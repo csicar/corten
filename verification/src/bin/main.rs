@@ -6,6 +6,7 @@
 // version: 1.53.0-nightly (9b0edb7fd 2021-03-27)
 
 extern crate rustc_ast_pretty;
+extern crate rustc_driver;
 extern crate rustc_error_codes;
 extern crate rustc_errors;
 extern crate rustc_hash;
@@ -13,20 +14,18 @@ extern crate rustc_hir;
 extern crate rustc_interface;
 extern crate rustc_session;
 extern crate rustc_span;
-extern crate rustc_driver;
 
 use rustc_ast_pretty::pprust::item_to_string;
 use rustc_driver::Compilation;
 use rustc_errors::registry;
+use rustc_interface::interface;
 use rustc_interface::Config;
 use rustc_interface::Queries;
-use rustc_interface::interface;
 use rustc_session::config;
 use rustc_span::source_map;
 use std::path;
 use std::process;
 use std::str;
-
 
 fn other_main() {
     let out = process::Command::new("rustc")
@@ -108,9 +107,38 @@ impl rustc_driver::Callbacks for OurCompilerCalls {
 
         // assert!(self.args.iter().any(|a| a == "--generate-test-program"));
 
-        queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
-            // Retrieve the MIR body of all user-written functions and run Polonius.
-            
+        // queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
+        //     tcx.hir()
+        //         .items()
+        //         .into_iter()
+        //         .for_each(|item| {
+        //             println!("\n{:?}   ({:?})", item.ident, item.kind);
+        //             println!("{:?}", item)
+        //         })
+        //     // Retrieve the MIR body of all user-written functions and run Polonius.
+        // });
+        // Analyze the crate and inspect the types under the cursor.
+        queries.global_ctxt().unwrap().take().enter(|tcx| {
+            // Every compilation contains a single crate.
+            let hir_krate = tcx.hir();
+            // Iterate over the top-level items in the crate, looking for the main function.
+            for item in hir_krate.items() {
+                // Use pattern-matching to find a specific node inside the main function.
+                if let rustc_hir::ItemKind::Fn(fn_sig, _, body_id) = &item.kind {
+                    println!("sig: {:?}", fn_sig);
+                    let expr = &tcx.hir().body(*body_id).value;
+                    if let rustc_hir::ExprKind::Block(block, _) = expr.kind {
+                        if let rustc_hir::StmtKind::Local(local) = block.stmts[0].kind {
+                            if let Some(expr) = local.init {
+                                let hir_id = expr.hir_id; // hir_id identifies the string "Hello, world!"
+                                let def_id = tcx.hir().local_def_id(item.hir_id()); // def_id identifies the main function
+                                let ty = tcx.typeck(def_id).node_type(hir_id);
+                                println!("{:?}: {:?}", expr, ty); // prints expr(HirId { owner: DefIndex(3), local_id: 4 }: "Hello, world!"): &'static str
+                            }
+                        }
+                    }
+                }
+            }
         });
 
         Compilation::Stop

@@ -106,7 +106,7 @@ impl rustc_driver::Callbacks for OurCompilerCalls {
         let session = compiler.session();
         session.abort_if_errors();
 
-        assert!(self.args.iter().any(|a| a == "--generate-test-program"));
+        // assert!(self.args.iter().any(|a| a == "--generate-test-program"));
 
         queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
             // Retrieve the MIR body of all user-written functions and run Polonius.

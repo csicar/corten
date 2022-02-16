@@ -1,21 +1,17 @@
 extern crate runtime_library;
-use runtime_library::ty;
-
+use runtime_library::{refined, refined2};
 
 fn main() {
-  let message = "Test";
-  println!("{}", message)
+    let message = "Test";
+    println!("{}", message)
 }
 
 struct Point {
-  x: i32,
-  y: i32
+    x: i32,
+    y: i32,
 }
 
-fn  abs(i: i32) -> ty!(r: i32 | r >= 0) {
-
-}
-
-fn update_x(a: &mut Point, x: i32) -> ty!(Unit<a.x == x>) {
-  a.x = x;
+#[refined]
+fn t(a: ty!(i32 | a > 2)) -> i32 {
+ 2
 }

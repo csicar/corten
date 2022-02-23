@@ -1,0 +1,484 @@
+%% Beispiel-Präsentation mit LaTeX Beamer im KIT-Design
+%% entsprechend den Gestaltungsrichtlinien vom 1. August 2020
+%%
+%% Siehe https://sdqweb.ipd.kit.edu/wiki/Dokumentvorlagen
+
+%% Beispiel-Präsentation
+\documentclass{sdqbeamer} 
+\usepackage[cache=false]{minted}
+\usemintedstyle{solarized-light}
+% \newminted{rust}{escapeinside=~~, autogobble, style=solarized-dark, fontsize=\footnotesize, linenos}
+\newminted{rust}{autogobble, fontsize=\small, escapeinside=@@}
+
+
+\usepackage{fontspec}
+\usepackage{varwidth}
+\usepackage{tikz}
+\usetikzlibrary{calc, patterns, tikzmark, arrows, decorations, shapes.callouts, decorations.pathreplacing, decorations.pathmorphing, external}
+% \tikzexternalize
+% \setbeameroption{show notes on second screen}
+\usepackage[overridenote, notesposition=right]{pdfpc}
+
+%% Titelbild
+\titleimage{banner_2020_kit}
+
+%% Gruppenlogo
+\grouplogo{}
+
+%% Gruppenname
+\groupname{Application-oriented Formal Verification}
+
+% Beginn der Präsentation
+
+\title[LiquidRust]{LiquidRust}
+\subtitle{Embracing Mutability on Refinement Types using Rust's Ownership Model} 
+\author[Carsten Csiky]{Carsten Csiky}
+
+\date[24.\,2.\,2022]{24. Februar 2022}
+
+% Literatur 
+ 
+\usepackage[citestyle=authoryear,bibstyle=numeric,hyperref,backend=biber]{biblatex}
+\addbibresource{../lib.bib}
+\bibhang1em
+
+% https://tex.stackexchange.com/a/445690
+\makeatletter
+\pgfset{
+  /pgf/decoration/randomness/.initial=2,
+  /pgf/decoration/wavelength/.initial=100
+}
+\pgfdeclaredecoration{sketch}{init}{
+  \state{init}[width=0pt,next state=draw,persistent precomputation={
+    \pgfmathsetmacro\pgf@lib@dec@sketch@t0
+  }]{}
+  \state{draw}[width=\pgfdecorationsegmentlength,
+  auto corner on length=\pgfdecorationsegmentlength,
+  persistent precomputation={
+    \pgfmathsetmacro\pgf@lib@dec@sketch@t{mod(\pgf@lib@dec@sketch@t+pow(\pgfkeysvalueof{/pgf/decoration/randomness},rand),\pgfkeysvalueof{/pgf/decoration/wavelength})}
+  }]{
+    \pgfmathparse{sin(2*\pgf@lib@dec@sketch@t*pi/\pgfkeysvalueof{/pgf/decoration/wavelength} r)}
+    \pgfpathlineto{\pgfqpoint{\pgfdecorationsegmentlength}{\pgfmathresult\pgfdecorationsegmentamplitude}}
+  }
+  \state{final}{}
+}
+\tikzset{xkcd/.style={decorate,decoration={sketch,segment length=0.5pt,amplitude=0.5pt}}}
+\tikzset{xkcd-little/.style={decorate,decoration={sketch,segment length=0.5pt,amplitude=0.25pt}}}
+\makeatother
+
+\pgfmathsetseed{1}
+
+
+\definecolor{c453A62}{RGB}{69,58,98}
+\definecolor{c5E5086}{RGB}{94,80,134}
+\definecolor{c8F4E8B}{RGB}{143,78,139}
+
+\begin{document}
+
+%Titelseite
+\KITtitleframe
+
+%Inhaltsverzeichnis
+% \begin{frame}{Inhaltsverzeichnis}
+% \tableofcontents
+% \end{frame}
+
+\section{Motivation}
+
+\begin{frame}{Motivation}
+  \centering
+  \begin{tikzpicture}[xscale=.2, yscale=.2]
+    \coordinate (good) at (90:7);
+    \coordinate (bad) at (-30:7);
+    \clip (-40, -15) rectangle (40, 15);
+    \begin{scope}[very thick, 
+        every path/.style={xkcd}
+        ]
+      \draw circle [radius=10, rotate=90];
+      % \filldraw[fill=green!20,draw=green!50!black] (0, 0) -- (80:11) arc [start angle=0, end angle=100, radius=11] -- cycle;
+      \filldraw[rotate=90, fill=green!20,draw=green!50!black] (0,0) -- (-15:10.5)
+          arc [start angle=-15, end angle=15, radius=10.5] -- cycle;
+      % \draw (0, 0) -- (100:12);
+    \end{scope}
+
+    \node[anchor=west, align=left] (good_label) at (16,5) {Actual Goal};
+    \node[anchor=west, align=left] (bad_label) at (16,-5) {$h(\texttt{var}) = h'(\texttt{var})$\\ "Variable unchanged between heaps};
+    
+    \draw[<-, very thick, cyan!60!black, dashed] (good) to[out=45, in=170] (good_label);
+    \draw[<-, very thick, cyan!60!black, dashed] (bad) to[out=-45, in=180] (bad_label);
+  \end{tikzpicture}
+\end{frame}
+
+\begin{frame}
+  \centering
+
+  \begin{tikzpicture}[x=1pt, y=1pt, remember picture]
+    \clip (-230 , -40) rectangle (230 , 190);
+
+    \node[help lines, minimum size=40] (rust_character) at (170, 0) {};
+    \node[help lines, minimum size=40] (haskell_character) at (-170, 0) {};
+
+    \draw[help lines, black!5, very thin, step=10] (-300,-50) grid (300, 170);
+
+    
+    \node[] (rust_img) at ($(rust_character) + (0, 20)$) {};
+    \node[] (haskell_img) at ($(haskell_character) + (0, 20)$) {};
+
+    \scoped[shift=(haskell_img)]
+      \begin{scope}[yscale=-1, scale=0.23, xshift=-70, yshift=10] 
+        \input{logos/haskell.svg.tikz}
+      \end{scope};
+
+    \onslide<4- > {
+    \scoped[shift=(rust_img)]
+      \begin{scope}[yscale=-1, scale=0.1, xshift=-240] 
+        \input{logos/rust.svg.tikz}
+      \end{scope};
+    }
+
+    \onslide<2- > {
+    \node[draw, xkcd-little, rectangle callout, callout pointer shorten=20, callout absolute pointer={(haskell_character)}] (haskell_speech) 
+        at ($(haskell_character) + (-10, 40)$) 
+        {Mutability is the problem!};
+    }
+    \onslide<3> {
+    \node[draw, xkcd-little, rectangle callout, callout pointer shorten=30, callout absolute pointer={(haskell_character)}] (refinement_types) 
+      at ($(haskell_character) + (140, 70)$) 
+      {\begin{varwidth}{\linewidth}
+          Refinement Types
+          \begin{itemize}
+            \item Extension of the Type-System
+            \item \texttt{i32} $\Rightarrow$ \texttt{\{ v: i32 | v > 0 \}}
+          \end{itemize}
+          Type Checking:\\
+          Is \texttt{f(a)} type correct?
+          \begin{itemize}
+            \item[(I)] $\Gamma \vdash a : \tau_{param}$
+            \item[(II)] $\{ v : \texttt{i32} \mid p(v) \} \preceq \{ w : \texttt{i32} \mid q(w) \}$
+          \end{itemize}
+
+          Subtype $\{ \tau | p \} \preceq \{ \tau' | q \}$
+          \begin{itemize}
+            \item[(I)] $\tau \text{ unifies with } \tau'$
+            \item[(II)] $\forall v : \tau. p(v) \Rightarrow q(v)$
+          \end{itemize}
+      \end{varwidth}};
+    }
+
+    \onslide<4- > {
+    \node[draw, xkcd-little, rectangle callout, callout pointer shorten=20, callout absolute pointer={(rust_character)}] (rust_speech) 
+        at ($(rust_character) + (10, 40)$) 
+        {\begin{varwidth}{\linewidth}
+          No quite: Mutable \\\textit{aliasing} is the problem!
+        \end{varwidth}};
+    }
+
+    \onslide<5> {
+    \node[draw, xkcd-little, rectangle callout, callout pointer shorten=30, callout absolute pointer={(rust_character)}]
+      (ownership_model) 
+      at ($(rust_character) + (-140, 70)$) 
+      {\begin{varwidth}{\linewidth}
+          Every lexical scope:
+          \begin{itemize}
+            \item tracks "Permissions" 
+            \item for every lexically visible variable
+          \end{itemize}
+          Possible Variable Permissions:
+          \begin{enumerate}
+            \item Owner \texttt{v}
+              \begin{itemize}
+                \item read
+                \item write
+                \item can transfer ownership, if no outstanding\\ borrows at time of transfer
+              \end{itemize}
+            \item immutable Reference \texttt{\&v}
+              \begin{itemize}
+                \item read
+                \item guarantee: no writes
+                \item possibly other readers
+                \item must give back before ownership transfer
+              \end{itemize}
+            \item mutable Reference \texttt{\&mut v}
+              \begin{itemize}
+                \item read and write
+                \item no other reader or writer
+                \item must give back before ownership transfer
+              \end{itemize}
+          \end{enumerate}
+      \end{varwidth}};
+    }
+  
+  \end{tikzpicture}
+  % \begin{tikzpicture}[scale=10]
+    
+  % \end{tikzpicture}
+\end{frame}
+
+\begin{frame}[fragile=singleslide]{Motivation}
+  \note{
+      - **Beispiel**: Nachbau eines Teiles d. Campus Management Systems
+    \\
+      - Aufgabe: Nach Prüfung neue note eintragen Student über Status informieren
+    }
+  % \begin{rustcode}
+  %   /// Add `b` to end of Vec `as`
+  %   fn push(as: &mut Vec<i32>, b: i32) {..}
+  %   /// Get highest value. Returns `None` for empty Vec
+  %   fn maximum(as: &Vec<i32>) -> Option<i32> {..}
+
+  %   fn update_exam_tries(tries: &mut Vec<i32>, new_try: i32) {
+  %     push(&mut tries, new_try);
+
+  %     match maximum(ties) {
+  %       None => panic!("impossible"), // `tries` must at least contain `new_try`
+  %       Some(max_mark) if max_mark < 4    => println!("puh"),
+  %       _              if tries.len() > 3 => println!("Härtefallantrag?"),
+  %       _                                 => println!("versuch's nochmal"),
+  %     }
+  %   }
+  % \end{rustcode}
+\end{frame}
+
+\subsection{Erster }
+\begin{frame}{Blöcke}{in den KIT-Farben}
+  \begin{columns}
+    \column{.3\textwidth}
+    \begin{greenblock}{Greenblock}
+      Standard (\texttt{block})
+        \end{greenblock}
+    \column{.3\textwidth}
+    \begin{blueblock}{Blueblock}
+      = \texttt{exampleblock}
+        \end{blueblock}
+    \column{.3\textwidth}
+    \begin{redblock}{Redblock}
+      = \texttt{alertblock}
+        \end{redblock}
+  \end{columns}
+  \begin{columns}
+    \column{.3\textwidth}
+        \begin{brownblock}{Brownblock}
+        \end{brownblock}
+    \column{.3\textwidth}
+        \begin{purpleblock}{Purpleblock}
+        \end{purpleblock}
+    \column{.3\textwidth}
+        \begin{cyanblock}{Cyanblock}
+        \end{cyanblock}
+  \end{columns}
+  \begin{columns}
+    \column{.3\textwidth}
+        \begin{yellowblock}{Yellowblock}
+        \end{yellowblock}
+    \column{.3\textwidth}
+        \begin{lightgreenblock}{Lightgreenblock}
+        \end{lightgreenblock}
+    \column{.3\textwidth}
+        \begin{orangeblock}{Orangeblock}
+        \end{orangeblock}
+  \end{columns}
+  \begin{columns}
+    \column{.3\textwidth}
+        \begin{grayblock}{Grayblock}
+        \end{grayblock}
+    \column{.3\textwidth}
+    \begin{contentblock}{Contentblock}
+      (farblos)
+    \end{contentblock}
+    \column{.3\textwidth}
+  \end{columns}
+\end{frame}
+    
+\subsection{Zweiter Unterabschnitt}
+\begin{frame}{Auflistungen}
+  Text
+  \begin{itemize}
+    \item Auflistung\\ Umbruch
+    \item Auflistung
+    \begin{itemize}
+      \item Auflistung
+      \item Auflistung
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\section{Zweiter Abschnitt}
+
+\begin{frame}
+        Bei Frames ohne Titel wird die Kopfzeile nicht angezeigt, und  
+    der freie Platz kann für Inhalte genutzt werden.
+\end{frame}
+
+\begin{frame}[plain]
+    Bei Frames mit Option \texttt{[plain]} werden weder Kopf- noch Fußzeile angezeigt.
+\end{frame}
+
+\begin{frame}[t]{Beispielinhalt}
+    Bei Frames mit Option \texttt{[t]} werden die Inhalte nicht vertikal zentriert, sondern an der Oberkante begonnen.
+\end{frame}
+
+
+\begin{frame}{Beispielinhalt: Literatur}
+    Literaturzitat: \cite{klare2021jss}
+\end{frame}
+
+\appendix
+\beginbackup
+
+\begin{frame}{Literatur}
+\begin{exampleblock}{Backup-Teil}
+    Folien, die nach \texttt{\textbackslash beginbackup} eingefügt werden, zählen nicht in die Gesamtzahl der Folien.
+\end{exampleblock}
+
+\printbibliography
+\end{frame}
+
+\section{Farben}
+%% ----------------------------------------
+%% | Test-Folie mit definierten Farben |
+%% ----------------------------------------
+\begin{frame}{Farbpalette}
+\tiny
+
+% GREEN
+  \colorbox{kit-green100}{kit-green100}
+  \colorbox{kit-green90}{kit-green90}
+  \colorbox{kit-green80}{kit-green80}
+  \colorbox{kit-green70}{kit-green70}
+  \colorbox{kit-green60}{kit-green60}
+  \colorbox{kit-green50}{kit-green50}
+  \colorbox{kit-green40}{kit-green40}
+  \colorbox{kit-green30}{kit-green30}
+  \colorbox{kit-green25}{kit-green25}
+  \colorbox{kit-green20}{kit-green20}
+  \colorbox{kit-green15}{kit-green15}
+  \colorbox{kit-green10}{kit-green10}
+  \colorbox{kit-green5}{kit-green5}
+
+% BLUE
+  \colorbox{kit-blue100}{kit-blue100}
+  \colorbox{kit-blue90}{kit-blue90}
+  \colorbox{kit-blue80}{kit-blue80}
+  \colorbox{kit-blue70}{kit-blue70}
+  \colorbox{kit-blue60}{kit-blue60}
+  \colorbox{kit-blue50}{kit-blue50}
+  \colorbox{kit-blue40}{kit-blue40}
+  \colorbox{kit-blue30}{kit-blue30}
+  \colorbox{kit-blue25}{kit-blue25}
+  \colorbox{kit-blue20}{kit-blue20}
+  \colorbox{kit-blue15}{kit-blue15}
+  \colorbox{kit-blue10}{kit-blue10}
+  \colorbox{kit-blue5}{kit-blue5}
+
+% RED
+  \colorbox{kit-red100}{kit-red100}
+  \colorbox{kit-red90}{kit-red90}
+  \colorbox{kit-red80}{kit-red80}
+  \colorbox{kit-red70}{kit-red70}
+  \colorbox{kit-red60}{kit-red60}
+  \colorbox{kit-red50}{kit-red50}
+  \colorbox{kit-red40}{kit-red40}
+  \colorbox{kit-red30}{kit-red30}
+  \colorbox{kit-red25}{kit-red25}
+  \colorbox{kit-red20}{kit-red20}
+  \colorbox{kit-red15}{kit-red15}
+  \colorbox{kit-red10}{kit-red10}
+  \colorbox{kit-red5}{kit-red5}
+
+% GREY
+  \colorbox{kit-gray100}{\color{white}kit-gray100}
+  \colorbox{kit-gray90}{\color{white}kit-gray90}
+  \colorbox{kit-gray80}{\color{white}kit-gray80}
+  \colorbox{kit-gray70}{\color{white}kit-gray70}
+  \colorbox{kit-gray60}{\color{white}kit-gray60}
+  \colorbox{kit-gray50}{\color{white}kit-gray50}
+  \colorbox{kit-gray40}{kit-gray40}
+  \colorbox{kit-gray30}{kit-gray30}
+  \colorbox{kit-gray25}{kit-gray25}
+  \colorbox{kit-gray20}{kit-gray20}
+  \colorbox{kit-gray15}{kit-gray15}
+  \colorbox{kit-gray10}{kit-gray10}
+  \colorbox{kit-gray5}{kit-gray5}
+
+% Orange
+  \colorbox{kit-orange100}{kit-orange100}
+  \colorbox{kit-orange90}{kit-orange90}
+  \colorbox{kit-orange80}{kit-orange80}
+  \colorbox{kit-orange70}{kit-orange70}
+  \colorbox{kit-orange60}{kit-orange60}
+  \colorbox{kit-orange50}{kit-orange50}
+  \colorbox{kit-orange40}{kit-orange40}
+  \colorbox{kit-orange30}{kit-orange30}
+  \colorbox{kit-orange25}{kit-orange25}
+  \colorbox{kit-orange20}{kit-orange20}
+  \colorbox{kit-orange15}{kit-orange15}
+  \colorbox{kit-orange10}{kit-orange10}
+  \colorbox{kit-orange5}{kit-orange5}
+
+% lightgreen
+  \colorbox{kit-lightgreen100}{kit-lightgreen100}
+  \colorbox{kit-lightgreen90}{kit-lightgreen90}
+  \colorbox{kit-lightgreen80}{kit-lightgreen80}
+  \colorbox{kit-lightgreen70}{kit-lightgreen70}
+  \colorbox{kit-lightgreen60}{kit-lightgreen60}
+  \colorbox{kit-lightgreen50}{kit-lightgreen50}
+  \colorbox{kit-lightgreen40}{kit-lightgreen40}
+  \colorbox{kit-lightgreen30}{kit-lightgreen30}
+  \colorbox{kit-lightgreen25}{kit-lightgreen25}
+  \colorbox{kit-lightgreen20}{kit-lightgreen20}
+  \colorbox{kit-lightgreen15}{kit-lightgreen15}
+  \colorbox{kit-lightgreen10}{kit-lightgreen10}
+  \colorbox{kit-lightgreen5}{kit-lightgreen5}
+
+% Brown
+  \colorbox{kit-brown100}{kit-brown100}
+  \colorbox{kit-brown90}{kit-brown90}
+  \colorbox{kit-brown80}{kit-brown80}
+  \colorbox{kit-brown70}{kit-brown70}
+  \colorbox{kit-brown60}{kit-brown60}
+  \colorbox{kit-brown50}{kit-brown50}
+  \colorbox{kit-brown40}{kit-brown40}
+  \colorbox{kit-brown30}{kit-brown30}
+  \colorbox{kit-brown25}{kit-brown25}
+  \colorbox{kit-brown20}{kit-brown20}
+  \colorbox{kit-brown15}{kit-brown15}
+  \colorbox{kit-brown10}{kit-brown10}
+  \colorbox{kit-brown5}{kit-brown5}
+
+% Purple
+  \colorbox{kit-purple100}{kit-purple100}
+  \colorbox{kit-purple90}{kit-purple90}
+  \colorbox{kit-purple80}{kit-purple80}
+  \colorbox{kit-purple70}{kit-purple70}
+  \colorbox{kit-purple60}{kit-purple60}
+  \colorbox{kit-purple50}{kit-purple50}
+  \colorbox{kit-purple40}{kit-purple40}
+  \colorbox{kit-purple30}{kit-purple30}
+  \colorbox{kit-purple25}{kit-purple25}
+  \colorbox{kit-purple20}{kit-purple20}
+  \colorbox{kit-purple15}{kit-purple15}
+  \colorbox{kit-purple10}{kit-purple10}
+  \colorbox{kit-purple5}{kit-purple5}
+
+% Cyan
+  \colorbox{kit-cyan100}{kit-cyan100}
+  \colorbox{kit-cyan90}{kit-cyan90}
+  \colorbox{kit-cyan80}{kit-cyan80}
+  \colorbox{kit-cyan70}{kit-cyan70}
+  \colorbox{kit-cyan60}{kit-cyan60}
+  \colorbox{kit-cyan50}{kit-cyan50}
+  \colorbox{kit-cyan40}{kit-cyan40}
+  \colorbox{kit-cyan30}{kit-cyan30}
+  \colorbox{kit-cyan25}{kit-cyan25}
+  \colorbox{kit-cyan20}{kit-cyan20}
+  \colorbox{kit-cyan15}{kit-cyan15}
+  \colorbox{kit-cyan10}{kit-cyan10}
+  \colorbox{kit-cyan5}{kit-cyan5}
+    
+\end{frame}
+%% ----------------------------------------
+%% | /Test-Folie mit definierten Farben |
+%% ----------------------------------------
+\backupend
+
+\end{document}

@@ -7,7 +7,6 @@
 \documentclass{sdqbeamer} 
 \usepackage[cache=false]{minted}
 \usemintedstyle{solarized-light}
-% \newminted{rust}{escapeinside=~~, autogobble, style=solarized-dark, fontsize=\footnotesize, linenos}
 \newminted{rust}{autogobble, fontsize=\small, escapeinside=@@}
 
 
@@ -38,7 +37,7 @@
 % Literatur 
  
 % \usepackage[citestyle=authoryear,bibstyle=numeric,hyperref,backend=biber,datatype=bibtex]{biblatex}
-\usepackage[citestyle=authoryear,bibstyle=numeric,hyperref,backend=biber]{biblatex}
+\usepackage[bibstyle=numeric]{biblatex}
 \addbibresource{lib.bib}
 \bibhang1em
 
@@ -236,7 +235,7 @@
     \begin{column}{.6\textwidth}
       \begin{itemize}
         % \item define syntax of refinement language
-        \item adapt refinement types semantics to rust, especially for mutability in Rust's Ownership Model
+        \item adapt Refinement Types semantics to Rust, especially for mutability in Rust's Ownership Model
         \item prototype translation to verification backend (e.g. z3, prusti)
         \item evaluate the verification and the expressiveness of the refinement language on minimal examples
       \end{itemize}

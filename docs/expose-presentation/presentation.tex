@@ -39,7 +39,7 @@
 % Literatur 
  
 \usepackage[citestyle=authoryear,bibstyle=numeric,hyperref,backend=biber]{biblatex}
-\addbibresource{../lib.bib}
+\addbibresource{lib.bib}
 \bibhang1em
 
 % https://tex.stackexchange.com/a/445690
@@ -88,8 +88,8 @@
 \begin{frame}{Motivation}
   \centering
   \begin{tikzpicture}[xscale=.2, yscale=.2]
-    \coordinate (good) at (90:7);
-    \coordinate (bad) at (-30:7);
+    \coordinate (good) at (90:8.5);
+    \coordinate (bad) at (-90:8.5);
     \clip (-40, -15) rectangle (40, 15);
     \begin{scope}[very thick, 
         every path/.style={xkcd}
@@ -102,21 +102,23 @@
     \end{scope}
 
     \node[anchor=west, align=left] (good_label) at (16,5) {Actual Goal};
-    \node[anchor=west, align=left] (bad_label) at (16,-5) {$h(\texttt{var}) = h'(\texttt{var})$\\ "Variable unchanged between heaps};
+    \node[anchor=east, align=right] (bad_label) at (-13,-5) {$h(\texttt{var}) = h'(\texttt{var})$\\ Variable unchanged between heaps};
     
-    \draw[<-, very thick, cyan!60!black, dashed] (good) to[out=45, in=170] (good_label);
-    \draw[<-, very thick, cyan!60!black, dashed] (bad) to[out=-45, in=180] (bad_label);
+    \draw[<-, ultra thick, cyan!60!black, dashed] (good) to[out=45, in=150] (good_label);
+    \draw[<-, ultra thick, cyan!60!black, dashed] (bad) to[out=-135, in=-5] (bad_label);
   \end{tikzpicture}
 \end{frame}
+
+\section{Foundations}
 
 \begin{frame}
   \centering
 
   \begin{tikzpicture}[x=1pt, y=1pt, remember picture]
-    \clip (-230 , -40) rectangle (230 , 190);
+    \clip (-235 , -40) rectangle (235 , 190);
 
-    \node[help lines, minimum size=40] (rust_character) at (170, 0) {};
-    \node[help lines, minimum size=40] (haskell_character) at (-170, 0) {};
+    \node[help lines, minimum size=40] (rust_character) at (160, 0) {};
+    \node[help lines, minimum size=40] (haskell_character) at (-160, 0) {};
 
     \draw[help lines, black!5, very thin, step=10] (-300,-50) grid (300, 170);
 
@@ -138,12 +140,12 @@
 
     \onslide<2- > {
     \node[draw, xkcd-little, rectangle callout, callout pointer shorten=20, callout absolute pointer={(haskell_character)}] (haskell_speech) 
-        at ($(haskell_character) + (-10, 40)$) 
+        at ($(haskell_character) + (-15, 40)$) 
         {Mutability is the problem!};
     }
     \onslide<3> {
     \node[draw, xkcd-little, rectangle callout, callout pointer shorten=30, callout absolute pointer={(haskell_character)}] (refinement_types) 
-      at ($(haskell_character) + (140, 70)$) 
+      at ($(haskell_character) + (150, 70)$) 
       {\begin{varwidth}{\linewidth}
           Refinement Types
           \begin{itemize}
@@ -167,7 +169,7 @@
 
     \onslide<4- > {
     \node[draw, xkcd-little, rectangle callout, callout pointer shorten=20, callout absolute pointer={(rust_character)}] (rust_speech) 
-        at ($(rust_character) + (10, 40)$) 
+        at ($(rust_character) + (15, 40)$) 
         {\begin{varwidth}{\linewidth}
           No quite: Mutable \\\textit{aliasing} is the problem!
         \end{varwidth}};
@@ -176,7 +178,7 @@
     \onslide<5> {
     \node[draw, xkcd-little, rectangle callout, callout pointer shorten=30, callout absolute pointer={(rust_character)}]
       (ownership_model) 
-      at ($(rust_character) + (-140, 70)$) 
+      at ($(rust_character) + (-150, 70)$) 
       {\begin{varwidth}{\linewidth}
           Every lexical scope:
           \begin{itemize}
@@ -196,13 +198,11 @@
                 \item read
                 \item guarantee: no writes
                 \item possibly other readers
-                \item must give back before ownership transfer
               \end{itemize}
             \item mutable Reference \texttt{\&mut v}
               \begin{itemize}
                 \item read and write
                 \item no other reader or writer
-                \item must give back before ownership transfer
               \end{itemize}
           \end{enumerate}
       \end{varwidth}};
@@ -213,6 +213,56 @@
     
   % \end{tikzpicture}
 \end{frame}
+
+\begin{frame}{Rust + Refinement Types?}
+  \textbf{Goal}
+  \begin{itemize}
+    \item Design a decidable type system with refinement types for functional verification in Rust.
+    \item Implement a proof of concept for automatic verification / type checking.
+    \item Backward-compatible to Rust
+    \item Limit to safe, (non-higher-order?) Rust
+    \item No Liquid Type Inference
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{How?}
+  \begin{itemize}
+    \item define syntax of refinement language
+    \item adapt refinement types semantics to rust, especially \textbf{mutability}
+    \item implement parser for refinement language
+    \item prototype translation to verification backend (e.g. z3, prusti)
+    \item evaluate the verifier and the expressiveness of the refinement language on minimal examples
+  \end{itemize}
+\end{frame}
+
+
+\begin{frame}{Related Work}
+  \begin{itemize}
+    \item Property Types in Java\cite{lanzinger_property_2021}
+      \begin{itemize}
+        \item Adaptation of Refinement Types for Java
+        \item Limited to immutable (\texttt{final}) subset
+      \end{itemize}
+    \item Prusti\cite{astrauskas_leveraging_2019}
+      \begin{itemize} 
+        \item Heavy-Weight functional verification for rust with semantics for \texttt{unsafe}.
+        \item Seperation Logic
+      \end{itemize}
+    \item Async Liquid Types\cite{kloos_asynchronous_2015}
+      \begin{itemize} 
+        \item for Refinement Types + Mutability in OCaml
+        \item cannot take advantage of Rust's Ownership model
+      \end{itemize}
+    \item RustHorn\cite{matsushita_rusthorn_2020}
+      \begin{itemize} 
+        \item constrained horn clauses based verification
+        \item \texttt{\&mut} handling interesting and should be adapted for LiquidRust
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+
+
 
 \begin{frame}[fragile=singleslide]{Motivation}
   \note{
@@ -319,18 +369,18 @@
 
 
 \begin{frame}{Beispielinhalt: Literatur}
-    Literaturzitat: \cite{klare2021jss}
+    Literaturzitat: \cite{erdin_verication_nodate}
 \end{frame}
 
 \appendix
 \beginbackup
 
 \begin{frame}{Literatur}
-\begin{exampleblock}{Backup-Teil}
-    Folien, die nach \texttt{\textbackslash beginbackup} eingefügt werden, zählen nicht in die Gesamtzahl der Folien.
-\end{exampleblock}
+  \begin{exampleblock}{Backup-Teil}
+      Folien, die nach \texttt{\textbackslash beginbackup} eingefügt werden, zählen nicht in die Gesamtzahl der Folien.
+  \end{exampleblock}
 
-\printbibliography
+  \printbibliography
 \end{frame}
 
 \section{Farben}

@@ -37,7 +37,7 @@
 % Literatur 
  
 % \usepackage[citestyle=authoryear,bibstyle=numeric,hyperref,backend=biber,datatype=bibtex]{biblatex}
-\usepackage[bibstyle=numeric]{biblatex}
+\usepackage[bibstyle=numeric, backend=biber, sorting=none]{biblatex}
 \addbibresource{lib.bib}
 \bibhang1em
 
@@ -85,27 +85,35 @@
 \section{Motivation}
 
 \begin{frame}{Motivation}
-  \centering
-  \begin{tikzpicture}[xscale=.2, yscale=.2]
-    \coordinate (good) at (90:8.5);
-    \coordinate (bad) at (-90:8.5);
-    \clip (-40, -15) rectangle (40, 15);
-    \begin{scope}[very thick, 
-        every path/.style={xkcd}
-        ]
-      \draw circle [radius=10, rotate=90];
-      % \filldraw[fill=green!20,draw=green!50!black] (0, 0) -- (80:11) arc [start angle=0, end angle=100, radius=11] -- cycle;
-      \filldraw[rotate=90, fill=green!20,draw=green!50!black] (0,0) -- (-15:10.5)
-          arc [start angle=-15, end angle=15, radius=10.5] -- cycle;
-      % \draw (0, 0) -- (100:12);
-    \end{scope}
-
-    \node[anchor=west, align=left] (good_label) at (16,5) {Actual Goal};
-    \node[anchor=east, align=right] (bad_label) at (-13,-5) {$h(\texttt{var}) = h'(\texttt{var})$\\ Variable unchanged between heaps};
-    
-    \draw[<-, ultra thick, cyan!60!black, dashed] (good) to[out=45, in=150] (good_label);
-    \draw[<-, ultra thick, cyan!60!black, dashed] (bad) to[out=-135, in=-5] (bad_label);
-  \end{tikzpicture}
+  \begin{columns}[T] % align columns
+    \begin{column}{.55\textwidth}
+      \inputminted[fontsize=\small]{java}{example.java}
+    \end{column}%
+    \hfill%
+      \begin{column}{.45\textwidth}
+        \begin{tikzpicture}[xscale=.2, yscale=.2]
+          \coordinate (good) at (90:8.5);
+          \coordinate (bad) at (-80:8.5);
+          % \clip (-40, -15) rectangle (40, 15);
+          \begin{scope}[very thick, 
+              every path/.style={xkcd}
+              ]
+            \draw circle [radius=10, rotate=90];
+            % \filldraw[fill=green!20,draw=green!50!black] (0, 0) -- (80:11) arc [start angle=0, end angle=100, radius=11] -- cycle;
+            \filldraw[rotate=90, fill=green!20,draw=green!50!black] (0,0) -- (-15:10.5)
+                arc [start angle=-15, end angle=15, radius=10.5] -- cycle;
+            % \draw (0, 0) -- (100:12);
+          \end{scope}
+      
+          \node[anchor=west, align=left] (good_label) at (16,5) {Actual Goal};
+          \node[anchor=west, align=left] (bad_label) at (16,-5) {$h(\texttt{var}) = h'(\texttt{var})$\\ Variable unchanged\\ between heaps};
+          
+          \draw[<-, ultra thick, cyan!60!black, dashed] (good) to[out=45, in=150] (good_label);
+          \draw[<-, ultra thick, cyan!60!black, dashed] (bad) to[out=-45, in=-180] (bad_label);
+        \end{tikzpicture}
+      \end{column}
+  \end{columns}
+  
 \end{frame}
 
 \section{Foundations}
@@ -161,7 +169,7 @@
           % Given $\Gamma = \{ f: \{ v: \tau_{param} \mid p(v) \} \to \{ u : \tau_{res} \mid r(u) \}, a : \{ w: \tau_{arg} | q(w) \} \}$\\
           Is \texttt{f(a)} type correct?
           \begin{itemize}
-            \item[(I)] $\{ v : \tau_{arg} \mid p(v) \} \preceq \{ w : \tau_{param} \mid q(w) \}$
+            \item[-] $\{ v : \tau_{arg} \mid p(v) \} \preceq \{ w : \tau_{param} \mid q(w) \}$
           \end{itemize}
           \vspace{1em}
           Subtyping judgment $\{ \tau | p \} \preceq \{ \tau' | q \}$

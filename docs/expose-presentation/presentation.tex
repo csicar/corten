@@ -11,7 +11,6 @@
 \newminted{rust}{autogobble, fontsize=\small, escapeinside=@@}
 
 
-\usepackage{fontspec}
 \usepackage{varwidth}
 \usepackage{tikz}
 \usetikzlibrary{calc, patterns, tikzmark, arrows, decorations, shapes.callouts, decorations.pathreplacing, decorations.pathmorphing, external}
@@ -38,6 +37,7 @@
 
 % Literatur 
  
+% \usepackage[citestyle=authoryear,bibstyle=numeric,hyperref,backend=biber,datatype=bibtex]{biblatex}
 \usepackage[citestyle=authoryear,bibstyle=numeric,hyperref,backend=biber]{biblatex}
 \addbibresource{lib.bib}
 \bibhang1em
@@ -117,10 +117,10 @@
   \begin{tikzpicture}[x=1pt, y=1pt, remember picture]
     \clip (-235 , -40) rectangle (235 , 190);
 
-    \node[help lines, minimum size=40] (rust_character) at (160, 0) {};
-    \node[help lines, minimum size=40] (haskell_character) at (-160, 0) {};
+    \node[minimum size=40] (rust_character) at (160, 0) {};
+    \node[minimum size=40] (haskell_character) at (-160, 0) {};
 
-    \draw[help lines, black!5, very thin, step=10] (-300,-50) grid (300, 170);
+    % \draw[help lines, black!5, very thin, step=10] (-300,-50) grid (300, 170);
 
     
     \node[] (rust_img) at ($(rust_character) + (0, 20)$) {};
@@ -145,24 +145,30 @@
     }
     \onslide<3> {
     \node[draw, xkcd-little, rectangle callout, callout pointer shorten=30, callout absolute pointer={(haskell_character)}] (refinement_types) 
-      at ($(haskell_character) + (150, 70)$) 
+      at ($(haskell_character) + (200, 70)$) 
       {\begin{varwidth}{\linewidth}
-          Refinement Types
+          \textbf{Refinement Types}
           \begin{itemize}
             \item Extension of the Type-System
             \item \texttt{i32} $\Rightarrow$ \texttt{\{ v: i32 | v > 0 \}}
           \end{itemize}
-          Type Checking:\\
+          \vspace{1em}
+          \textbf{Type Checking}\\
+          Given Type Context: \\
+          $
+            \Gamma = \{ f: \{ v: \tau_{param} \mid p(v) \} \to \{ u : \tau_{res} \mid r(u) \},
+               a : \{ w: \tau_{arg} | q(w) \} \}
+          $\\
+          % Given $\Gamma = \{ f: \{ v: \tau_{param} \mid p(v) \} \to \{ u : \tau_{res} \mid r(u) \}, a : \{ w: \tau_{arg} | q(w) \} \}$\\
           Is \texttt{f(a)} type correct?
           \begin{itemize}
-            \item[(I)] $\Gamma \vdash a : \tau_{param}$
-            \item[(II)] $\{ v : \texttt{i32} \mid p(v) \} \preceq \{ w : \texttt{i32} \mid q(w) \}$
+            \item[(I)] $\{ v : \tau_{arg} \mid p(v) \} \preceq \{ w : \tau_{param} \mid q(w) \}$
           \end{itemize}
-
-          Subtype $\{ \tau | p \} \preceq \{ \tau' | q \}$
+          \vspace{1em}
+          Subtyping judgment $\{ \tau | p \} \preceq \{ \tau' | q \}$
           \begin{itemize}
-            \item[(I)] $\tau \text{ unifies with } \tau'$
-            \item[(II)] $\forall v : \tau. p(v) \Rightarrow q(v)$
+            \item[(I)] Base types $\tau, \tau'$ unify
+            \item[(II)] $\forall v .\ \tau. p(v) \Rightarrow q(v)$
           \end{itemize}
       \end{varwidth}};
     }
@@ -207,34 +213,58 @@
           \end{enumerate}
       \end{varwidth}};
     }
-  
   \end{tikzpicture}
-  % \begin{tikzpicture}[scale=10]
-    
-  % \end{tikzpicture}
 \end{frame}
+
+\section{Master Thesis}
 
 \begin{frame}{Rust + Refinement Types?}
+  How can Refinement Types be adapted for mutable Languages leveraging Rust's  Ownership Model?
+  \vspace{1em}\\
   \textbf{Goal}
   \begin{itemize}
-    \item Design a decidable type system with refinement types for functional verification in Rust.
-    \item Implement a proof of concept for automatic verification / type checking.
-    \item Backward-compatible to Rust
-    \item Limit to safe, (non-higher-order?) Rust
-    \item No Liquid Type Inference
+    \item design a decidable type system with refinement types for functional verification in Rust.
+    \item implement a proof of concept for automatic verification / type checking.
+    \item backward-compatible to Rust
+    \item limit to safe, (non-higher-order?) Rust
+    \item no liquid type inference
   \end{itemize}
 \end{frame}
 
-\begin{frame}{How?}
-  \begin{itemize}
-    \item define syntax of refinement language
-    \item adapt refinement types semantics to rust, especially \textbf{mutability}
-    \item implement parser for refinement language
-    \item prototype translation to verification backend (e.g. z3, prusti)
-    \item evaluate the verifier and the expressiveness of the refinement language on minimal examples
-  \end{itemize}
+\begin{frame}[fragile=singleslide]{How?}
+  \begin{columns}[T] % align columns
+    \begin{column}{.6\textwidth}
+      \begin{itemize}
+        % \item define syntax of refinement language
+        \item adapt refinement types semantics to rust, especially for mutability in Rust's Ownership Model
+        \item prototype translation to verification backend (e.g. z3, prusti)
+        \item evaluate the verification and the expressiveness of the refinement language on minimal examples
+      \end{itemize}
+    \end{column}%
+    \hfill%
+      \begin{column}{.38\textwidth}
+        \begin{rustcode}
+          fn push_all(
+              a: &mut Vec<i32>, 
+              b: &Vec<i32>) {
+                ..
+          }
+
+          fn client() -> i32 {
+            let mut a = vec![1, 2];
+            let b = vec![2, 3];
+            push_all(a, b);
+            return a[5]; // type error!
+          }
+        \end{rustcode}
+      \end{column}%
+    \end{columns}
+  
+  
+  % TODO! Bsp concat swap
 \end{frame}
 
+\section{Related Work}
 
 \begin{frame}{Related Work}
   \begin{itemize}
@@ -261,6 +291,16 @@
   \end{itemize}
 \end{frame}
 
+
+\appendix
+\beginbackup
+
+
+
+\begin{frame}{Literatur}
+
+  \printbibliography
+\end{frame}
 
 
 
@@ -367,13 +407,6 @@
     Bei Frames mit Option \texttt{[t]} werden die Inhalte nicht vertikal zentriert, sondern an der Oberkante begonnen.
 \end{frame}
 
-
-\begin{frame}{Beispielinhalt: Literatur}
-    Literaturzitat: \cite{erdin_verication_nodate}
-\end{frame}
-
-\appendix
-\beginbackup
 
 \begin{frame}{Literatur}
   \begin{exampleblock}{Backup-Teil}

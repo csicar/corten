@@ -1,3 +1,4 @@
+latex-out
 presentation.aux
 presentation.bbl
 presentation.bcf
@@ -11,3 +12,4 @@ presentation.run.xml
 presentation.snm
 presentation.synctex.gz
 presentation.toc
+presentation.out.pyg

@@ -38,7 +38,8 @@
  
 % \usepackage[citestyle=authoryear,bibstyle=numeric,hyperref,backend=biber,datatype=bibtex]{biblatex}
 \usepackage[bibstyle=numeric, backend=biber, sorting=none]{biblatex}
-\addbibresource{lib.bib}
+\addbibresource{../Meine Bibliothek.bib}
+
 \bibhang1em
 
 % https://tex.stackexchange.com/a/445690
@@ -86,32 +87,32 @@
 
 \begin{frame}{Motivation}
   \begin{columns}[T] % align columns
-    \begin{column}{.55\textwidth}
+    \begin{column}{.45\textwidth}
       \inputminted[fontsize=\small]{java}{example.java}
     \end{column}%
-    \hfill%
-      \begin{column}{.45\textwidth}
-        \begin{tikzpicture}[xscale=.2, yscale=.2]
-          \coordinate (good) at (90:8.5);
-          \coordinate (bad) at (-80:8.5);
-          % \clip (-40, -15) rectangle (40, 15);
-          \begin{scope}[very thick, 
-              every path/.style={xkcd}
-              ]
-            \draw circle [radius=10, rotate=90];
-            % \filldraw[fill=green!20,draw=green!50!black] (0, 0) -- (80:11) arc [start angle=0, end angle=100, radius=11] -- cycle;
-            \filldraw[rotate=90, fill=green!20,draw=green!50!black] (0,0) -- (-15:10.5)
-                arc [start angle=-15, end angle=15, radius=10.5] -- cycle;
-            % \draw (0, 0) -- (100:12);
-          \end{scope}
-      
-          \node[anchor=west, align=left] (good_label) at (16,5) {Actual Goal};
-          \node[anchor=west, align=left] (bad_label) at (16,-5) {$h(\texttt{var}) = h'(\texttt{var})$\\ Variable unchanged\\ between heaps};
-          
-          \draw[<-, ultra thick, cyan!60!black, dashed] (good) to[out=45, in=150] (good_label);
-          \draw[<-, ultra thick, cyan!60!black, dashed] (bad) to[out=-45, in=-180] (bad_label);
-        \end{tikzpicture}
-      \end{column}
+    \begin{column}{.45\textwidth}
+      \begin{tikzpicture}[xscale=.2, yscale=.2]
+        \coordinate (good) at (90:8.5);
+        \coordinate (bad) at (-80:8.5);
+        % \clip (-40, -15) rectangle (40, 15);
+        \begin{scope}[very thick, 
+            every path/.style={xkcd}
+            ]
+          \draw circle [radius=10, rotate=90];
+          % \filldraw[fill=green!20,draw=green!50!black] (0, 0) -- (80:11) arc [start angle=0, end angle=100, radius=11] -- cycle;
+          \filldraw[rotate=90, fill=green!20,draw=green!50!black] (0,0) -- (-15:10.5)
+              arc [start angle=-15, end angle=15, radius=10.5] -- cycle;
+          % \draw (0, 0) -- (100:12);
+        \end{scope}
+    
+        \node[anchor=west, align=left] (good_label) at (16,5) {Actual Goal};
+        \node[anchor=west, align=left] (bad_label) at (16,-5) {$h(\texttt{x}) = h'(\texttt{x})$\\ Variable unchanged\\ between heaps};
+        
+        \draw[<-, ultra thick, cyan!60!black, dashed] (good) to[out=45, in=150] (good_label);
+        \draw[<-, ultra thick, cyan!60!black, dashed] (bad) to[out=-45, in=-180] (bad_label);
+      \end{tikzpicture}
+    \end{column}%
+    \hfill
   \end{columns}
   
 \end{frame}
@@ -311,32 +312,25 @@
 
 
 
-\begin{frame}[fragile=singleslide]{Motivation}
+\begin{frame}[fragile=singleslide]{Example Rust}
   \note{
       - **Beispiel**: Nachbau eines Teiles d. Campus Management Systems
     \\
       - Aufgabe: Nach Prüfung neue note eintragen Student über Status informieren
     }
-  % \begin{rustcode}
-  %   /// Add `b` to end of Vec `as`
-  %   fn push(as: &mut Vec<i32>, b: i32) {..}
-  %   /// Get highest value. Returns `None` for empty Vec
-  %   fn maximum(as: &Vec<i32>) -> Option<i32> {..}
-
-  %   fn update_exam_tries(tries: &mut Vec<i32>, new_try: i32) {
-  %     push(&mut tries, new_try);
-
-  %     match maximum(ties) {
-  %       None => panic!("impossible"), // `tries` must at least contain `new_try`
-  %       Some(max_mark) if max_mark < 4    => println!("puh"),
-  %       _              if tries.len() > 3 => println!("Härtefallantrag?"),
-  %       _                                 => println!("versuch's nochmal"),
-  %     }
-  %   }
-  % \end{rustcode}
+  \inputminted[fontsize=\small]{rust}{./rust-no-spec.rs}
 \end{frame}
 
-\subsection{Erster }
+
+\begin{frame}[fragile=singleslide]{Example Rust}
+  \note{
+      - **Beispiel**: Nachbau eines Teiles d. Campus Management Systems
+    \\
+      - Aufgabe: Nach Prüfung neue note eintragen Student über Status informieren
+    }
+  \inputminted[fontsize=\footnotesize]{rust}{./rust-spec.rs}
+\end{frame}
+
 \begin{frame}{Blöcke}{in den KIT-Farben}
   \begin{columns}
     \column{.3\textwidth}
@@ -386,7 +380,6 @@
   \end{columns}
 \end{frame}
     
-\subsection{Zweiter Unterabschnitt}
 \begin{frame}{Auflistungen}
   Text
   \begin{itemize}
@@ -399,7 +392,6 @@
   \end{itemize}
 \end{frame}
 
-\section{Zweiter Abschnitt}
 
 \begin{frame}
         Bei Frames ohne Titel wird die Kopfzeile nicht angezeigt, und  

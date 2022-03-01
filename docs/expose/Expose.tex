@@ -110,11 +110,11 @@ Relevant papers originate from two lines of work. Firstly additions to refinemen
 
 For example, Lanzinger \cite{lanzinger_property_2021} successfully adapted refinement types to Java, which allows the user to check, that property types described by java annotations hold true throughout the program. At this point in time, specification and verification is limited to immutable (\texttt{final}) data.
 
-Koos et al. \cite{kloos_asynchronous_2015} extended refinement types to mutable and asynchronous programs. The paper explores how changes to possibly aliased memory cells can be tracked throughout a OCaml program. For that purpose the types are extended by a set of requirements on memory objects, which track distinktness and refinemented types of these memory cells. In contrast to OCaml, Rust already guarantees that mutable memory is not aliased and in particular \textit{all mutable memory locations must be accessible by a variable name in the current context}, which offers.
+Kloos et al. \cite{kloos_asynchronous_2015} extended refinement types to mutable and asynchronous programs. The paper explores how changes to possibly aliased memory cells can be tracked throughout a OCaml program. For that purpose the types are extended by a set of requirements on memory objects, which track distinctness and refined types of these memory cells. In contrast to OCaml, Rust already guarantees that mutable memory is not aliased and in particular \textit{all mutable memory locations must be accessible by a variable name in the current context}, which offers.
 
-In terms of alternative verification approaches, Prusti\cite{astrauskas_leveraging_2019} is notable, because of their work on formalizing the full Rust semantics, including \texttt{unsafe}. Prusti is a heavy-weight functional verification framework for Rust; based on seperation logic.
+In terms of alternative verification approaches, Prusti\cite{astrauskas_leveraging_2019} is notable, because of their work on formalizing the full Rust semantics, including \texttt{unsafe}. Prusti is a heavy-weight functional verification framework for Rust; based on separation logic.
 
-Alternative verification approaches also exists: For example RustHorn\cite{matsushita_rusthorn_2020} employs constrained horn clauses based verification to Rust. Particularily relevant for this thesis is the novel formalization for mutable references used in the paper. The authors stipulate that mutable references should be specified by a pre- and poststate from before a reference is borrowed to after it is returned.
+Alternative verification approaches also exists: For example RustHorn\cite{matsushita_rusthorn_2020} employs constrained horn clauses based verification to Rust. Particularity relevant for this thesis is the novel formalization for mutable references used in the paper. The authors stipulate that mutable references should be specified by a pre- and post-state from before a reference is borrowed to after it is returned.
 
 \section{Schedule} \label{sec:schedule}
 
@@ -150,47 +150,34 @@ This sections describes the relation of the tasks from Section \ref{ssec:How} to
 
 \section{Use Case Analysis}
 
-To gain some understanding of how lambdas are used in java, the 1000 most starred java repositories on GitHub were scanned for lambda expressions. In total 151 thousand lambda expressions were found in 37 thousand files in a combined code-base size of over 51 million lines of java code (without comments and white space lines), in about five million methods. Excluding tests, 73 thousand lambda expressions were found in 22 thousand files. 
+To gain some understanding of how relevant mutability is in Rust, all published Rust crates (Rusts version packages) published on crates.io with at least 10 versions was analysed\footnote{The limit of 10 versions is used to eliminate inactive and placeholder packages}. The analysis uses the syntactical structure to infer mutability information about various ast items: 
+\begin{itemize}
+	\item Local Variable Definitions. These can be tracked with high confidence
+	\item Parameters, which are considered immutable if they are passed as immutable references or owned.
+	\item Function Definitions, which are considered immutable, iff all parameters considered immutable.
+	\item Arguments. Hard to trace
+	\item Function Calls, which are considered immutable, iff all arguments are considered immutable.
+\end{itemize}
+In total around 52 million items were found in XXX files in a combined code-base size of over XXX liens of Rust code (without comments and white space lines)\footnote{Calculated with \texttt{cloc}}
+
+
+In total 151 thousand lambda expressions were found in 37 thousand files in a combined code-base size of over 51 million lines of java code (without comments and white space lines), in about five million methods. Excluding tests, 73 thousand lambda expressions were found in 22 thousand files. 
 % from cloc
 %Language                              files          blank        comment           code
 %----------------------------------------------------------------------------------------
 %Java                                  516939       11008674       19851358       51481787
 
 
-First the general context -- meaning the parent node in the java AST -- of these lambda expressions was determined (shown in Figure~\ref{fig:coarse_category}). The context is categorized into "Invocation of a Method by Field" (call of a Method on an Object by reference); "other Invocation" (e.g. call of a local method by name); "return statement"; a "constructor call"; "assignment" and finally a catch-all category: "any other Context".
-
-More than 80\% of all uses are in an invocation context. Thus making it the primary use case.
-
+Figure~\ref{fig:mutabillity_by_category} shows the ratio of mutable to immutable items. Note that about 30\% of local variables are defined mutable while just 10\% to 20\% of parameters and less than 10\% of functions are mutable.
 
 \begin{figure}[H]
-	% \includegraphics[width=\linewidth]{coarse_category.png}
-	\caption{Lambda Expressions by Context}
-	\label{fig:coarse_category}
-\end{figure}
-
-To get a better understanding of what kinds of invocations can be expected the data was analysed by the method's name (visualized in Figure~\ref{fig:fine_category}). The x-axis labels are the names of the Methods; RETURN being an exception and standing for a return statement context.
-
-\texttt{map}, \texttt{forEach} and \texttt{filter} make up about 25\% of all uses, but the rest of all uses quickly drops below 2\%.
-
-For this thesis that means, that the classical use case of \texttt{map}, \texttt{forEach} and \texttt{filter} is an important one, but certainly not the only. Consequently the solution should be general and expandable to cover the 75\% of other use cases.
-
-\begin{figure}[H]
-	% \includegraphics[width=\linewidth]{fine_category.png}
-	\caption{Lambda Expressions by fine Context}
-	\label{fig:fine_category}
+	\centering
+	\includegraphics[width=0.9\linewidth, clip, trim={0.5cm 6cm 0.5cm 6cm}]{../mutability_by_category.pdf}
+	\caption{Ratio of Immutable to Mutable Versions of Different AST Items. Items are Counted by Unique Occurrences}
+	\label{fig:mutabillity_by_category}
 \end{figure}
 
 
-
-\subsection{Comparison to Cok's Observations}
-
-Comparing the observation made here and the ones make by Cok et al. :
-In this data set from GitHub, functions as arguments made up about 85\% of lambda uses; \code{Collection} uses about 18\%; while functions as variables only accounted for about 6\% and return statements about 5\%.
-% in section 3 of Cok20182
-In the data set from GitHub \code{Collection} uses are three times higher than Cok et al. saw.
-
-In contrast to Cok et al. in the data set from GitHub, only 2\% of Methods had FP features, while Cok saw 20\%. This difference might originate from different definitions what constitutes a FP feature. In this analysis, only lambda expressions and function references are considered FP features; Cok's exact definition could not be found in the paper. Another reason could be the different code bases.
-Method length is likely not the reason, since in the data set from GitHub, method length did not correlate with having FP features.
 \end{appendices}
 
 

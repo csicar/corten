@@ -30,16 +30,16 @@
 
 \subsection{Why?}
 
-In systems programming, there has always been an interest in both performance and correctness. As 
+In systems programming, there has always been an interest in both performance and correctness, as 
 these pieces of software are often the foundation of critical infrastructure.
 
-The classical approaches to ensure correctness uncluse extensive testing, long experience and bmc, because these approaches are approachable to programmers as well as understandable in the programming context (i.e. no seperate language)
+The classical approaches to ensure correctness include extensive testing, long experience and bmc, because these approaches are approachable to programmers as well as understandable in the programming context (i.e. no separate language)
 
-Rust -- a relative newcomer to the systems programming field -- has the goal of guaraneeing memory and thread safety at runtime by extending the type system. This approach works surprisingly well. 
+Rust -- a relative newcomer to the systems programming field -- has the goal of guaranteeing memory and thread safety at runtime by extending the type system, which works quite well.
 
-User-defined functional requirements however cannot be checked by rusts type system and require users to use testing / fuzzing to check for correctness.
+User-defined functional requirements however cannot be checked by Rust's type system and require users to use testing / fuzzing to check for correctness.
 
-Testing is inadequate in terms of accuracy, while heavy verification systems are inadequate in terms of accesability to developers:
+Testing is inadequate in terms of accuracy, while heavy verification systems are inadequate in terms of accessability to developers:
 Both workflow and the specification languages are hard to adapt to existing programming workflows.
 
 In contrast developers are used to interacting with statically typed languages and their type warnings. It is therefore desirable to embed functional verification systems in type checking phase a compiler.
@@ -56,11 +56,11 @@ In contrast developers are used to interacting with statically typed languages a
 \subsection{What?}
 
 
-The thesis will enable automated verification of rust programming against refinement type specifications.
+The thesis will enable automated verification of Rust programs against refinement type specifications.
 
-The verification should be sound and feasible in the identified use cases, which will be tested on minimal -- yet representative -- examples. The examples will include full refinement type annotations, consequently making type inference optional.
+The verification should be sound, decidable and feasible in the identified use cases, which will be tested on minimal -- yet representative -- examples. The examples will include full refinement type annotations, consequently making type inference optional.
 
-The specification will be written in an extension of the rust type language, inspired by refinement types.
+The specification will be written in an extension of the Rust type language, inspired by refinement types.
 
 \subsection{How?} \label{ssec:How}
 
@@ -68,7 +68,7 @@ This section starts with outlining the fundamental ideas (denoted "I1" to "I4") 
 
 \begin{itemize}
 	\item[I1] adapt Refinement Type semantics to Rust, especially for mutability in Rust's Ownership Model
-	\item[I2] Treat owner and immutable types as logical variables (i.e. referncially transparent, unchanging)
+	\item[I2] Treat owner and immutable types as logical variables (i.e. referentially transparent, unchanging)
 	\item[I3] Treat mutable references as state transitions from start of end of borrow
 	\item[I2] develop a prototype for translating refinement type judgments to a verification backend (e.g. z3, prusti)
 	\item[I3] conduct a feasibility study on different categories of common use cases
@@ -86,33 +86,39 @@ The following enumeration lists the concrete tasks (denoted "T1" to "T6") with t
 	\item[T2] devise a system for type specifications, which would ideally cover the identified use cases. Refinement types are inherently limited in expressiveness, thusly in cases where use cases cannot be covered, the reason will be explained. The result is a concrete description of the syntax and type judgment semantics.
 	\item[T3] implement a parser for the refinement language defined above. The product is a parser that can parse the refinement language.
 	\item[T4] transform refinement types and Rust AST to a verification backend. The product is an implementation, or alternatively a description of the process.
-	\item[T5] if necessary for the use cases, a definition of suitable axioms for language build-in types. The deliverable is a set of refinement type coersions.
+	\item[T5] if necessary for the use cases, a definition of suitable axioms for language build-in types. The deliverable is a set of refinement type coercions.
 	\item[T6] conduct a feasibility study on the examples of the use cases in \hyperref[itm:T1]{T1}. The result is a set of proven examples. If some examples could not be proven, the reason will be investigated and explained.
 \end{itemize}
 
 
 \section{Defining the Goal}
 
-The goal of the thesis is to show that Refinement Types can be idiomatically adapted to mutable languages when leveraging a strong Ownership Model. It aims to enable gradual adoption of leightweight verification methods to Rust.
+The goal of the thesis is to show that Refinement Types can be idiomatically adapted to mutable languages when leveraging a strong Ownership Model. It aims to enable gradual adoption of lightweight verification methods to Rust.
 
-I aim for automated parsing of refinement types and source code translation. As well as giving a description of the syntax and semantics of the constructs, that will be added to Rust.
+I aim for automated parsing of refinement types and verification. As well as giving a description of the syntax and semantics of the constructs, that will extend Rust's type system.
 
-A feasibility study on the previously defined use cases will show how usefull the proposed additions are. For use cases that could not be covered by the porposed additions, the reason will be investigated.
+A feasibility study on the previously defined use cases will show how useful the proposed additions are. For use cases that could not be covered by the proposed additions, the reason will be investigated.
 In case implementing these translations could not be completed, the use cases will be transformed manually.
 
-Specifying or verifying complete Rust modules or the entire Rust languge is not the goal of the thesis.
+Specifying or verifying complete Rust modules or the entire Rust language is not the goal of the thesis.
+
+In particular \code{unsafe} Rust will not be represented in the specification nor implementation.
+
+\todo{Define subset or Rust?}
+
+Implementing liquid type inference in also not a goal of the thesis.
 
 \section{State of the Art}
 
 There currently does not exist an implementation of refinement types for Rust.
 
-Relevant papers originate from two lines of work. Firstly additions to refinement types for mutability, asynchroneous execution etc. and secondly other verification frameworks for Rust.
+Relevant papers originate from two lines of work. Firstly additions to refinement types for mutability, asynchronous execution etc. and secondly other verification frameworks for Rust.
 
-For example, Lanzinger \cite{lanzinger_property_2021} successfully adapted refinement types to Java, which allows the user to check, that property types described by java annotations hold true throughout the program. At this point in time, specification and verification is limited to immutable (\texttt{final}) data.
+For example, Lanzinger \cite{lanzinger_property_2021} successfully adapted refinement types to Java, which allows the user to check, that property types described by java annotations hold true throughout the program. At this point in time, specification and verification is limited to immutable (\code{final}) data.
 
-Kloos et al. \cite{kloos_asynchronous_2015} extended refinement types to mutable and asynchronous programs. The paper explores how changes to possibly aliased memory cells can be tracked throughout a OCaml program. For that purpose the types are extended by a set of requirements on memory objects, which track distinctness and refined types of these memory cells. In contrast to OCaml, Rust already guarantees that mutable memory is not aliased and in particular \textit{all mutable memory locations must be accessible by a variable name in the current context}, which offers.
+Kloos et al. \cite{kloos_asynchronous_2015} extended refinement types to mutable and asynchronous programs. The paper explores how changes to possibly aliased memory cells can be tracked throughout a OCaml program. For that purpose the types are extended by a set of requirements on memory objects, which track distinctness and refined types of these memory cells. In contrast to OCaml, Rust already guarantees that mutable memory is not aliased and in particular \textit{all mutable memory locations must be accessible by a variable name in the current context}, which offers substantial advantages in terms of simplicity to specification and verification of Rust programs.
 
-In terms of alternative verification approaches, Prusti\cite{astrauskas_leveraging_2019} is notable, because of their work on formalizing the full Rust semantics, including \texttt{unsafe}. Prusti is a heavy-weight functional verification framework for Rust; based on separation logic.
+In terms of alternative verification approaches, Prusti\cite{astrauskas_leveraging_2019} is notable, because of their work on formalizing the full Rust semantics, including \code{unsafe}. Prusti is a heavy-weight functional verification framework for Rust; based on separation logic.
 
 Alternative verification approaches also exists: For example RustHorn\cite{matsushita_rusthorn_2020} employs constrained horn clauses based verification to Rust. Particularity relevant for this thesis is the novel formalization for mutable references used in the paper. The authors stipulate that mutable references should be specified by a pre- and post-state from before a reference is borrowed to after it is returned.
 
@@ -150,25 +156,30 @@ This sections describes the relation of the tasks from Section \ref{ssec:How} to
 
 \section{Use Case Analysis}
 
-To gain some understanding of how relevant mutability is in Rust, all published Rust crates (Rusts version packages) published on crates.io with at least 10 versions was analysed\footnote{The limit of 10 versions is used to eliminate inactive and placeholder packages}. The analysis uses the syntactical structure to infer mutability information about various ast items: 
+To gain some understanding of how relevant mutability is in Rust, all published Rust crates (Rusts version packages) published on crates.io with at least 10 versions were analysed\footnote{The limit of 10 versions is used to eliminate inactive and placeholder packages}. The analysis uses the syntactical structure to infer mutability information about the following various AST items: 
 \begin{itemize}
 	\item Local Variable Definitions. These can be tracked with high confidence
 	\item Parameters, which are considered immutable if they are passed as immutable references or owned.
 	\item Function Definitions, which are considered immutable, iff all parameters considered immutable.
-	\item Arguments. Hard to trace
+	\item Arguments. Hard to track
 	\item Function Calls, which are considered immutable, iff all arguments are considered immutable.
 \end{itemize}
-In total around 52 million items were found in XXX files in a combined code-base size of over XXX liens of Rust code (without comments and white space lines)\footnote{Calculated with \texttt{cloc}}
+A total of around 52 million items were found in 228263 files in a combined code-base size of over 64 million lines of Rust code (without comments and white space lines)\footnote{Calculated with \texttt{cloc}}
 
-
-In total 151 thousand lambda expressions were found in 37 thousand files in a combined code-base size of over 51 million lines of java code (without comments and white space lines), in about five million methods. Excluding tests, 73 thousand lambda expressions were found in 22 thousand files. 
 % from cloc
-%Language                              files          blank        comment           code
-%----------------------------------------------------------------------------------------
-%Java                                  516939       11008674       19851358       51481787
+% ----------------------------------------------------------------------------------------
+% Language                              files          blank        comment           code
+% ----------------------------------------------------------------------------------------
+% Rust                                 228263        5664979       10317162       64193670
+% C                                     32945        1539542        1979846       13468919
+% C++                                   18084        1263696        1093652        7956897
+% JSON                                  15838           1897              0        6424252
+% C/C++ Header                          31619        1152322        2015896        6284146
+% XML                                    5142          25277          25773        4807556
+% Assembly                               4146         534785         582345        2631991
 
 
-Figure~\ref{fig:mutabillity_by_category} shows the ratio of mutable to immutable items. Note that about 30\% of local variables are defined mutable while just 10\% to 20\% of parameters and less than 10\% of functions are mutable.
+Figure~\ref{fig:mutabillity_by_category} shows the ratio of mutable to immutable items. Note that about 30\% of local variables are defined mutable while just 10\% to 20\% of parameters are mutable and less than 10\% of functions have mutable parameters at all.
 
 \begin{figure}[H]
 	\centering

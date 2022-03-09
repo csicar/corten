@@ -26,13 +26,24 @@
 
 \maketitle
 
+
+\section{Defining the Goal}
+
+The goal of the thesis is to show that Refinement Types can be idiomatically adapted to mutable languages when leveraging a strong Ownership Model. It aims to enable gradual adoption of lightweight verification methods in mutable languages.
+
+I aim for automated parsing of refinement types and verification. 
+In case implementing these translations could not be completed, the use cases will be transformed manually.
+In addition, a description of the syntax and semantics of the constructs, that will extend Rust's type system, will be provided as well as justification for their soundness. A feasibility study on minimal examples of representative use cases will show how useful the proposed verification system is. For use cases that could not be covered by the proposed additions, the reason will be investigated.
+
+Specifying or verifying complete Rust modules or the entire Rust language is not the goal of the thesis. In particular \code{unsafe} Rust will not be taken into account in specification nor implementation. Implementing Liquid Type inference in also not a goal of the thesis.
+
+
 \section{Exposition}
 
 \subsection{Why?}
 
 
-Software correctness is a big problem. One way to improve correctness is strong and descriptive types and type systems. Using type systems for correctness was traditionally prevalent in purely functional languages where evolving states can be represented by evolving types. Tracing evolving states in the type system would also be useful in languages with mutability. In particular Rust seems like a promising target language, because mutability is already tracked precisely.
-
+Software correctness is a central goal for software development. One way to improve correctness is strong and descriptive types and verification thereof with type systems. Using type systems for correctness was traditionally prevalent in purely functional languages where evolving states are often represented by evolving types, offering approachable and gradual adoption of verification methods. Tracing evolving states in the type system would be especially useful for languages with mutability, since substantial parts of the behaviour of the program is expressed as mutation of state. In particular Rust seems like a promising target language, because mutability is already tracked precisely and thus promising functional verification for relatively minimal effort on the programmer's part.
 
 
 % In systems programming, there has always been an interest in both performance and correctness, as 
@@ -83,17 +94,6 @@ Instead of conducting these tasks once for all use cases the set of tasks will b
 	\item[S7] \textbf{ADTs}: This step would consist of extending the type system with sum types and the language with pattern matching, as well as extending the specification with means of expressing restrictions on sum type variants. Starting this step is optional.
 \end{itemize}
 
-\section{Defining the Goal}
-
-The goal of the thesis is to show that Refinement Types can be idiomatically adapted to mutable languages when leveraging a strong Ownership Model. It aims to enable gradual adoption of lightweight verification methods in mutable languages.
-
-I aim for automated parsing of refinement types and verification. As well as giving a description of the syntax and semantics of the constructs, that will extend Rust's type system and justify their soundness.
-
-A feasibility study on the previously defined use cases will show how useful the proposed additions are. For use cases that could not be covered by the proposed additions, the reason will be investigated.
-In case implementing these translations could not be completed, the use cases will be transformed manually.
-
-Specifying or verifying complete Rust modules or the entire Rust language is not the goal of the thesis. In particular \code{unsafe} Rust will not be represented in the specification nor implementation. Implementing liquid type inference in also not a goal of the thesis.
-
 \section{State of the Art}
 
 There currently does not exist an implementation of refinement types for Rust.
@@ -110,7 +110,8 @@ Alternative verification approaches also exists: For example RustHorn\cite{matsu
 
 \section{Schedule} \label{sec:schedule}
 
-This sections describes the relation of the tasks from Section \ref{ssec:How} to their timeslot and the dependencies between them in form of a gantt diagram. There are two milestones: Completion of Specification (denoted \textit{Specification}) and the completion of implementation (denoted \textit{Implementation}).
+This sections describes the relation of the steps from Section \ref{ssec:How} to their timeslot and the dependencies between them in form of a gantt diagram. There are one milestones, namely completion of the critical stages, which is denoted \textit{Feature Complete}.
+
 
 % \begin{ganttchart}[
 % 	time slot format=isodate,

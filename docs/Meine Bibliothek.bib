@@ -242,3 +242,42 @@ Publisher: Schloss Dagstuhl - Leibniz-Zentrum fuer Informatik {GmbH}, Wadern/Saa
 	note = {Place: New York, {NY}, {USA}
 Publisher: Association for Computing Machinery},
 }
+
+@article{graf_lower_2020,
+	title = {Lower your guards: a compositional pattern-match coverage checker},
+	volume = {4},
+	issn = {2475-1421},
+	url = {https://dl.acm.org/doi/10.1145/3408989},
+	doi = {10.1145/3408989},
+	shorttitle = {Lower your guards},
+	abstract = {A compiler should warn if a function defined by pattern matching does not cover its inputs—that is, if there are missing or redundant patterns. Generating such warnings accurately is difficult for modern languages due to the myriad of language features that interact with pattern matching. This is especially true in Haskell, a language with a complicated pattern language that is made even more complex by extensions offered by the Glasgow Haskell Compiler ({GHC}). Although {GHC} has spent a significant amount of effort towards improving its pattern-match coverage warnings, there are still several cases where it reports inaccurate warnings.
+            
+              We introduce a coverage checking algorithm called Lower Your Guards, which boils down the complexities of pattern matching into
+              guard trees
+              . While the source language may have many exotic forms of patterns, guard trees only have three different constructs, which vastly simplifies the coverage checking process. Our algorithm is modular, allowing for new forms of source-language patterns to be handled with little changes to the overall structure of the algorithm. We have implemented the algorithm in {GHC} and demonstrate places where it performs better than {GHC}’s current coverage checker, both in accuracy and performance.},
+	pages = {1--30},
+	issue = {{ICFP}},
+	journaltitle = {Proceedings of the {ACM} on Programming Languages},
+	shortjournal = {Proc. {ACM} Program. Lang.},
+	author = {Graf, Sebastian and Peyton Jones, Simon and Scott, Ryan G.},
+	urldate = {2022-03-15},
+	date = {2020-08-02},
+	langid = {english},
+	file = {Graf et al. - 2020 - Lower your guards a compositional pattern-match c.pdf:/home/csicar/Zotero/storage/LEFXNJPB/Graf et al. - 2020 - Lower your guards a compositional pattern-match c.pdf:application/pdf},
+}
+
+@inproceedings{vazou_abstract_2013,
+	location = {Berlin, Heidelberg},
+	title = {Abstract Refinement Types},
+	isbn = {978-3-642-37036-6},
+	doi = {10.1007/978-3-642-37036-6_13},
+	abstract = {We present abstract refinement types which enable quantification over the refinements of data- and function-types. Our key insight is that we can avail of quantification while preserving {SMT}-based decidability, simply by encoding refinement parameters as uninterpreted propositions within the refinement logic. We illustrate how this mechanism yields a variety of sophisticated means for reasoning about programs, including: parametric refinements for reasoning with type classes, index-dependent refinements for reasoning about key-value maps, recursive refinements for reasoning about recursive data types, and inductive refinements for reasoning about higher-order traversal routines. We have implemented our approach in a refinement type checker for Haskell and present experiments using our tool to verify correctness invariants of various programs.},
+	pages = {209--228},
+	booktitle = {Programming Languages and Systems},
+	publisher = {Springer},
+	author = {Vazou, Niki and Rondon, Patrick M. and Jhala, Ranjit},
+	editor = {Felleisen, Matthias and Gardner, Philippa},
+	date = {2013},
+	langid = {english},
+	file = {Springer Full Text PDF:/home/csicar/Zotero/storage/88XPM8P7/Vazou et al. - 2013 - Abstract Refinement Types.pdf:application/pdf},
+}

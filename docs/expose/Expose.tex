@@ -26,10 +26,23 @@
 
 \maketitle
 
+\section{Abstract}
+
+
+Software correctness is a central goal for software development. 
+One way to improve correctness is strong and descriptive types and verification thereof with type systems.
+In particular Refinement Types demonstrated, that even with a verification system that is restricted to a decidable logic, intricate properties can be expressed and verified in a lightweight and gradual way.
+However existing approaches for adapting Refinement Types from functional to imperative languages proved hard without compromising on at least one of core features of Refinement Types.
+% I argue that a base language restricted to unique mutable references will make 
+This thesis aims to design a Refinement Type system without such compromises by taking advantage of a base language's restriction to unique mutable references (i.e. Rust). 
+I will define a Refinement Type language and typing rules and argue for their soundness. Additionally I will implement a prototype verifier to evaluate the effectiveness of the approach on selected examples.
+
+
+% \todo{zu konkret: stattdessen vorgehensweise}
 
 \section{Defining the Goal}
 
-The goal of the thesis is to show that Refinement Types can be idiomatically adapted to mutable languages when leveraging a strong Ownership Model. It aims to enable gradual adoption of lightweight verification methods in mutable languages.
+The goal of the thesis is to show that Refinement Types can be idiomatically adapted to languages with unique mutable references. It aims to enable gradual adoption of lightweight verification methods in mutable languages.
 
 I aim for automated parsing of refinement types and verification. 
 In case implementing these translations could not be completed, the use cases will be transformed manually.

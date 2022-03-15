@@ -9,7 +9,7 @@
 \usepackage[british]{babel}
 \usepackage[bibstyle=numeric, backend=biber, sorting=none]{biblatex}
 \addbibresource{../Meine Bibliothek.bib}
-% 
+%
 \usepackage[colorinlistoftodos,prependcaption,textsize=tiny]{todonotes}
 
 \newcommand{\defeq}{\vcentcolon=}
@@ -29,12 +29,12 @@
 \section{Abstract}
 
 
-Software correctness is a central goal for software development. 
+Software correctness is a central goal for software development.
 One way to improve correctness is using strong and descriptive types and verifying them with type systems.
 In particular Refinement Types demonstrated, that even with a verification system that is restricted to a decidable logic, intricate properties can be expressed and verified in a lightweight and gradual way.
 However existing approaches for adapting Refinement Types from functional to imperative languages proved hard without compromising on at least one of core features of Refinement Types.
-% I argue that a base language restricted to unique mutable references will make 
-This thesis aims to design a Refinement Type system without such compromises by taking advantage of a base language's restriction to unique mutable references (i.e. Rust). 
+% I argue that a base language restricted to unique mutable references will make
+This thesis aims to design a Refinement Type system without such compromises by taking advantage of Rust's restriction to unique mutable references. 
 I will define a Refinement Type language and typing rules and argue for their soundness. Additionally I will implement a prototype verifier to evaluate the effectiveness of the approach on selected examples.
 
 
@@ -44,7 +44,7 @@ I will define a Refinement Type language and typing rules and argue for their so
 
 The goal of the thesis is to show that Refinement Types can be idiomatically adapted to languages with unique mutable references. It aims to enable gradual adoption of lightweight verification methods in mutable languages.
 
-I aim for automated parsing of refinement types and verification. 
+I aim for automated parsing of refinement types and verification.
 In case implementing these translations could not be completed, the use cases will be transformed manually.
 In addition, a description of the syntax and semantics of the constructs, that will extend Rust's type system, will be provided as well as justification for their soundness. A feasibility study on minimal examples of representative use cases will show how useful the proposed verification system is. For use cases that could not be covered by the proposed additions, the reason will be investigated.
 
@@ -55,11 +55,13 @@ Specifying or verifying complete Rust modules or the entire Rust language is not
 
 \subsection{Why?}
 
-With increasing reliance on increasingly complex software, ensuring correctness of programs is a vital concern to software development. Especially with a predicted shortage of developers\cite{breaux_2021_2021-1}, it is not acceptable to require, all developers to undergo year-long training in specialized and complex verification tools. It is therefore crucial to integrate with their existing tooling and workflows to ensure the future high quality of software.
+% With increasing reliance on increasingly complex software, ensuring correctness of programs is a vital concern to software development.
+With increasing amount and reliance of software, ensuring the correctness of programs is a vital concern for the future of software development.
+Although research in this area has made good progress, most approaches are not accessible enough for general adoption by the developers. Especially in light of a predicted shortage of developers\cite{breaux_2021_2021-1}, it is not sufficient to require developers to undergo year-long training in specialized and complex verification methods to ensure the correctness of their software. It is therefore crucial to integrate with their existing tooling and workflows to ensure the future high quality of software.
 One avenue for improving accessability for functional verification is extending the expressiveness of the type system to cover more of the correctness properties.
 Using type systems for correctness was traditionally prevalent in purely functional languages where evolving states are often represented by evolving types, offering approachable and gradual adoption of verification methods. Tracing evolving states in the type system would be especially useful for languages with mutability, since substantial parts of the behaviour of the program is expressed as mutation of state. In particular Rust seems like a promising target language, because mutability is already tracked precisely and thus promising functional verification for relatively minimal effort on the programmer's part.
 
-% In systems programming, there has always been an interest in both performance and correctness, as 
+% In systems programming, there has always been an interest in both performance and correctness, as
 % these pieces of software are often the foundation of critical infrastructure.
 
 % The classical approaches to ensure correctness include extensive testing, long experience and bmc, because these approaches are approachable to programmers as well as understandable in the programming context (i.e. no separate language)
@@ -102,7 +104,7 @@ Instead of conducting these tasks once for all use cases the set of tasks will b
 	\item[S2] \textbf{Modular Verification}: Extend the system to cover modular verification. This entails propagating type information between caller and callee. Consequently, the value-level language will be extended with function calls.
 	\item[S3] \textbf{Loops}: This step adds loops to the value-level language necessitating the handling of loop invariants (or an  alternative thereof). The invariants will not be automatically inferred.
 	\item[S4] \textbf{Predicate Generics}: Improve the expressivity of the type system by adding abstract refinement
-	\item[S5] \textbf{ADTs}: This step would consist of extending the type system with sum types and the language with pattern matching, as well as extending the specification with means of expressing restrictions on sum type variants. 
+	\item[S5] \textbf{ADTs}: This step would consist of extending the type system with sum types and the language with pattern matching, as well as extending the specification with means of expressing restrictions on sum type variants.
 	\item[S6] \textbf{Higher-Order Functions}: Extend the system with non-capturing lambdas and their refinement type specification. Completing this step is optional.
 	\item[S7] \textbf{Concurrency}: Explore how this approach can be expanded to cover concurrent programs. Starting this step is optional.
 \end{itemize}
@@ -174,7 +176,7 @@ This sections describes the relation of the steps from Section \ref{ssec:How} to
 
 \section{Use Case Analysis}
 
-To gain some understanding of how relevant mutability is in Rust, all published Rust crates (Rusts version packages) published on crates.io with at least 10 versions were analysed\footnote{The limit of 10 versions is used to eliminate inactive and placeholder packages}. The analysis uses the syntactical structure to infer mutability information about the following various AST items: 
+To gain some understanding of how relevant mutability is in Rust, all published Rust crates (Rusts version packages) published on crates.io with at least 10 versions were analysed\footnote{The limit of 10 versions is used to eliminate inactive and placeholder packages}. The analysis uses the syntactical structure to infer mutability information about the following various AST items:
 \begin{itemize}
 	\item Local Variable Definitions. These can be tracked with high confidence
 	\item Parameters, which are considered immutable if they are passed as immutable references or owned.

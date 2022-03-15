@@ -95,16 +95,16 @@ This section starts with outlining the fundamental ideas (denoted "T1" to "T5") 
 	\item[T5] Conduct a feasibility study on different categories of common use cases. The result is a set of proven examples. If some examples could not be proven, the reason will be investigated and explained.
 \end{itemize}
 
-Instead of conducting these tasks once for all use cases the set of tasks will be performed incrementally on the identified use cases in order of increasing complexity. These steps are denoted "S1" to "S6". These steps are connected to specific time in Section \ref{sec:schedule}.
+Instead of conducting these tasks once for all use cases the set of tasks will be performed incrementally on the identified use cases in order of increasing complexity. These steps are denoted "S1" to "S7". These steps are connected to specific time in Section \ref{sec:schedule}.
 
 \begin{itemize}
-	\item[S1] \textbf{Fundamentals}: Cover the mutable, immutable and owned variables, which are specified with (non-abstract) refinement types. In terms of the value-level language, this step will cover assignments, if expressions and tuples or product types.
-	\item[S2] \textbf{Modular Verification}: Extend the system to cover modular verification. In entails propagating type information between caller and callee. Consequently, the value-level language will be extended with function calls.
-	\item[S3] \textbf{Loops}: This step adds loops to the value-level language necessitating the handling of loop invariant (or an  alternative thereof). The invariants will not be automatically inferred.
+	\item[S1] \textbf{Fundamentals}: Cover the mutable, immutable and owned variables, which are specified with (non-abstract) refinement types. In terms of the value-level language, this step will cover assignments, if statements and tuples or product types.
+	\item[S2] \textbf{Modular Verification}: Extend the system to cover modular verification. This entails propagating type information between caller and callee. Consequently, the value-level language will be extended with function calls.
+	\item[S3] \textbf{Loops}: This step adds loops to the value-level language necessitating the handling of loop invariants (or an  alternative thereof). The invariants will not be automatically inferred.
 	\item[S4] \textbf{Predicate Generics}: Improve the expressivity of the type system by adding abstract refinement
-	\item[S5] \textbf{Higher-Order Functions}: Extend the system with non-capturing lambdas and their refinement type specification.
-	\item[S6] \textbf{Concurrency}: Explore how this approach can be expanded to cover concurrent programs. Completing this step is optional.
-	\item[S7] \textbf{ADTs}: This step would consist of extending the type system with sum types and the language with pattern matching, as well as extending the specification with means of expressing restrictions on sum type variants. Starting this step is optional.
+	\item[S5] \textbf{ADTs}: This step would consist of extending the type system with sum types and the language with pattern matching, as well as extending the specification with means of expressing restrictions on sum type variants. 
+	\item[S6] \textbf{Higher-Order Functions}: Extend the system with non-capturing lambdas and their refinement type specification. Completing this step is optional.
+	\item[S7] \textbf{Concurrency}: Explore how this approach can be expanded to cover concurrent programs. Starting this step is optional.
 \end{itemize}
 
 \section{State of the Art}
@@ -126,31 +126,6 @@ Alternative verification approaches also exists: For example RustHorn\cite{matsu
 This sections describes the relation of the steps from Section \ref{ssec:How} to their timeslot and the dependencies between them in form of a gantt diagram. There are one milestones, namely completion of the critical stages, which is denoted \textit{Feature Complete}.
 
 
-% \begin{ganttchart}[
-% 	time slot format=isodate,
-% 	x unit=0.04cm,
-% 	today = 2022-02-30,
-% 	link bulge=2.5,
-% 	]{2022-02-30}{2022-08-31}
-% \gantttitlecalendar{year, month=name} \\
-% \ganttbar{T1 (Use Cases)}{2022-02-30}{2022-03-07} \\
-% 	\ganttlinkedbar[name=T2]{T2 (Formalization)}{2022-03-07}{2022-05-17} \\
-% 		\ganttlinkedmilestone[name=Spec]{Specification}{2022-05-17} \\
-% 			\ganttlinkedbar[name=T5]{T5 (Axioms)}{2022-05-31}{2022-06-15} \\
-% 				\ganttlinkedbar[name=T6]{T6 (Evaluation)}{2022-07-31}{2022-08-15} \\
-
-% \ganttbar[name=T3]{T3 (Parsing)}{2022-04-07}{2022-05-07} \\
-% 	\ganttlinkedbar[name=T4]{T4 (Translation)}{2022-05-07}{2022-06-31} \\
-% 		\ganttlinkedmilestone[name=Impl]{Implementation}{2022-07-10} \\
-
-% \ganttlink[link mid=0.9]{T3}{Impl}
-
-
-% \ganttbar[name=raw_version]{Draft Version}{2022-06-01}{2022-08-01} \\
-% 	\ganttlinkedbar[name=corrections]{Revisions}{2022-08-01}{2022-08-20} \\
-% 		\ganttlinkedbar{Buffer}{2022-08-20}{2022-08-31} \\
-% \end{ganttchart}
-
 \begin{ganttchart}[
 	time slot format=isodate,
 	x unit=0.04cm,
@@ -166,22 +141,27 @@ This sections describes the relation of the steps from Section \ref{ssec:How} to
 \ganttbar[name=S3]{S3 Loops}{2022-04-08}{2022-05-08} \\
 \ganttlink[link mid=0.1]{S1}{S3}
 
-\ganttbar[name=S4]{S4 Predicate Generics}{2022-05-08}{2022-06-08} \\
-\ganttlink{S2}{S4}
+
+
+\ganttbar[name=S4]{S4 Predicate Generics}{2022-05-08}{2022-05-30}\\
+\ganttlink[link mid=0.2]{S2}{S4}
+
+
+\ganttbar[name=S5]{S5 ADTs}{2022-05-30}{2022-06-18}  \\
+\ganttlink[link mid=0.01]{S1}{S5}
+
+\ganttlinkedmilestone[name=fc]{Feature Complete}{2022-06-18} \\
+\ganttlink[]{S4}{fc}
+
+
+\ganttbar[name=S6]{S6 Higher-Order}{2022-06-28}{2022-07-25} \\
+\ganttlink[link mid=0.25]{S4}{S6}
 
 
 
-\ganttbar[name=S5]{S5 Higher-Order}{2022-06-08}{2022-07-08} \\
-\ganttlink[link mid=0.5]{S4}{S5}
+\ganttbar[name=S7]{S7 Concurrency}{2022-07-25}{2022-08-10} \\
+\ganttlink[link mid=0.5]{S6}{S7}
 
-\ganttlinkedmilestone{Feature Complete}{2022-07-08} \\
-
-
-\ganttbar[name=S6]{S6 Concurrency}{2022-07-12}{2022-07-30} \\
-\ganttlink[link mid=0.1]{S5}{S6}
-
-\ganttbar[name=S7]{S7 ADTs}{2022-07-22}{2022-08-10} \\
-\ganttlink[link mid=0.01]{S1}{S7}
 
 \ganttbar[name=raw_version]{Draft Version}{2022-06-10}{2022-08-15} \\
 	\ganttlinkedbar[name=corrections]{Revisions}{2022-08-15}{2022-09-06} \\

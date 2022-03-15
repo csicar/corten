@@ -30,7 +30,7 @@
 
 
 Software correctness is a central goal for software development. 
-One way to improve correctness is strong and descriptive types and verification thereof with type systems.
+One way to improve correctness is using strong and descriptive types and verifying them with type systems.
 In particular Refinement Types demonstrated, that even with a verification system that is restricted to a decidable logic, intricate properties can be expressed and verified in a lightweight and gradual way.
 However existing approaches for adapting Refinement Types from functional to imperative languages proved hard without compromising on at least one of core features of Refinement Types.
 % I argue that a base language restricted to unique mutable references will make 
@@ -55,9 +55,9 @@ Specifying or verifying complete Rust modules or the entire Rust language is not
 
 \subsection{Why?}
 
-
-Software correctness is a central goal for software development. One way to improve correctness is strong and descriptive types and verification thereof with type systems. Using type systems for correctness was traditionally prevalent in purely functional languages where evolving states are often represented by evolving types, offering approachable and gradual adoption of verification methods. Tracing evolving states in the type system would be especially useful for languages with mutability, since substantial parts of the behaviour of the program is expressed as mutation of state. In particular Rust seems like a promising target language, because mutability is already tracked precisely and thus promising functional verification for relatively minimal effort on the programmer's part.
-
+With increasing reliance on increasingly complex software, ensuring correctness of programs is a vital concern to software development. Especially with a predicted shortage of developers\cite{breaux_2021_2021-1}, it is not acceptable to require, all developers to undergo year-long training in specialized and complex verification tools. It is therefore crucial to integrate with their existing tooling and workflows to ensure the future high quality of software.
+One avenue for improving accessability for functional verification is extending the expressiveness of the type system to cover more of the correctness properties.
+Using type systems for correctness was traditionally prevalent in purely functional languages where evolving states are often represented by evolving types, offering approachable and gradual adoption of verification methods. Tracing evolving states in the type system would be especially useful for languages with mutability, since substantial parts of the behaviour of the program is expressed as mutation of state. In particular Rust seems like a promising target language, because mutability is already tracked precisely and thus promising functional verification for relatively minimal effort on the programmer's part.
 
 % In systems programming, there has always been an interest in both performance and correctness, as 
 % these pieces of software are often the foundation of critical infrastructure.

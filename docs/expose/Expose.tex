@@ -7,6 +7,7 @@
 \usepackage{float}
 \usepackage[toc,page]{appendix}
 \usepackage[british]{babel}
+\usepackage{minted}
 \usepackage[bibstyle=numeric, backend=biber, sorting=none]{biblatex}
 \addbibresource{../Meine Bibliothek.bib}
 %
@@ -80,9 +81,18 @@ Using type systems for correctness was traditionally prevalent in purely functio
 
 The thesis will enable automated verification of programs with mutability against refinement type specifications by taking advantage of Rust's strong Ownership Model.
 
-The verification should be sound, decidable and feasible in the identified use cases, which will be tested on minimal -- yet representative -- examples. The examples will include full refinement type annotations, consequently making type inference optional.
-Justification for why the refinement types system is sound will be provided.
+The verification should be sound, decidable and feasible in the identified use cases, which will be tested on minimal -- yet representative -- examples. The examples will include full refinement type annotations, consequently making type inference optional. Listing \ref{lst:pushall} shows how an example program might look like: The \code{ty!} macros specify Refinement Types, which are used in the type checking of the \code{client} function for detect an index out of bounds error.
+
+
+\begin{listing}
+	\inputminted[fontsize=\footnotesize]{rust}{./pushall.rs}
+	\caption{Example Use-Case: \code{push\_all} specifies how the \code{Vec} length changes by calling it; as a result \code{client} should not compile.}
+	\label{lst:pushall}
+\end{listing}
+
+Additionally justification for why the refinement types system is sound will be provided.
 The specification will be written in an extension of the Rust type language, inspired by refinement types.
+
 
 \subsection{How?} \label{ssec:How}
 

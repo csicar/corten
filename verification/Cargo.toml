@@ -14,9 +14,15 @@ rustc_private = true
 # doctest = false
 
 [dependencies]
-"env_logger"="*"
-"serde"="*"
-
+tracing = "*"
+tracing-subscriber = { version = "0.3.9", features = [
+  "env-filter",
+  "json",
+  "ansi",
+] }
+"serde" = "*"
+syn = { version = "1.0", features = ["full"] }
+syn-serde = { version = "0.2", features = ["json"] }
 
 
 [dev-dependencies]

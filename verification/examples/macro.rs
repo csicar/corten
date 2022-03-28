@@ -1,17 +1,16 @@
 extern crate runtime_library;
-use runtime_library::{refined, refined2};
+use runtime_library::{refined};
 
 fn main() {
     let message = "Test";
     println!("{}", message)
 }
 
-struct Point {
-    x: i32,
-    y: i32,
-}
-
 #[refined]
-fn t(a: ty!(i32 | a > 2)) -> i32 {
- 2
+fn max(a: ty!{i32 | true}, b: ty!{i32 | true}) -> ty!(i32 | v >= a && v >= b) {
+    if a > b {
+        a
+    } else {
+        b
+    }
 }

@@ -185,7 +185,7 @@ impl rustc_driver::Callbacks for OurCompilerCalls {
                                      None
                                  }
                              });
-                             info!("found spec {:#?}", spec);
+                             info!("found spec {:?}", spec);
 
 
                               Some((local_def_id, hir_node))
@@ -196,7 +196,7 @@ impl rustc_driver::Callbacks for OurCompilerCalls {
                 })
                 .collect();
             def_ids_with_body.iter().for_each(|(id, def)| {
-                trace!("Item {:?} {:#?}", id, def);
+                trace!("Item {:?} {:?}", id, def);
             });
         });
 
@@ -244,6 +244,5 @@ fn main() {
     tracing_subscriber::fmt::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::new("trace"))
         .pretty().init();
-    error!("asd");
     prusti_main();
 }

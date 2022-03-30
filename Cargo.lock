@@ -113,6 +113,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "refinement-language"
+version = "0.1.0"
+dependencies = [
+ "nom",
+ "proc-macro2",
+ "quote",
+ "syn",
+ "syn-serde",
+]
+
+[[package]]
 name = "regex"
 version = "1.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -143,6 +154,7 @@ dependencies = [
  "nom",
  "proc-macro2",
  "quote",
+ "refinement-language",
  "syn",
  "syn-serde",
 ]

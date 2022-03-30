@@ -42,6 +42,8 @@ use std::str;
 mod hir_ext;
 use hir_ext::GenericArgExt;
 use crate::hir_ext::TyExt;
+mod constraint_generator;
+mod refinements;
 
 struct OurCompilerCalls {
     args: Vec<String>,
@@ -91,17 +93,18 @@ impl rustc_driver::Callbacks for OurCompilerCalls {
                     let hir_node = tcx.hir().get(hir_id);
                     match hir_node {
                         hir::Node::Item(hir::Item {
-                            kind: hir::ItemKind::Fn(FnSig {decl: FnDecl {output, ..}, ..}, ..),
+                            kind: hir::ItemKind::Fn(FnSig {decl: FnDecl {output, ..}, ..}, _, body_id),
                             ident,
                             ..
                         })
                           => {
-                            
+                            let body = tcx.hir().get(body_id.hir_id);
+                            trace!(?body_id, ?body, "function");
                             // // search for specification
                             // let expected_name = "refinement_spec_for_".to_owned() + ident.name.as_str(); 
                             // let spec = tcx.mir_keys(()).iter().map(|id| tcx.hir().get_by_def_id(*id)).find_map(|node| {
                             //     if let hir::Node::Item(hir::Item { ident, kind: hir::ItemKind::Const(_ty, body_id), ..}) =  node {
-                            //         if ident.name.as_str() == expected_name {
+                            //         if asd.name.as_str() == expected_name {
                             //             Some(body_id)
                             //         } else {
                             //             None
@@ -123,15 +126,17 @@ impl rustc_driver::Callbacks for OurCompilerCalls {
                             //  info!("found spec {:?}", spec);
                             match output {
                                 hir::FnRetTy::Return(return_type) => {
-                                    let refinement = return_type.try_into_refinement(&tcx);
+                                    let refinement = refinements::extract_refinement_type_from_type_alias(return_type, &tcx).expect("error extracting a refinement from a type alias");
                                     info!(?refinement, "found refinement");
+                                    let constr = constraint_generator::type_check_node(&body, &tcx, &refinement);
+                                    info!("contraints: {:#?}", constr);
                                 },
                                 o => {
                                     error!("unrefined function: {:?}", o)
                                 }
                             }
 
-                              Some((local_def_id, hir_node))
+                              Some("")
                             
                             },
                         _ => None,
@@ -145,15 +150,6 @@ impl rustc_driver::Callbacks for OurCompilerCalls {
 
         Compilation::Continue
     }
-}
-
-struct RefinementType<'t> {
-    ty: Ty<'t>,
-    refinement: Expr<'t>
-}
-
-fn parse_refinement_type() {
-
 }
 
 // see: https://github.com/viperproject/prusti-dev/blob/1a7ac32128ca2a63ce05944369a7f13b0674a1f8/analysis/src/bin/gen-accessibility-driver.rs

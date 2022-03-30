@@ -32,6 +32,7 @@ impl<'a> TyExt<'a> for hir::Ty<'a> {
         } = self
         {
             // TODO: find Refinement alias properly
+            // tcx.get_diagnostic_name
             if format!("{:?}", def_id).ends_with("]::Refinement)") {
                 if let Some(hir::PathSegment {
                     args:

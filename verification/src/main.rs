@@ -12,12 +12,12 @@ extern crate rustc_error_codes;
 extern crate rustc_errors;
 extern crate rustc_hash;
 extern crate rustc_hir;
+extern crate rustc_hir_pretty;
 extern crate rustc_interface;
+extern crate rustc_lint;
 extern crate rustc_middle;
 extern crate rustc_session;
 extern crate rustc_span;
-extern crate rustc_hir_pretty;
-extern crate rustc_lint;
 
 use rustc_ast_pretty::pprust::item_to_string;
 use rustc_driver::Compilation;
@@ -128,27 +128,25 @@ impl rustc_driver::Callbacks for OurCompilerCalls {
                             trace!(?body_id, ?body, "function");
                             let hir_id = body_id.hir_id;
                             let local_ctx = tcx.typeck(*def_id);
-                            
+
                             let ctx = vec![];
-                            let ty = constraint_generator::type_of_node(&body, &tcx, local_ctx, &ctx);
+                            let ty =
+                                constraint_generator::type_of_node(&body, &tcx, local_ctx, &ctx);
                             trace!(?ty, "body type");
-                            
+
                             match output {
                                 hir::FnRetTy::Return(return_type) => {
                                     let refinement =
                                         refinements::extract_refinement_from_type_alias(
                                             return_type,
                                             &tcx,
-                                            local_ctx
+                                            local_ctx,
                                         )
                                         .expect("error extracting a refinement from a type alias");
                                     info!(?refinement, "found refinement");
-                                    let constr = constraint_generator::type_check_node(
-                                        &body,
-                                        &tcx,
-                                    todo!(),
-                                    );
-                                    info!("constraints: {:#?}", constr);
+                                    // let constr =
+                                    //     constraint_generator::type_check_node(&body, &tcx, todo!());
+                                    // info!("constraints: {:#?}", constr);
                                 }
                                 o => {
                                     error!("unrefined function: {:?}", o)

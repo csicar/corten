@@ -1,6 +1,6 @@
 #![feature(adt_const_params)]
 extern crate runtime_library;
-use runtime_library::refined;
+use runtime_library::ty;
 
 fn main() {
     // let message = "Test";
@@ -8,11 +8,10 @@ fn main() {
     ()
 }
 
-pub type Refinement<T, const Var: &'static str, const Expr: &'static str> = T;
 
-#[refined]
+
 fn t(a: ty! {ra: i32 | ra < 10}) -> ty! {v: i32 | v > 0} {
-    2
+    2 as ty!{v : i32 | v > 0}
 }
 
 // #[refined]

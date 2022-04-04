@@ -1,9 +1,9 @@
 use rustc_hir as hir;
+use rustc_hir_pretty;
 use rustc_middle::ty::TyCtxt;
 use rustc_span as span;
 use rustc_span::source_map;
-use rustc_hir_pretty;
-use tracing::info;
+use tracing::{info, instrument, trace};
 
 //////////////////// Ty
 
@@ -47,9 +47,12 @@ impl<'a> TyExt<'a> for hir::Ty<'a> {
                     ..
                 }) = segments.last()
                 {
-                    let binder = binder_const_arg.try_into_const_string(&tcx).unwrap();
-                    let predicate = body_const_arg.try_into_const_string(&tcx).unwrap();
-                    info!(?base_type, ?binder, ?predicate, "found refinement");
+                    let binder = binder_const_arg
+                        .try_into_const_string(&tcx)
+                        .expect("could not extract binder");
+                    let predicate = body_const_arg
+                        .try_into_const_string(&tcx)
+                        .expect("could not extract predicate");
                     Some((base_type, binder, predicate))
                 } else {
                     None
@@ -75,25 +78,33 @@ pub trait ExprExt<'a> {
 
 impl<'a> ExprExt<'a> for hir::Expr<'a> {
     fn try_into_symbol(&'a self) -> Option<span::Symbol> {
-        if let hir::Expr {
-            kind:
-                hir::ExprKind::Lit(source_map::Spanned {
-                    node: rustc_ast::LitKind::Str(symbol, _),
-                    ..
-                }),
-            ..
-        } = self
-        {
-            Some(*symbol)
-        } else {
-            None
+        match self {
+            hir::Expr {
+                kind:
+                    hir::ExprKind::Lit(source_map::Spanned {
+                        node: rustc_ast::LitKind::Str(symbol, _),
+                        ..
+                    }),
+                ..
+            } => Some(*symbol),
+            hir::Expr {
+                kind:
+                    hir::ExprKind::Block(
+                        hir::Block {
+                            stmts: [],
+                            expr: Some(inner),
+                            ..
+                        },
+                        None,
+                    ),
+                ..
+            } => inner.try_into_symbol(),
+            other => None,
         }
     }
 
     fn pretty_print(&'a self) -> String {
-        rustc_hir_pretty::to_string(&rustc_hir_pretty::NoAnn, |state| {
-            state.print_expr(self)
-        })
+        rustc_hir_pretty::to_string(&rustc_hir_pretty::NoAnn, |state| state.print_expr(self))
     }
 }
 
@@ -121,8 +132,12 @@ impl<'tcx> GenericArgExt<'tcx> for hir::GenericArg<'tcx> {
         }) = self
         {
             match tcx.hir().get(*body_hir_id) {
-                hir::Node::Expr(expr) => Some(expr),
-                e => None,
+                hir::Node::Expr(expr) => {
+                    Some(expr)
+                }
+                e => {
+                    None
+                }
             }
         } else {
             None

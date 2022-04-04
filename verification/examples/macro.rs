@@ -3,14 +3,15 @@ extern crate runtime_library;
 use runtime_library::refined;
 
 fn main() {
-    let message = "Test";
-    println!("{}", message)
+    // let message = "Test";
+    // println!("{}", message)
+    ()
 }
 
 pub type Refinement<T, const Var: &'static str, const Expr: &'static str> = T;
 
 #[refined]
-fn t(a: ty! {ra: i32 | ra > 10}) -> ty! {v: i32 | v > 0} {
+fn t(a: ty! {ra: i32 | ra < 10}) -> ty! {v: i32 | v > 0} {
     2
 }
 

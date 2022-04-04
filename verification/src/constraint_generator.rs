@@ -1,14 +1,21 @@
 use anyhow::anyhow;
+use quote::quote;
 use rsmt2::SmtConf;
+use rsmt2::Solver;
 use rustc_ast as ast;
+use rustc_ast_pretty::pprust;
 use rustc_hir as hir;
 use rustc_hir::Ty;
 use rustc_hir::{Expr, ExprKind};
+use rustc_middle::ty::TypeckResults;
 use rustc_middle::ty::{query::TyCtxtAt, TyCtxt};
 use rustc_span::source_map::Spanned;
 use syn::__private::ToTokens;
+use syn::parse_quote;
+use tracing::info;
 
-use crate::refinements::{extract_refinement_type_from_type_alias, RefinementType};
+use crate::hir_ext::ExprExt;
+use crate::refinements::{extract_refinement_from_type_alias, RefinementType};
 
 macro_rules! sexp {
     ($assert:tt) => {{
@@ -18,7 +25,9 @@ macro_rules! sexp {
 
 pub fn encode_smt(expr: &syn::Expr) -> String {
     match expr {
-        syn::Expr::Binary(syn::ExprBinary {left, right, op, ..}) => {
+        syn::Expr::Binary(syn::ExprBinary {
+            left, right, op, ..
+        }) => {
             let smt_op = match op {
                 syn::BinOp::Add(_) => "+",
                 syn::BinOp::Sub(_) => "-",
@@ -31,11 +40,11 @@ pub fn encode_smt(expr: &syn::Expr) -> String {
                 syn::BinOp::Le(_) => "<=",
                 syn::BinOp::Ge(_) => ">=",
                 syn::BinOp::Gt(_) => ">",
-                _ => todo!()
+                _ => todo!(),
             };
             format!("({} {} {})", smt_op, encode_smt(left), encode_smt(right))
-        },
-        syn::Expr::Lit(syn::ExprLit {lit, ..}) => match lit {
+        }
+        syn::Expr::Lit(syn::ExprLit { lit, .. }) => match lit {
             syn::Lit::Str(_) => todo!(),
             syn::Lit::ByteStr(_) => todo!(),
             syn::Lit::Byte(_) => todo!(),
@@ -45,11 +54,13 @@ pub fn encode_smt(expr: &syn::Expr) -> String {
             syn::Lit::Bool(_) => todo!(),
             syn::Lit::Verbatim(_) => todo!(),
         },
-        syn::Expr::Path(syn::ExprPath {path: syn::Path {segments, ..}, ..}) => 
-            match segments.first() {
-                Some(syn::PathSegment {ident, ..})  => format!("{}", ident),
-                _ => todo!()
-            },
+        syn::Expr::Path(syn::ExprPath {
+            path: syn::Path { segments, .. },
+            ..
+        }) => match segments.first() {
+            Some(syn::PathSegment { ident, .. }) => format!("{}", ident),
+            _ => todo!(),
+        },
         other => todo!("expr: {:?}", expr),
     }
 }
@@ -60,7 +71,7 @@ pub fn type_check_node<'a, 'tcx>(
     expected_type: &'a RefinementType,
 ) -> anyhow::Result<Vec<String>>
 where
-    'tcx : 'a,
+    'tcx: 'a,
 {
     match node {
         hir::Node::Expr(expr) => type_check(expr, tcx, expected_type),
@@ -108,12 +119,12 @@ where
             ..
         }) => {
             let refinement_type = ty
-                .map(|t| extract_refinement_type_from_type_alias(t, &tcx))
+                .map(|t| extract_refinement_from_type_alias(t, &tcx, todo!()))
                 .ok_or(anyhow!(
                     "LiquidRust requires fully specified types. Missing on {:?}",
                     span
                 ))??;
-            type_check(init, tcx, &refinement_type)
+            type_check(init, tcx, todo!())
         }
         ExprKind::Block(hir::Block { stmts, expr, .. }, _) => match (stmts, expr) {
             ([], Some(result_expression)) => type_check(result_expression, tcx, expected_type),
@@ -122,7 +133,12 @@ where
         ExprKind::Lit(Spanned { node, span }) => match node {
             ast::LitKind::Int(val, _) => Ok(vec![
                 "(declare-const v Int)".to_string(),
-                format!("(assert (=> (= v {}) ({})))", val, encode_smt(&expected_type.predicate))]),
+                format!(
+                    "(assert (=> (= v {}) ({})))",
+                    val,
+                    encode_smt(&expected_type.predicate)
+                ),
+            ]),
             ast::LitKind::Str(_, _) => todo!(),
             ast::LitKind::ByteStr(_) => todo!(),
             ast::LitKind::Byte(_) => todo!(),
@@ -160,6 +176,117 @@ where
         ExprKind::Repeat(_, _) => todo!(),
         ExprKind::Yield(_, _) => todo!(),
         ExprKind::Err => todo!(),
+    }
+}
+
+pub type RContext<'a> = Vec<CtxEntry<'a>>;
+
+pub enum CtxEntry<'a> {
+    Typed {
+        ident: String,
+        ty: RefinementType<'a>,
+    },
+    Formula {
+        expr: syn::Expr,
+    },
+}
+
+pub fn type_of<'a, 'tcx, P>(
+    expr: &'a Expr<'tcx>,
+    tcx: &'a TyCtxt<'tcx>,
+    ctx: &'a RContext<'a>,
+    local_ctx: &'a TypeckResults<'a>,
+    solver: &mut Solver<P>,
+) -> anyhow::Result<RefinementType<'a>>
+where
+    // 'tcx at least as long as 'a
+    'tcx: 'a,
+{
+    match &expr.kind {
+        ExprKind::Lit(Spanned { node, span }) => {
+            let lit = expr.pretty_print();
+            let predicate = parse_quote! {
+                v == #lit
+            };
+            info!(pred=?predicate);
+            let base = local_ctx.node_type(expr.hir_id);
+
+            anyhow::Ok(RefinementType {
+                base,
+                binder: "v".to_string(),
+                predicate,
+            })
+        }
+        ExprKind::Block(hir::Block { stmts, expr, .. }, None) => {
+            assert_eq!(stmts.len(), 0, "unexpected stmts {:?}", stmts);
+            match expr {
+                Some(expr) => type_of(expr, tcx, ctx, local_ctx, solver),
+                None => todo!("dont know how to handle block without expr (yet)"),
+            }
+        }
+        ExprKind::Block(_, Some(_)) => {
+            todo!("labels are not yet supported")
+        }
+        ExprKind::Path(_) => todo!(),
+        ExprKind::Box(_) => todo!(),
+        ExprKind::ConstBlock(_) => todo!(),
+        ExprKind::Array(_) => todo!(),
+        ExprKind::Call(_, _) => todo!(),
+        ExprKind::MethodCall(_, _, _) => todo!(),
+        ExprKind::Tup(contents) => {
+            let tuple_type = local_ctx.node_type(expr.hir_id);
+            info!(?tuple_type);
+            let ty = match contents {
+                [] => RefinementType {
+                    base: tuple_type,
+                    binder: "v".to_string(),
+                    predicate: parse_quote! { true },
+                },
+                o => todo!(),
+            };
+            anyhow::Ok(ty)
+        }
+        ExprKind::Binary(_, _, _) => todo!(),
+        ExprKind::Unary(_, _) => todo!(),
+        ExprKind::Cast(_, _) => todo!(),
+        ExprKind::Type(_, _) => todo!(),
+        ExprKind::DropTemps(_) => todo!(),
+        ExprKind::If(_, _, _) => todo!(),
+        ExprKind::Loop(_, _, _, _) => todo!(),
+        ExprKind::Match(_, _, _) => todo!(),
+        ExprKind::Closure(_, _, _, _, _) => todo!(),
+        ExprKind::Assign(_, _, _) => todo!(),
+        ExprKind::AssignOp(_, _, _) => todo!(),
+        ExprKind::Field(_, _) => todo!(),
+        ExprKind::Index(_, _) => todo!(),
+        ExprKind::AddrOf(_, _, _) => todo!(),
+        ExprKind::Break(_, _) => todo!(),
+        ExprKind::Continue(_) => todo!(),
+        ExprKind::Ret(_) => todo!(),
+        ExprKind::InlineAsm(_) => todo!(),
+        ExprKind::Struct(_, _, _) => todo!(),
+        ExprKind::Repeat(_, _) => todo!(),
+        ExprKind::Yield(_, _) => todo!(),
+        ExprKind::Err => todo!(),
+        e => todo!("expr: {:?}", e),
+    }
+}
+
+pub fn type_of_node<'a, 'tcx>(
+    node: &'a hir::Node<'tcx>,
+    tcx: &'a TyCtxt<'tcx>,
+    local_ctx: &'a TypeckResults<'a>,
+    ctx: &'a RContext<'a>,
+) -> anyhow::Result<RefinementType<'a>>
+where
+    'tcx: 'a,
+{
+    let parser = ();
+    let conf = SmtConf::default_z3();
+    let mut solver = conf.spawn(parser).unwrap();
+    match node {
+        hir::Node::Expr(expr) => type_of(expr, tcx, ctx, local_ctx, &mut solver),
+        o => todo!(),
     }
 }
 

@@ -2,11 +2,14 @@ use rustc_hir as hir;
 use rustc_middle::ty::TyCtxt;
 use rustc_span as span;
 use rustc_span::source_map;
+use rustc_hir_pretty;
 use tracing::info;
 
 //////////////////// Ty
 
 pub trait TyExt<'a> {
+    /// Try Convert a Type Alias `Refinement<i32, "b", "b > 0"> into its parts: (i32, "b", "b > 0")
+    /// Return None if `self` is not an alias
     fn try_into_refinement(
         &'a self,
         tcx: &'a TyCtxt,
@@ -63,7 +66,11 @@ impl<'a> TyExt<'a> for hir::Ty<'a> {
 //////////////////// Expr
 
 pub trait ExprExt<'a> {
+    /// tries to turn Expr `"my_name"` into Symbol `my_name`
     fn try_into_symbol(&'a self) -> Option<span::Symbol>;
+
+    /// Pretty prints the Expression
+    fn pretty_print(&'a self) -> String;
 }
 
 impl<'a> ExprExt<'a> for hir::Expr<'a> {
@@ -81,6 +88,12 @@ impl<'a> ExprExt<'a> for hir::Expr<'a> {
         } else {
             None
         }
+    }
+
+    fn pretty_print(&'a self) -> String {
+        rustc_hir_pretty::to_string(&rustc_hir_pretty::NoAnn, |state| {
+            state.print_expr(self)
+        })
     }
 }
 

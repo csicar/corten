@@ -70,7 +70,7 @@ impl Parse for RefinedParam {
 
 #[test]
 fn test_parse_refined_param() {
-    let s = "a : ty!(&mut i32 | a > 2)";
+    let s = "a : ty!(a: &mut i32 | a > 2)";
     let res = syn::parse_str::<RefinedParam>(s).unwrap();
     dbg!(res.refinement.ty.to_token_stream());
     dbg!(res.refinement.refinement.to_token_stream());
@@ -86,7 +86,7 @@ impl Parse for Parameters {
 
 #[test]
 fn test_parse_refined_multiple() {
-    let s = "a : ty!(i32 | a > 2), b: ty!(i32 | b > 2)";
+    let s = "a : ty!(v: i32 | v > 2), b: ty!(v: i32 | v > 2)";
 
     let Parameters(res) = syn::parse_str::<Parameters>(s).unwrap();
     dbg!(res

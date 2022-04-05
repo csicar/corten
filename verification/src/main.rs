@@ -47,6 +47,8 @@ use crate::hir_ext::TyExt;
 use hir_ext::GenericArgExt;
 mod constraint_generator;
 mod refinements;
+#[cfg(test)]
+mod test_utils;
 
 struct MyLint;
 
@@ -181,9 +183,7 @@ fn prusti_main() {
         }
     }
 
-    compiler_args.push("-Zpolonius".to_owned());
     compiler_args.push("-Zalways-encode-mir".to_owned());
-    compiler_args.push("-Zcrate-attr=feature(register_tool)".to_owned());
 
     let mut callbacks = OurCompilerCalls {
         args: callback_args,

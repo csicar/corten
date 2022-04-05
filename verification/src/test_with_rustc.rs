@@ -5,12 +5,12 @@ use rustc_hir as hir;
 use rustc_hir::Expr;
 use rustc_hir::FnDecl;
 use rustc_hir::FnSig;
-use rustc_hir::Ty;
 use rustc_interface::interface;
 use rustc_interface::Config;
 use rustc_interface::Queries;
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::ty::WithOptConstParam;
+use rustc_middle::ty::TypeckResults;
 use rustc_session::config;
 use rustc_span::source_map;
 use std::path;
@@ -22,19 +22,25 @@ use tracing::info;
 use tracing::info_span;
 use tracing::trace;
 
+use crate::hir_ext::NodeExt;
+
 struct HirCallback<F: Send> {
     with_hir: RwLock<F>,
     input: String,
     sys_root: Option<path::PathBuf>,
 }
 
-impl<F: for<'a> FnMut(hir::Node<'a>, TyCtxt<'a>) -> () + Send> rustc_driver::Callbacks for HirCallback<F> {
+impl<F: for<'a> FnMut(hir::Node<'a>, TyCtxt<'a>) -> () + Send> rustc_driver::Callbacks
+    for HirCallback<F>
+{
     fn config(&mut self, config: &mut Config) {
         config.input = config::Input::Str {
-            name: source_map::FileName::Custom("main.rs".to_string()),
+            name: source_map::FileName::Custom("file_under_test_name.rs".to_string()),
             input: self.input.clone(),
         };
-        config.opts.maybe_sysroot = self.sys_root.clone()
+        config.output_dir = Some(path::PathBuf::from("/tmp/test-rustc"));
+        config.opts.maybe_sysroot = self.sys_root.clone();
+        config.make_codegen_backend = None;
     }
 
     fn after_analysis<'tcx>(
@@ -59,15 +65,10 @@ impl<F: for<'a> FnMut(hir::Node<'a>, TyCtxt<'a>) -> () + Send> rustc_driver::Cal
     }
 }
 
-fn with_hir<F>(callback: F, input: &str) -> Result<(), rustc_errors::ErrorReported>
+pub fn with_hir<F>(callback: F, input: &str) -> Result<(), rustc_errors::ErrorReported>
 where
     F: for<'a> FnMut(hir::Node<'a>, TyCtxt<'a>) -> () + Send,
 {
-    tracing_subscriber::fmt::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::new("trace"))
-        .pretty()
-        .init();
-
     let out = process::Command::new("rustc")
         .arg("--print=sysroot")
         .current_dir(".")
@@ -80,16 +81,18 @@ where
         input: input.to_string(),
         sys_root: Some(path::PathBuf::from(sysroot)),
     };
-    let args : Vec<String> = vec![
+    let args: Vec<String> = vec![
         "-v".into(),
+        "--crate-type".into(),
+        "lib".into(),
         "/tmp/a".into(), // this input gets overridden by the Callback, but the rustc cli parser still requires *some* file as input
     ];
     rustc_driver::RunCompiler::new(&args, &mut callback).run()
 }
 
-fn with_item<F>(mut callback: F, input: &str) -> Result<(), rustc_errors::ErrorReported>
+pub fn with_item<F>(mut callback: F, input: &str) -> Result<(), rustc_errors::ErrorReported>
 where
-F: for<'a> FnMut(&hir::Item<'a>, TyCtxt<'a>) -> () + Send,
+    F: for<'a> FnMut(&hir::Item<'a>, TyCtxt<'a>) -> () + Send,
 {
     with_hir(
         |hir, tcx| match hir {
@@ -100,10 +103,9 @@ F: for<'a> FnMut(&hir::Item<'a>, TyCtxt<'a>) -> () + Send,
     )
 }
 
-
-fn with_expr<F>(mut callback: F, input: &str) -> Result<(), rustc_errors::ErrorReported>
+pub fn with_expr<F>(input: &str, mut callback: F) -> Result<(), rustc_errors::ErrorReported>
 where
-F: for<'a> FnMut(&hir::Expr<'a>, TyCtxt<'a>) -> () + Send,
+    F: for<'a> FnMut(&hir::Expr<'a>, TyCtxt<'a>, &TypeckResults<'a>) -> () + Send,
 {
     with_item(
         |item, tcx| match &item.kind {
@@ -114,14 +116,25 @@ F: for<'a> FnMut(&hir::Expr<'a>, TyCtxt<'a>) -> () + Send,
                 },
                 _,
                 body_id,
-            ) => todo!(),
-            o => error!("parsing input resulted in different stuff"),
+            ) => {
+                let hir = (tcx as TyCtxt).hir();
+                let node = hir.get(body_id.hir_id);
+                let local_ctx = tcx.typeck(item.def_id);
+
+                match node {
+                    hir::Node::Expr(expr) => callback(expr, tcx, local_ctx),
+                    o => todo!(),
+                }
+
+                
+            }
+            o => panic!("parsing input resulted in different stuff"),
         },
         input,
     )
 }
 
-#[test]
+#[test_log::test]
 fn test_item() {
     with_item(|item, tcx| println!("{:?}", item), "fn main() {}").unwrap();
 }

@@ -132,12 +132,8 @@ impl<'tcx> GenericArgExt<'tcx> for hir::GenericArg<'tcx> {
         }) = self
         {
             match tcx.hir().get(*body_hir_id) {
-                hir::Node::Expr(expr) => {
-                    Some(expr)
-                }
-                e => {
-                    None
-                }
+                hir::Node::Expr(expr) => Some(expr),
+                e => None,
             }
         } else {
             None
@@ -147,5 +143,19 @@ impl<'tcx> GenericArgExt<'tcx> for hir::GenericArg<'tcx> {
     fn try_into_const_string(&'tcx self, tcx: &'tcx TyCtxt) -> Option<span::Symbol> {
         self.try_into_const_value(tcx)
             .and_then(|expr| expr.try_into_symbol())
+    }
+}
+
+//////////////////// Node
+pub trait NodeExt<'a, 'b> {
+    fn try_into_expr(&'a self) -> Option<&'a hir::Expr<'b>>;
+}
+
+impl<'a : 'b, 'b> NodeExt<'a, 'b> for hir::Node<'a> {
+    fn try_into_expr(&'a self) -> Option<&'a hir::Expr<'b>> {
+        match self {
+            hir::Node::Expr(expr) => Some(expr),
+            o => todo!(),
+        }
     }
 }

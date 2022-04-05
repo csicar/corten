@@ -7,6 +7,7 @@ use quote::ToTokens;
 use quote::quote;
 use core::fmt::Display;
 
+
 #[derive(Debug)]
 pub struct RefinementType<'a> {
     pub base: Ty<'a>,

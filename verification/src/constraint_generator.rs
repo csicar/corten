@@ -48,7 +48,7 @@ where
 {
     match &expr.kind {
         ExprKind::Lit(Spanned { node, span }) => {
-            let lit : syn::Expr = syn::parse_str(&expr.pretty_print())?;
+            let lit: syn::Expr = syn::parse_str(&expr.pretty_print())?;
             let predicate = parse_quote! {
                 v == #lit
             };
@@ -103,7 +103,10 @@ where
                 predicate: cast_refinement.1,
             };
 
-            info!("need to do subtyping judgement: {} >= {}",super_ty, expr_ty);
+            info!(
+                "need to do subtyping judgement: {} >= {}",
+                super_ty, expr_ty
+            );
 
             anyhow::Ok(super_ty)
         }
@@ -142,28 +145,60 @@ where
     let parser = ();
     let conf = SmtConf::default_z3();
     let mut solver = conf.spawn(parser).unwrap();
+
     match node {
         hir::Node::Expr(expr) => type_of(expr, tcx, ctx, local_ctx, &mut solver),
         o => todo!(),
     }
 }
 
-#[test]
-fn test() {
-    let parser = ();
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::test_with_rustc::with_expr;
+    use rsmt2::SmtConf;
+    use tracing::{trace, error};
 
-    let conf = SmtConf::default_z3();
-    let mut solver = conf.spawn(parser).unwrap();
-    solver.declare_const("a", "Int").unwrap();
+    #[test_log::test]
+    fn test_smt() {
+        let parser = ();
 
-    let ass = sexp! {
-      (> a 2)
-    };
-    dbg!(ass.clone());
-    solver.assert(ass);
+        let conf = SmtConf::default_z3();
+        let mut solver = conf.spawn(parser).unwrap();
+        solver.declare_const("a", "Int").unwrap();
 
-    let is_sat = solver.check_sat().unwrap();
-    println!("{}", is_sat);
-    let model = solver.get_model().unwrap();
-    println!("{:?}", model);
+        let ass = sexp! {
+          (> a 2)
+        };
+        dbg!(ass.clone());
+        solver.assert(ass);
+
+        let is_sat = solver.check_sat().unwrap();
+        assert!(is_sat);
+        let model = solver.get_model().unwrap();
+        println!("{:?}", model);
+    }
+
+    #[test_log::test]
+    fn test_type_of_lit() {
+        with_expr(
+            &quote! {
+                #![feature(adt_const_params)]
+
+                type Refinement<T, const B: &'static str, const R: &'static str> = T;
+                
+                fn f() ->i32{ 1 }
+                // fn main() {}
+            }
+            .to_string(),
+            |expr, tcx, local_ctx| {
+                let conf = SmtConf::default_z3();
+                let mut solver = conf.spawn(()).unwrap();
+                let ctx = vec![];
+                let ty = type_of(expr, &tcx, &ctx, local_ctx, &mut solver).unwrap();
+                info!(?ty);
+            },
+        )
+        .unwrap();
+    }
 }

@@ -1,0 +1,8 @@
+cargo-test:
+  image: registry.gitlab.com/csicar/liquidrust
+  stage: test
+  script:
+    # - rustup default nightly-2022-02-17
+    # - rustup component add rustc-dev llvm-tools-preview
+    # - cat rust-toolchain.toml
+    - cargo test --verbose --jobs 1

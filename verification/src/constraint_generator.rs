@@ -260,7 +260,7 @@ mod test {
             |expr, tcx, local_ctx| {
                 let conf = SmtConf::default_z3();
                 let mut solver = conf.spawn(()).unwrap();
-                solver.path_tee("/tmp/z3");
+                solver.path_tee("/tmp/z3").unwrap();
                 let ctx = vec![];
                 let ty = type_of(expr, &tcx, &ctx, local_ctx, &mut solver).unwrap();
                 pretty::assert_eq!(ty.to_string(), "ty!{ x : i32 | x > 0 }");
@@ -283,7 +283,7 @@ mod test {
             |expr, tcx, local_ctx| {
                 let conf = SmtConf::default_z3();
                 let mut solver = conf.spawn(()).unwrap();
-                solver.path_tee("/tmp/z3");
+                solver.path_tee("/tmp/z3").unwrap();
                 let ctx = vec![];
                 let ty = type_of(expr, &tcx, &ctx, local_ctx, &mut solver).unwrap(); // <- panic happens here
             },
@@ -303,7 +303,7 @@ mod test {
             |expr, tcx, local_ctx| {
                 let conf = SmtConf::default_z3();
                 let mut solver = conf.spawn(()).unwrap();
-                solver.path_tee("/tmp/z3");
+                solver.path_tee("/tmp/z3").unwrap();
                 let ctx = vec![];
                 let ty = type_of(expr, &tcx, &ctx, local_ctx, &mut solver).unwrap();
                 pretty::assert_eq!(ty.to_string(), "ty!{ x : i32 | x > 1 }");

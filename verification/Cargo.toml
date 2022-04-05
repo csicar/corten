@@ -31,3 +31,4 @@ quote = "1.0.17"
 [dev-dependencies]
 "runtime-library" = { path = "../runtime-library" }
 test-log = { version = "0.2.10", features = ["trace"], default-features = false }
+pretty_assertions = "1.2.1"

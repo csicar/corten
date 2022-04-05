@@ -1,3 +1,4 @@
+use crate::refinements;
 use anyhow::anyhow;
 use quote::quote;
 use rsmt2::SmtConf;
@@ -10,6 +11,8 @@ use rustc_hir::{Expr, ExprKind};
 use rustc_middle::ty::TypeckResults;
 use rustc_middle::ty::{query::TyCtxtAt, TyCtxt};
 use rustc_span::source_map::Spanned;
+use tracing::error;
+use std::io::Write;
 use syn::__private::ToTokens;
 use syn::parse_quote;
 use tracing::info;
@@ -25,6 +28,13 @@ macro_rules! sexp {
 
 pub type RContext<'a> = Vec<CtxEntry<'a>>;
 
+fn encode_refinement_context<'a>(ctx: RContext<'a>) -> String {
+    ctx.iter()
+        .map(|entry| entry.encode_smt())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 pub enum CtxEntry<'a> {
     Typed {
         ident: String,
@@ -33,6 +43,15 @@ pub enum CtxEntry<'a> {
     Formula {
         expr: syn::Expr,
     },
+}
+
+impl<'a> CtxEntry<'a> {
+    fn encode_smt(&self) -> String {
+        match self {
+            CtxEntry::Formula { expr } => refinements::encode_smt(expr),
+            CtxEntry::Typed { ident, ty } => format!("XXX"),
+        }
+    }
 }
 
 pub fn type_of<'a, 'tcx, P>(
@@ -103,10 +122,38 @@ where
                 predicate: cast_refinement.1,
             };
 
-            info!(
-                "need to do subtyping judgement: {} >= {}",
-                super_ty, expr_ty
-            );
+            // SMT Subtyping
+            {
+                info!(
+                    "need to do subtyping judgement: {} >= {}",
+                    super_ty, expr_ty
+                );
+                solver.push(1).unwrap();
+                solver.define_fun(
+                    "super_ty",
+                    &[(&super_ty.binder, "Int")],
+                    "Bool",
+                    refinements::encode_smt(&super_ty.predicate),
+                );
+                solver.define_fun(
+                    "sub_ty",
+                    &[(&expr_ty.binder, "Int")],
+                    "Bool",
+                    refinements::encode_smt(&expr_ty.predicate),
+                );
+                solver.declare_const("inst", "Int");
+                solver.assert("(not (=> (sub_ty inst) (super_ty inst)))");
+                let is_sat = solver.check_sat().unwrap();
+                solver.pop(1);
+                if is_sat {
+                    let msg = format!("Subtyping judgement failed: {} is not a subtype of {}", &expr_ty, &super_ty);
+                    error!("{}", msg);
+                    Err(anyhow!(msg))?;
+                } else {
+                    info!("no counterexample found 🮱")
+                    // no counterexample found => everything is fine => continue
+                }
+            }
 
             anyhow::Ok(super_ty)
         }
@@ -156,8 +203,9 @@ where
 mod test {
     use super::*;
     use crate::test_with_rustc::with_expr;
+    use pretty_assertions as pretty;
     use rsmt2::SmtConf;
-    use tracing::{trace, error};
+    use tracing::{error, trace};
 
     #[test_log::test]
     fn test_smt() {
@@ -183,20 +231,83 @@ mod test {
     fn test_type_of_lit() {
         with_expr(
             &quote! {
-                #![feature(adt_const_params)]
-
-                type Refinement<T, const B: &'static str, const R: &'static str> = T;
-                
+                // type Refinement<T, const B: &'static str, const R: &'static str> = T;
                 fn f() ->i32{ 1 }
-                // fn main() {}
             }
             .to_string(),
             |expr, tcx, local_ctx| {
                 let conf = SmtConf::default_z3();
                 let mut solver = conf.spawn(()).unwrap();
+                
                 let ctx = vec![];
                 let ty = type_of(expr, &tcx, &ctx, local_ctx, &mut solver).unwrap();
-                info!(?ty);
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == 1 }");
+                info!("{}", ty);
+            },
+        )
+        .unwrap();
+    }
+
+    #[test_log::test]
+    fn test_subtype_lit_pos() {
+        with_expr(
+            &quote! {
+                type Refinement<T, const B: &'static str, const R: &'static str> = T;
+
+                fn f() ->i32{ 1 as Refinement<i32, "x", "x > 0"> }
+            }
+            .to_string(),
+            |expr, tcx, local_ctx| {
+                let conf = SmtConf::default_z3();
+                let mut solver = conf.spawn(()).unwrap();
+                solver.path_tee("/tmp/z3");
+                let ctx = vec![];
+                let ty = type_of(expr, &tcx, &ctx, local_ctx, &mut solver).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ x : i32 | x > 0 }");
+                info!("expr has type {}", ty);
+            },
+        )
+        .unwrap();
+    }
+
+    #[should_panic]
+    #[test_log::test]
+    fn test_subtype_lit_neg() {
+        with_expr(
+            &quote! {
+                type Refinement<T, const B: &'static str, const R: &'static str> = T;
+
+                fn f() -> i32 { 1 as Refinement<i32, "x", "x < 0"> }
+            }
+            .to_string(),
+            |expr, tcx, local_ctx| {
+                let conf = SmtConf::default_z3();
+                let mut solver = conf.spawn(()).unwrap();
+                solver.path_tee("/tmp/z3");
+                let ctx = vec![];
+                let ty = type_of(expr, &tcx, &ctx, local_ctx, &mut solver).unwrap(); // <- panic happens here
+            },
+        )
+        .unwrap();
+    }
+
+    #[test_log::test]
+    fn test_subtype_lit_pos_nested() {
+        with_expr(
+            &quote! {
+                type Refinement<T, const B: &'static str, const R: &'static str> = T;
+
+                fn f() ->i32{ (3 as Refinement<i32, "x", "x > 2">) as Refinement<i32, "x", "x > 1"> }
+            }
+            .to_string(),
+            |expr, tcx, local_ctx| {
+                let conf = SmtConf::default_z3();
+                let mut solver = conf.spawn(()).unwrap();
+                solver.path_tee("/tmp/z3");
+                let ctx = vec![];
+                let ty = type_of(expr, &tcx, &ctx, local_ctx, &mut solver).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ x : i32 | x > 1 }");
+                info!("expr has type {}", ty);
             },
         )
         .unwrap();

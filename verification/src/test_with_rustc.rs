@@ -21,6 +21,7 @@ use tracing::error;
 use tracing::info;
 use tracing::info_span;
 use tracing::trace;
+use quote::quote;
 
 use crate::hir_ext::NodeExt;
 
@@ -76,9 +77,16 @@ where
         .unwrap();
     let sysroot = str::from_utf8(&out.stdout).unwrap().trim();
     let cb = RwLock::new(callback);
+    let header = quote! {
+        #![feature(adt_const_params)]
+        #![allow(dead_code)]
+        #![allow(incomplete_features)]
+
+    };
+
     let mut callback = HirCallback {
         with_hir: cb,
-        input: input.to_string(),
+        input: header.to_string() + "\n// --- test input --- //\n\n" + input,
         sys_root: Some(path::PathBuf::from(sysroot)),
     };
     let args: Vec<String> = vec![
@@ -97,7 +105,7 @@ where
     with_hir(
         |hir, tcx| match hir {
             hir::Node::Item(item) => callback(item, tcx),
-            o => error!("parsing input resulted in different stuff"),
+            o => error!(node=?o, "parsing input resulted in different stuff"),
         },
         input,
     )

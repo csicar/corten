@@ -1,0 +1,127 @@
+use rustc_ast_pretty::pprust::item_to_string;
+use rustc_driver::Compilation;
+use rustc_errors::registry;
+use rustc_hir as hir;
+use rustc_hir::Expr;
+use rustc_hir::FnDecl;
+use rustc_hir::FnSig;
+use rustc_hir::Ty;
+use rustc_interface::interface;
+use rustc_interface::Config;
+use rustc_interface::Queries;
+use rustc_middle::ty::TyCtxt;
+use rustc_middle::ty::WithOptConstParam;
+use rustc_session::config;
+use rustc_span::source_map;
+use std::path;
+use std::process;
+use std::str;
+use std::sync::RwLock;
+use tracing::error;
+use tracing::info;
+use tracing::info_span;
+use tracing::trace;
+
+struct HirCallback<F: Send> {
+    with_hir: RwLock<F>,
+    input: String,
+    sys_root: Option<path::PathBuf>,
+}
+
+impl<F: for<'a> FnMut(hir::Node<'a>, TyCtxt<'a>) -> () + Send> rustc_driver::Callbacks for HirCallback<F> {
+    fn config(&mut self, config: &mut Config) {
+        config.input = config::Input::Str {
+            name: source_map::FileName::Custom("main.rs".to_string()),
+            input: self.input.clone(),
+        };
+        config.opts.maybe_sysroot = self.sys_root.clone()
+    }
+
+    fn after_analysis<'tcx>(
+        &mut self,
+        compiler: &interface::Compiler,
+        queries: &'tcx Queries<'tcx>,
+    ) -> Compilation {
+        let session = compiler.session();
+        session.abort_if_errors();
+
+        queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
+            tcx.mir_keys(()).iter().for_each(|&local_def_id| {
+                // Skip items that are not functions or methods.
+                let hir_id = tcx.hir().local_def_id_to_hir_id(local_def_id);
+                let hir_node = tcx.hir().get(hir_id);
+                let mut callback = self.with_hir.write().unwrap();
+                (callback)(hir_node, tcx);
+            });
+        });
+
+        Compilation::Continue
+    }
+}
+
+fn with_hir<F>(callback: F, input: &str) -> Result<(), rustc_errors::ErrorReported>
+where
+    F: for<'a> FnMut(hir::Node<'a>, TyCtxt<'a>) -> () + Send,
+{
+    tracing_subscriber::fmt::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::new("trace"))
+        .pretty()
+        .init();
+
+    let out = process::Command::new("rustc")
+        .arg("--print=sysroot")
+        .current_dir(".")
+        .output()
+        .unwrap();
+    let sysroot = str::from_utf8(&out.stdout).unwrap().trim();
+    let cb = RwLock::new(callback);
+    let mut callback = HirCallback {
+        with_hir: cb,
+        input: input.to_string(),
+        sys_root: Some(path::PathBuf::from(sysroot)),
+    };
+    let args : Vec<String> = vec![
+        "-v".into(),
+        "/tmp/a".into(), // this input gets overridden by the Callback, but the rustc cli parser still requires *some* file as input
+    ];
+    rustc_driver::RunCompiler::new(&args, &mut callback).run()
+}
+
+fn with_item<F>(mut callback: F, input: &str) -> Result<(), rustc_errors::ErrorReported>
+where
+F: for<'a> FnMut(&hir::Item<'a>, TyCtxt<'a>) -> () + Send,
+{
+    with_hir(
+        |hir, tcx| match hir {
+            hir::Node::Item(item) => callback(item, tcx),
+            o => error!("parsing input resulted in different stuff"),
+        },
+        input,
+    )
+}
+
+
+fn with_expr<F>(mut callback: F, input: &str) -> Result<(), rustc_errors::ErrorReported>
+where
+F: for<'a> FnMut(&hir::Expr<'a>, TyCtxt<'a>) -> () + Send,
+{
+    with_item(
+        |item, tcx| match &item.kind {
+            hir::ItemKind::Fn(
+                FnSig {
+                    decl: FnDecl { output, .. },
+                    ..
+                },
+                _,
+                body_id,
+            ) => todo!(),
+            o => error!("parsing input resulted in different stuff"),
+        },
+        input,
+    )
+}
+
+#[test]
+fn test_item() {
+    with_item(|item, tcx| println!("{:?}", item), "fn main() {}").unwrap();
+}

@@ -102,7 +102,7 @@ impl rustc_driver::Callbacks for OurCompilerCalls {
         session.abort_if_errors();
 
         // Analyze the crate and inspect the types under the cursor.
-        queries.global_ctxt().unwrap().take().enter(|tcx| {
+        queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
             // Every compilation contains a single crate.
             let mut def_ids_with_body: Vec<_> = tcx
                 .mir_keys(())

@@ -3,7 +3,7 @@ use rustc_hir_pretty;
 use rustc_middle::ty::TyCtxt;
 use rustc_span as span;
 use rustc_span::source_map;
-use tracing::{info, instrument, trace};
+
 
 //////////////////// Ty
 
@@ -99,7 +99,7 @@ impl<'a> ExprExt<'a> for hir::Expr<'a> {
                     ),
                 ..
             } => inner.try_into_symbol(),
-            other => None,
+            _other => None,
         }
     }
 
@@ -133,7 +133,7 @@ impl<'tcx> GenericArgExt<'tcx> for hir::GenericArg<'tcx> {
         {
             match tcx.hir().get(*body_hir_id) {
                 hir::Node::Expr(expr) => Some(expr),
-                e => None,
+                _e => None,
             }
         } else {
             None
@@ -155,7 +155,7 @@ impl<'a : 'b, 'b> NodeExt<'a, 'b> for hir::Node<'a> {
     fn try_into_expr(&'a self) -> Option<&'a hir::Expr<'b>> {
         match self {
             hir::Node::Expr(expr) => Some(expr),
-            o => todo!(),
+            _o => todo!(),
         }
     }
 }

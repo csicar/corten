@@ -1,19 +1,19 @@
 use crate::refinements;
 use anyhow::anyhow;
-use quote::quote;
+
 use rsmt2::SmtConf;
 use rsmt2::Solver;
-use rustc_ast as ast;
-use rustc_ast_pretty::pprust;
+
+
 use rustc_hir as hir;
-use rustc_hir::Ty;
+
 use rustc_hir::{Expr, ExprKind};
 use rustc_middle::ty::TypeckResults;
-use rustc_middle::ty::{query::TyCtxtAt, TyCtxt};
+use rustc_middle::ty::{TyCtxt};
 use rustc_span::source_map::Spanned;
 use tracing::error;
-use std::io::Write;
-use syn::__private::ToTokens;
+
+
 use syn::parse_quote;
 use tracing::info;
 
@@ -49,7 +49,7 @@ impl<'a> CtxEntry<'a> {
     fn encode_smt(&self) -> String {
         match self {
             CtxEntry::Formula { expr } => refinements::encode_smt(expr),
-            CtxEntry::Typed { ident, ty } => format!("XXX"),
+            CtxEntry::Typed { ident: _, ty: _ } => format!("XXX"),
         }
     }
 }
@@ -66,7 +66,7 @@ where
     'tcx: 'a,
 {
     match &expr.kind {
-        ExprKind::Lit(Spanned { node, span }) => {
+        ExprKind::Lit(Spanned { node: _, span: _ }) => {
             let lit: syn::Expr = syn::parse_str(&expr.pretty_print())?;
             let predicate = parse_quote! {
                 v == #lit
@@ -105,7 +105,7 @@ where
                     binder: "v".to_string(),
                     predicate: parse_quote! { true },
                 },
-                o => todo!(),
+                _o => todo!(),
             };
             anyhow::Ok(ty)
         }
@@ -128,23 +128,23 @@ where
                     "need to do subtyping judgement: {} >= {}",
                     super_ty, expr_ty
                 );
-                solver.push(1).unwrap();
+                solver.push(1).map_err(|e| anyhow!("Z3: {}", e))?;
                 solver.define_fun(
                     "super_ty",
                     &[(&super_ty.binder, "Int")],
                     "Bool",
                     refinements::encode_smt(&super_ty.predicate),
-                );
+                ).map_err(|e| anyhow!("Z3: {}", e))?;
                 solver.define_fun(
                     "sub_ty",
                     &[(&expr_ty.binder, "Int")],
                     "Bool",
                     refinements::encode_smt(&expr_ty.predicate),
-                );
-                solver.declare_const("inst", "Int");
-                solver.assert("(not (=> (sub_ty inst) (super_ty inst)))");
-                let is_sat = solver.check_sat().unwrap();
-                solver.pop(1);
+                ).map_err(|e| anyhow!("Z3: {}", e))?;
+                solver.declare_const("inst", "Int").map_err(|e| anyhow!("Z3: {}", e))?;
+                solver.assert("(not (=> (sub_ty inst) (super_ty inst)))").map_err(|e| anyhow!("Z3: {}", e))?;
+                let is_sat = solver.check_sat().map_err(|e| anyhow!("Z3: {}", e))?;
+                solver.pop(1).map_err(|e| anyhow!("Z3: {}", e))?;
                 if is_sat {
                     let msg = format!("Subtyping judgement failed: {} is not a subtype of {}", &expr_ty, &super_ty);
                     error!("{}", msg);
@@ -195,7 +195,7 @@ where
 
     match node {
         hir::Node::Expr(expr) => type_of(expr, tcx, ctx, local_ctx, &mut solver),
-        o => todo!(),
+        _o => todo!(),
     }
 }
 
@@ -205,7 +205,8 @@ mod test {
     use crate::test_with_rustc::with_expr;
     use pretty_assertions as pretty;
     use rsmt2::SmtConf;
-    use tracing::{error, trace};
+    
+    use quote::quote;
 
     #[test_log::test]
     fn test_smt() {
@@ -219,7 +220,7 @@ mod test {
           (> a 2)
         };
         dbg!(ass.clone());
-        solver.assert(ass);
+        solver.assert(ass).unwrap();
 
         let is_sat = solver.check_sat().unwrap();
         assert!(is_sat);
@@ -285,7 +286,7 @@ mod test {
                 let mut solver = conf.spawn(()).unwrap();
                 solver.path_tee("/tmp/z3").unwrap();
                 let ctx = vec![];
-                let ty = type_of(expr, &tcx, &ctx, local_ctx, &mut solver).unwrap(); // <- panic happens here
+                let _ty = type_of(expr, &tcx, &ctx, local_ctx, &mut solver).unwrap(); // <- panic happens here
             },
         )
         .unwrap();

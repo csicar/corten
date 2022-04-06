@@ -10,7 +10,7 @@ fn main() {
 
 
 
-fn t(a: ty! {ra: i32 | ra < 10}) -> ty! {v: i32 | v > 0} {
+fn t(_a: ty! {ra: i32 | ra < 10}) -> ty! {v: i32 | v > 0} {
     2 as ty!{v : i32 | v > 0}
 }
 

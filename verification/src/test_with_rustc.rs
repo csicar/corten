@@ -1,15 +1,15 @@
-use rustc_ast_pretty::pprust::item_to_string;
+
 use rustc_driver::Compilation;
-use rustc_errors::registry;
+
 use rustc_hir as hir;
-use rustc_hir::Expr;
+
 use rustc_hir::FnDecl;
 use rustc_hir::FnSig;
 use rustc_interface::interface;
 use rustc_interface::Config;
 use rustc_interface::Queries;
 use rustc_middle::ty::TyCtxt;
-use rustc_middle::ty::WithOptConstParam;
+
 use rustc_middle::ty::TypeckResults;
 use rustc_session::config;
 use rustc_span::source_map;
@@ -18,12 +18,12 @@ use std::process;
 use std::str;
 use std::sync::RwLock;
 use tracing::error;
-use tracing::info;
-use tracing::info_span;
-use tracing::trace;
+
+
+
 use quote::quote;
 
-use crate::hir_ext::NodeExt;
+
 
 struct HirCallback<F: Send> {
     with_hir: RwLock<F>,
@@ -119,7 +119,7 @@ where
         |item, tcx| match &item.kind {
             hir::ItemKind::Fn(
                 FnSig {
-                    decl: FnDecl { output, .. },
+                    decl: FnDecl { output: _, .. },
                     ..
                 },
                 _,
@@ -131,12 +131,12 @@ where
 
                 match node {
                     hir::Node::Expr(expr) => callback(expr, tcx, local_ctx),
-                    o => todo!(),
+                    _o => todo!(),
                 }
 
                 
             }
-            o => panic!("parsing input resulted in different stuff"),
+            _o => panic!("parsing input resulted in different stuff"),
         },
         input,
     )
@@ -144,5 +144,5 @@ where
 
 #[test_log::test]
 fn test_item() {
-    with_item(|item, tcx| println!("{:?}", item), "fn main() {}").unwrap();
+    with_item(|item, _tcx| println!("{:?}", item), "fn main() {}").unwrap();
 }

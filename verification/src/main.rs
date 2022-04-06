@@ -19,23 +19,17 @@ extern crate rustc_middle;
 extern crate rustc_session;
 extern crate rustc_span;
 
-use rustc_ast_pretty::pprust::item_to_string;
 use rustc_driver::Compilation;
-use rustc_errors::registry;
+
 use rustc_hir as hir;
-use rustc_hir::Expr;
+
 use rustc_hir::FnDecl;
 use rustc_hir::FnSig;
-use rustc_hir::Ty;
+
 use rustc_interface::interface;
-use rustc_interface::Config;
+
 use rustc_interface::Queries;
-use rustc_middle::ty::TyCtxt;
-use rustc_middle::ty::WithOptConstParam;
-use rustc_session::config;
-use rustc_span::source_map;
-use std::path;
-use std::process;
+
 use std::str;
 use tracing::error;
 use tracing::info;
@@ -43,8 +37,7 @@ use tracing::info_span;
 use tracing::trace;
 
 mod hir_ext;
-use crate::hir_ext::TyExt;
-use hir_ext::GenericArgExt;
+
 mod constraint_generator;
 mod refinements;
 #[cfg(test)]
@@ -59,14 +52,12 @@ impl rustc_lint::LintPass for MyLint {
 }
 
 impl<'tcx> rustc_lint::LateLintPass<'tcx> for MyLint {
-    fn check_expr(&mut self, cx: &rustc_lint::LateContext<'tcx>, expr: &rustc_hir::Expr<'tcx>) {
+    fn check_expr(&mut self, _cx: &rustc_lint::LateContext<'tcx>, _expr: &rustc_hir::Expr<'tcx>) {
         // Static analysis goes here
     }
 }
 
-struct OurCompilerCalls {
-    args: Vec<String>,
-}
+struct OurCompilerCalls {}
 impl rustc_driver::Callbacks for OurCompilerCalls {
     fn after_parsing<'tcx>(
         &mut self,
@@ -104,7 +95,7 @@ impl rustc_driver::Callbacks for OurCompilerCalls {
         // Analyze the crate and inspect the types under the cursor.
         queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
             // Every compilation contains a single crate.
-            let mut def_ids_with_body: Vec<_> = tcx
+            let _def_ids_with_body: Vec<_> = tcx
                 .mir_keys(())
                 .iter()
                 .flat_map(|&local_def_id| {
@@ -122,13 +113,13 @@ impl rustc_driver::Callbacks for OurCompilerCalls {
                                     _,
                                     body_id,
                                 ),
-                            ident,
+                            ident: _,
                             def_id,
                             ..
                         }) => {
                             let body = tcx.hir().get(body_id.hir_id);
                             trace!(?body_id, ?body, "function");
-                            let hir_id = body_id.hir_id;
+                            let _hir_id = body_id.hir_id;
                             let local_ctx = tcx.typeck(*def_id);
 
                             let ctx = vec![];
@@ -185,9 +176,7 @@ fn prusti_main() {
 
     compiler_args.push("-Zalways-encode-mir".to_owned());
 
-    let mut callbacks = OurCompilerCalls {
-        args: callback_args,
-    };
+    let mut callbacks = OurCompilerCalls {};
     // Invoke compiler, and handle return code.
     let exit_code = rustc_driver::catch_with_exit_code(move || {
         rustc_driver::RunCompiler::new(&compiler_args, &mut callbacks).run()

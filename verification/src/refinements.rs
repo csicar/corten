@@ -1,8 +1,8 @@
 use crate::hir_ext::TyExt;
 use anyhow::anyhow;
 use rustc_hir as hir;
-use rustc_middle::ty as middle;
-use rustc_middle::ty::{self, Ty, TyCtxt, TypeckResults};
+
+use rustc_middle::ty::{Ty, TyCtxt, TypeckResults};
 use quote::ToTokens;
 use quote::quote;
 use core::fmt::Display;
@@ -68,7 +68,7 @@ pub fn encode_smt(expr: &syn::Expr) -> String {
             Some(syn::PathSegment { ident, .. }) => format!("{}", ident),
             _ => todo!(),
         },
-        other => todo!("expr: {:?}", expr),
+        _other => todo!("expr: {:?}", expr),
     }
 }
 
@@ -80,9 +80,9 @@ fn parse_predicate(raw_predicate: &str) -> anyhow::Result<syn::Expr> {
 pub fn extract_refinement_from_type_alias<'a, 'tcx>(
     raw_type: &'a hir::Ty<'a>,
     tcx: &'a TyCtxt<'tcx>,
-    local_ctx: &'a TypeckResults<'a>,
+    _local_ctx: &'a TypeckResults<'a>,
 ) -> anyhow::Result<(String, syn::Expr)> {
-    if let Some((base, binder, raw_predicate)) = raw_type.try_into_refinement(tcx) {
+    if let Some((_base, binder, raw_predicate)) = raw_type.try_into_refinement(tcx) {
         let predicate = parse_predicate(raw_predicate.as_str())?;
         Ok((binder.as_str().to_string(), predicate))
     } else {

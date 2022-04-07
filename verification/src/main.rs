@@ -19,6 +19,7 @@ extern crate rustc_middle;
 extern crate rustc_session;
 extern crate rustc_span;
 
+use constraint_generator::type_check_function;
 use rustc_driver::Compilation;
 
 use rustc_hir as hir;
@@ -36,9 +37,12 @@ use tracing::info;
 use tracing::info_span;
 use tracing::trace;
 
+use crate::refinement_context::RContext;
+
 mod hir_ext;
 
 mod constraint_generator;
+mod refinement_context;
 mod refinements;
 #[cfg(test)]
 mod test_with_rustc;
@@ -103,48 +107,11 @@ impl rustc_driver::Callbacks for OurCompilerCalls {
                     let hir_id = tcx.hir().local_def_id_to_hir_id(local_def_id);
                     let hir_node = tcx.hir().get(hir_id);
                     match hir_node {
-                        hir::Node::Item(hir::Item {
-                            kind:
-                                hir::ItemKind::Fn(
-                                    FnSig {
-                                        decl: FnDecl { output, .. },
-                                        ..
-                                    },
-                                    _,
-                                    body_id,
-                                ),
-                            ident: _,
-                            def_id,
+                        hir::Node::Item(fn_item@hir::Item {
+                            kind: hir::ItemKind::Fn(_, _, _),
                             ..
                         }) => {
-                            let body = tcx.hir().get(body_id.hir_id);
-                            trace!(?body_id, ?body, "function");
-                            let _hir_id = body_id.hir_id;
-                            let local_ctx = tcx.typeck(*def_id);
-
-                            let ctx = vec![];
-                            let ty =
-                                constraint_generator::type_of_node(&body, &tcx, local_ctx, &ctx);
-                            trace!(?ty, "body type");
-
-                            match output {
-                                hir::FnRetTy::Return(return_type) => {
-                                    let refinement =
-                                        refinements::extract_refinement_from_type_alias(
-                                            return_type,
-                                            &tcx,
-                                            local_ctx,
-                                        )
-                                        .expect("error extracting a refinement from a type alias");
-                                    info!(?refinement, "found refinement");
-                                    // let constr =
-                                    //     constraint_generator::type_check_node(&body, &tcx, todo!());
-                                    // info!("constraints: {:#?}", constr);
-                                }
-                                o => {
-                                    error!("unrefined function: {:?}", o)
-                                }
-                            }
+                            let res = type_check_function(fn_item, &tcx);
 
                             Some("")
                         }

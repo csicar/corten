@@ -2,15 +2,14 @@ use crate::hir_ext::TyExt;
 use anyhow::anyhow;
 use rustc_hir as hir;
 
-use rustc_middle::ty::{Ty, TyCtxt, TypeckResults};
-use quote::ToTokens;
-use quote::quote;
 use core::fmt::Display;
+use quote::quote;
+use quote::ToTokens;
+use rustc_middle::ty::{Ty, TyCtxt, TypeckResults};
 
-
-#[derive(Debug)]
-pub struct RefinementType<'a> {
-    pub base: Ty<'a>,
+#[derive(Debug, Clone)]
+pub struct RefinementType<'tcx> {
+    pub base: Ty<'tcx>,
     pub binder: String,
     pub predicate: syn::Expr,
 }
@@ -18,11 +17,37 @@ pub struct RefinementType<'a> {
 impl<'a> Display for RefinementType<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let pred = &self.predicate;
-        write!(f, "ty!{{ {} : {:?} | {} }}", self.binder, self.base, quote!{ #pred })
+        write!(
+            f,
+            "ty!{{ {} : {:?} | {} }}",
+            self.binder,
+            self.base,
+            quote! { #pred }
+        )
     }
 }
 
 impl<'a> RefinementType<'a> {
+    pub fn from_type_alias<'b, 'tcx>(
+        raw_type: &'a hir::Ty<'a>,
+        tcx: &'b TyCtxt<'tcx>,
+        base_ty: Ty<'a>,
+    ) -> anyhow::Result<RefinementType<'a>> {
+        if let Some((_base, binder, raw_predicate)) = raw_type.try_into_refinement(tcx) {
+            let predicate = parse_predicate(raw_predicate.as_str())?;
+            Ok(RefinementType {
+                base: base_ty,
+                binder: binder.as_str().to_string(),
+                predicate,
+            })
+        } else {
+            Err(anyhow!(
+                "type {:?} does not seem to be a refinement type, when one was expected",
+                raw_type
+            ))
+        }
+    }
+
     pub fn encode_smt(&self, name: &str) -> String {
         let body = encode_smt(&self.predicate);
         let args = format!("({} Int)", self.binder);
@@ -75,20 +100,4 @@ pub fn encode_smt(expr: &syn::Expr) -> String {
 fn parse_predicate(raw_predicate: &str) -> anyhow::Result<syn::Expr> {
     let parsed = syn::parse_str::<syn::Expr>(raw_predicate)?;
     Ok(parsed)
-}
-
-pub fn extract_refinement_from_type_alias<'a, 'tcx>(
-    raw_type: &'a hir::Ty<'a>,
-    tcx: &'a TyCtxt<'tcx>,
-    _local_ctx: &'a TypeckResults<'a>,
-) -> anyhow::Result<(String, syn::Expr)> {
-    if let Some((_base, binder, raw_predicate)) = raw_type.try_into_refinement(tcx) {
-        let predicate = parse_predicate(raw_predicate.as_str())?;
-        Ok((binder.as_str().to_string(), predicate))
-    } else {
-        Err(anyhow!(
-            "type {:?} does not seem to be a refinement type, when one was expected",
-            raw_type
-        ))
-    }
 }

@@ -1,6 +1,6 @@
-
 use rustc_driver::Compilation;
 
+use rustc_errors::ErrorReported;
 use rustc_hir as hir;
 
 use rustc_hir::FnDecl;
@@ -19,11 +19,7 @@ use std::str;
 use std::sync::RwLock;
 use tracing::error;
 
-
-
 use quote::quote;
-
-
 
 struct HirCallback<F: Send> {
     with_hir: RwLock<F>,
@@ -66,7 +62,7 @@ impl<F: for<'a> FnMut(hir::Node<'a>, TyCtxt<'a>) -> () + Send> rustc_driver::Cal
     }
 }
 
-pub fn with_hir<F>(callback: F, input: &str) -> Result<(), rustc_errors::ErrorReported>
+pub fn with_hir<F>(callback: F, input: &str) -> Result<(), ErrorReported>
 where
     F: for<'a> FnMut(hir::Node<'a>, TyCtxt<'a>) -> () + Send,
 {
@@ -98,7 +94,7 @@ where
     rustc_driver::RunCompiler::new(&args, &mut callback).run()
 }
 
-pub fn with_item<F>(mut callback: F, input: &str) -> Result<(), rustc_errors::ErrorReported>
+pub fn with_item<F>(input: &str, mut callback: F) -> Result<(), ErrorReported>
 where
     F: for<'a> FnMut(&hir::Item<'a>, TyCtxt<'a>) -> () + Send,
 {
@@ -111,38 +107,33 @@ where
     )
 }
 
-pub fn with_expr<F>(input: &str, mut callback: F) -> Result<(), rustc_errors::ErrorReported>
+pub fn with_expr<F>(input: &str, mut callback: F) -> Result<(), ErrorReported>
 where
     F: for<'a> FnMut(&hir::Expr<'a>, TyCtxt<'a>, &TypeckResults<'a>) -> () + Send,
 {
-    with_item(
-        |item, tcx| match &item.kind {
-            hir::ItemKind::Fn(
-                FnSig {
-                    decl: FnDecl { output: _, .. },
-                    ..
-                },
-                _,
-                body_id,
-            ) => {
-                let hir = (tcx as TyCtxt).hir();
-                let node = hir.get(body_id.hir_id);
-                let local_ctx = tcx.typeck(item.def_id);
+    with_item(input, |item, tcx| match &item.kind {
+        hir::ItemKind::Fn(
+            FnSig {
+                decl: FnDecl { output: _, .. },
+                ..
+            },
+            _,
+            body_id,
+        ) => {
+            let hir = (tcx as TyCtxt).hir();
+            let node = hir.get(body_id.hir_id);
+            let local_ctx = tcx.typeck(item.def_id);
 
-                match node {
-                    hir::Node::Expr(expr) => callback(expr, tcx, local_ctx),
-                    _o => todo!(),
-                }
-
-                
+            match node {
+                hir::Node::Expr(expr) => callback(expr, tcx, local_ctx),
+                _o => todo!(),
             }
-            _o => panic!("parsing input resulted in different stuff"),
-        },
-        input,
-    )
+        }
+        _o => panic!("parsing input resulted in different stuff"),
+    })
 }
 
 #[test_log::test]
 fn test_item() {
-    with_item(|item, _tcx| println!("{:?}", item), "fn main() {}").unwrap();
+    with_item("fn main() {}", |item, _tcx| println!("{:?}", item)).unwrap();
 }

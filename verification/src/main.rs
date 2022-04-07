@@ -24,20 +24,20 @@ use rustc_driver::Compilation;
 
 use rustc_hir as hir;
 
-use rustc_hir::FnDecl;
-use rustc_hir::FnSig;
+
+
 
 use rustc_interface::interface;
 
 use rustc_interface::Queries;
 
 use std::str;
-use tracing::error;
-use tracing::info;
+
+
 use tracing::info_span;
 use tracing::trace;
 
-use crate::refinement_context::RContext;
+
 
 mod hir_ext;
 
@@ -111,7 +111,7 @@ impl rustc_driver::Callbacks for OurCompilerCalls {
                             kind: hir::ItemKind::Fn(_, _, _),
                             ..
                         }) => {
-                            let res = type_check_function(fn_item, &tcx);
+                            let _res = type_check_function(fn_item, &tcx);
 
                             Some("")
                         }

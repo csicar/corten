@@ -1,7 +1,7 @@
-use std::rc::Rc;
-use std::sync::Arc;
 
-use crate::hir_ext::TyExt;
+
+
+
 use crate::refinement_context::CtxEntry;
 use crate::refinement_context::RContext;
 use crate::refinements;
@@ -194,7 +194,7 @@ where
         ExprKind::DropTemps(_) => todo!(),
         ExprKind::If(cond, then_expr, maybe_else_expr) => {
             match maybe_else_expr {
-                Some(else_expr) => {
+                Some(_else_expr) => {
                     let mut inner_ctx = ctx.clone();
                     let cond_syn = syn::parse_str(&cond.pretty_print())?;
                     inner_ctx.add_entry(CtxEntry::Formula {expr: cond_syn});

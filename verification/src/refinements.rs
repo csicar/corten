@@ -5,7 +5,7 @@ use rustc_hir as hir;
 use core::fmt::Display;
 use quote::quote;
 use quote::ToTokens;
-use rustc_middle::ty::{Ty, TyCtxt, TypeckResults};
+use rustc_middle::ty::{Ty, TyCtxt};
 
 #[derive(Debug, Clone)]
 pub struct RefinementType<'tcx> {

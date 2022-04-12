@@ -2,7 +2,7 @@
 extern crate runtime_library;
 use runtime_library::ty;
 
-fn main() {
+fn main() -> ty! { v: () | true } {
     // let message = "Test";
     // println!("{}", message)
     ()
@@ -11,7 +11,7 @@ fn main() {
 
 
 fn t(_a: ty! {ra: i32 | ra < 10}) -> ty! {v: i32 | v > 0} {
-    2 as ty!{v : i32 | v > 0}
+    2 as ty!{v : i32 | v < 0}
 }
 
 // #[refined]

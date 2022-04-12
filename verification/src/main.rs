@@ -46,6 +46,7 @@ mod refinement_context;
 mod refinements;
 #[cfg(test)]
 mod test_with_rustc;
+mod smtlib_ext;
 
 struct MyLint;
 
@@ -109,10 +110,18 @@ impl rustc_driver::Callbacks for OurCompilerCalls {
                     match hir_node {
                         hir::Node::Item(fn_item@hir::Item {
                             kind: hir::ItemKind::Fn(_, _, _),
+                            span,
                             ..
                         }) => {
                             let _res = type_check_function(fn_item, &tcx);
-
+                            match _res {
+                                Ok(_) => (),
+                                Err(e) =>  {
+                                    // see: https://rustc-dev-guide.rust-lang.org/diagnostics.html?highlight=diagnost#error-messages
+                                    let mut err = session.struct_span_err(*span, &e.to_string());
+                                    err.emit();
+                                }
+                            }
                             Some("")
                         }
                         _ => None,

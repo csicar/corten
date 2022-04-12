@@ -1,15 +1,14 @@
-
-
-
+use std::io::Write;
 
 use crate::refinement_context::CtxEntry;
 use crate::refinement_context::RContext;
 use crate::refinements;
+use crate::smtlib_ext::SmtResExt;
 use anyhow::anyhow;
 
+use quote::format_ident;
 use rsmt2::SmtConf;
 use rsmt2::Solver;
-
 use rustc_hir as hir;
 
 use rustc_hir::{Expr, ExprKind};
@@ -87,10 +86,11 @@ where
 
             let conf = SmtConf::default_z3();
             let mut solver = conf.spawn(()).unwrap();
+            solver.path_tee("/tmp/z3-fn.lisp").unwrap();
 
             let actual_ty = type_of(&body.value, &tcx, &ctx, local_ctx, &mut solver)?;
             trace!(%actual_ty, "actual function type");
-            require_is_subtype_of(&actual_ty, &expected_type, &mut solver)?;
+            require_is_subtype_of(&actual_ty, &expected_type, &ctx, &mut solver)?;
             anyhow::Ok(expected_type)
         }
         other => Err(anyhow!(
@@ -138,12 +138,35 @@ where
         }
         ExprKind::Path(path) => {
             // this is a variable reference
+            // for
+            // ```rust
+            //  fn f(a: ty!{av : i32 | av > 0}) -> {
+            //     a
+            //  }
+            // ```
+            // Generates constraint `v: i32 | v > 0 && av == v`
+            //
             let res = local_ctx.qpath_res(path, expr.hir_id);
             match res {
-                hir::def::Res::Local(hir_id) => ctx.lookup_hir(&hir_id).ok_or(anyhow!(
-                    "could not find refinement type definition of {:?} in refinement context",
-                    hir_id
-                )),
+                hir::def::Res::Local(hir_id) => {
+                    let ty_in_context = ctx.lookup_hir(&hir_id).ok_or(anyhow!(
+                        "could not find refinement type definition of {:?} in refinement context",
+                        hir_id
+                    ))?;
+                    let var_ty = ty_in_context.rename_binder("v_new_todo")?;
+                    let combined_predicate = {
+                        let new_pred = &var_ty.predicate;
+                        let new_name = format_ident!("{}", &var_ty.binder);
+                        let old_name = format_ident!("{}", &ty_in_context.binder);
+                        parse_quote! {
+                            #new_pred && #new_name == #old_name
+                        }
+                    };
+                    let var_ty_with_eq_constraint = RefinementType { predicate: 
+                        combined_predicate
+                        , ..var_ty};
+                    Ok(var_ty_with_eq_constraint)
+                }
                 hir::def::Res::Def(_, _) => todo!(),
                 other => anyhow::bail!("reference to unexpected resolution {:?}", other),
             }
@@ -186,23 +209,21 @@ where
             let super_ty = RefinementType::from_type_alias(cast_ty, tcx, local_ctx.expr_ty(&expr))?;
 
             // SMT Subtyping
-            require_is_subtype_of(&expr_ty,&super_ty, solver)?;
+            require_is_subtype_of(&expr_ty, &super_ty, ctx, solver)?;
 
             anyhow::Ok(super_ty)
         }
         ExprKind::Type(_, _) => todo!(),
         ExprKind::DropTemps(_) => todo!(),
-        ExprKind::If(cond, then_expr, maybe_else_expr) => {
-            match maybe_else_expr {
-                Some(_else_expr) => {
-                    let mut inner_ctx = ctx.clone();
-                    let cond_syn = syn::parse_str(&cond.pretty_print())?;
-                    inner_ctx.add_entry(CtxEntry::Formula {expr: cond_syn});
-                    let then_ty = type_of(then_expr, tcx, &inner_ctx, local_ctx, solver)?;
-                    anyhow::Ok(then_ty)
-                },
-                None => todo!(),
+        ExprKind::If(cond, then_expr, maybe_else_expr) => match maybe_else_expr {
+            Some(_else_expr) => {
+                let mut inner_ctx = ctx.clone();
+                let cond_syn = syn::parse_str(&cond.pretty_print())?;
+                inner_ctx.add_entry(CtxEntry::Formula { expr: cond_syn });
+                let then_ty = type_of(then_expr, tcx, &inner_ctx, local_ctx, solver)?;
+                anyhow::Ok(then_ty)
             }
+            None => todo!(),
         },
         ExprKind::Loop(_, _, _, _) => todo!(),
         ExprKind::Match(_, _, _) => todo!(),
@@ -227,34 +248,41 @@ where
 fn require_is_subtype_of<'tcx, P>(
     sub_ty: &RefinementType<'tcx>,
     super_ty: &RefinementType<'tcx>,
+    ctx: &RContext<'tcx>,
     solver: &mut Solver<P>,
 ) -> anyhow::Result<()> {
     info!("need to do subtyping judgement: {} ≼ {}", sub_ty, super_ty);
-    solver.push(1).map_err(|e| anyhow!("Z3: {}", e))?;
-    solver
-        .define_fun(
-            "super_ty",
-            &[(&super_ty.binder, "Int")],
-            "Bool",
-            refinements::encode_smt(&super_ty.predicate),
-        )
-        .map_err(|e| anyhow!("Z3: {}", e))?;
-    solver
-        .define_fun(
-            "sub_ty",
-            &[(&sub_ty.binder, "Int")],
-            "Bool",
-            refinements::encode_smt(&sub_ty.predicate),
-        )
-        .map_err(|e| anyhow!("Z3: {}", e))?;
-    solver
-        .declare_const("inst", "Int")
-        .map_err(|e| anyhow!("Z3: {}", e))?;
-    solver
-        .assert("(not (=> (sub_ty inst) (super_ty inst)))")
-        .map_err(|e| anyhow!("Z3: {}", e))?;
-    let is_sat = solver.check_sat().map_err(|e| anyhow!("Z3: {}", e))?;
-    solver.pop(1).map_err(|e| anyhow!("Z3: {}", e))?;
+    solver.push(1).into_anyhow()?;
+    ctx.encode_smt(solver)?;
+
+    solver.declare_const(&sub_ty.binder, "Int").into_anyhow()?;
+    solver.assert(refinements::encode_smt(&sub_ty.predicate)).into_anyhow()?;
+
+    solver.declare_const(&super_ty.binder, "Int").into_anyhow()?;
+
+    solver.assert(format!("(= {} {})", &super_ty.binder, &sub_ty.binder)).into_anyhow()?;
+
+    solver.assert(format!("(not {})", refinements::encode_smt(&super_ty.predicate))).into_anyhow()?;
+
+    // solver
+    //     .define_fun(
+    //         "super_ty",
+    //         &[(&super_ty.binder, "Int")],
+    //         "Bool",
+    //         refinements::encode_smt(&super_ty.predicate),
+    //     )
+    //     .into_anyhow()?;
+    // solver
+    //     .define_fun(
+    //         "sub_ty",
+    //         &[(&sub_ty.binder, "Int")],
+    //         "Bool",
+    //         refinements::encode_smt(&sub_ty.predicate),
+    //     )
+    //     .into_anyhow()?;
+
+    let is_sat = solver.check_sat().into_anyhow()?;
+    solver.pop(2).into_anyhow()?;
     if is_sat {
         let msg = format!(
             "Subtyping judgement failed: {} is not a sub_ty of {}",
@@ -274,9 +302,9 @@ mod test {
     use super::*;
     use crate::test_with_rustc::{with_expr, with_item};
     use pretty_assertions as pretty;
-    use rsmt2::SmtConf;
-
     use quote::quote;
+    use rsmt2::SmtConf;
+    use std::io::Write;
 
     #[test_log::test]
     fn test_smt() {
@@ -367,7 +395,7 @@ mod test {
             &quote! {
                 type Refinement<T, const B: &'static str, const R: &'static str> = T;
 
-                fn f() ->i32{ (3 as Refinement<i32, "x", "x > 2">) as Refinement<i32, "x", "x > 1"> }
+                fn f() ->i32{ (3 as Refinement<i32, "x", "x > 2">) as Refinement<i32, "y", "y > 1"> }
             }
             .to_string(),
             |expr, tcx, local_ctx| {
@@ -376,14 +404,14 @@ mod test {
                 solver.path_tee("/tmp/z3").unwrap();
                 let ctx = RContext::new();
                 let ty = type_of(expr, &tcx, &ctx, local_ctx, &mut solver).unwrap();
-                pretty::assert_eq!(ty.to_string(), "ty!{ x : i32 | x > 1 }");
+                pretty::assert_eq!(ty.to_string(), "ty!{ y : i32 | y > 1 }");
                 info!("expr has type {}", ty);
             },
         )
         .unwrap();
     }
 
-    #[test]
+    #[test_log::test]
     fn test_type_function() {
         with_item(
             &quote! {
@@ -395,9 +423,6 @@ mod test {
             }
             .to_string(),
             |item, tcx| {
-                let conf = SmtConf::default_z3();
-                let mut solver = conf.spawn(()).unwrap();
-                solver.path_tee("/tmp/z3").unwrap();
                 let ty = type_check_function(item, &tcx).unwrap();
                 pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
             },
@@ -406,7 +431,7 @@ mod test {
     }
 
     #[should_panic]
-    #[test]
+    #[test_log::test]
     fn test_type_function_invalid() {
         with_item(
             &quote! {
@@ -414,6 +439,63 @@ mod test {
 
                 fn f(a : Refinement<i32, "x", "x > 0">) -> Refinement<i32, "v", "v > 1"> {
                     a
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
+            },
+        )
+        .unwrap();
+    }
+
+    #[test_log::test]
+    fn test_var_with_eq() {
+        with_item(
+            &quote! {
+                type Refinement<T, const B: &'static str, const R: &'static str> = T;
+
+                fn f(a : Refinement<i32, "av", "true">) -> Refinement<i32, "v", "v == av"> {
+                    a
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == av }");
+            },
+        )
+        .unwrap();
+    }
+
+    #[should_panic]
+    #[test_log::test]
+    fn test_var_with_eq_neg() {
+        with_item(
+            &quote! {
+                type Refinement<T, const B: &'static str, const R: &'static str> = T;
+
+                fn f(a : Refinement<i32, "av", "true">) -> Refinement<i32, "v", "v == av + 1"> {
+                    a
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let _ty = type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
+
+    #[test_log::test]
+    fn test_type_ite() {
+        with_item(
+            &quote! {
+                type Refinement<T, const B: &'static str, const R: &'static str> = T;
+
+                fn f(a : Refinement<i32, "x", "x > 0">) -> Refinement<i32, "v", "v > 0"> {
+                    if true { a } else { a }
                 }
             }
             .to_string(),
@@ -427,5 +509,4 @@ mod test {
         )
         .unwrap();
     }
-
 }

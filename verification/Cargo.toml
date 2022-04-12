@@ -23,12 +23,14 @@ tracing-subscriber = { version = "0.3.9", features = [
 "serde" = "*"
 syn = { version = "1.0", features = ["full"] }
 syn-serde = { version = "0.2", features = ["json"] }
-rsmt2 = "0.14.1"
+rsmt2 = { version = "0.14.1" }
 anyhow = "*"
 quote = "1.0.17"
 
 
 [dev-dependencies]
 "runtime-library" = { path = "../runtime-library" }
-test-log = { version = "0.2.10", features = ["trace"], default-features = false }
+test-log = { version = "0.2.10", features = [
+  "trace",
+], default-features = false }
 pretty_assertions = "1.2.1"

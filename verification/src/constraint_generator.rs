@@ -1,4 +1,4 @@
-use std::io::Write;
+
 
 use crate::refinement_context::CtxEntry;
 use crate::refinement_context::RContext;
@@ -304,7 +304,7 @@ mod test {
     use pretty_assertions as pretty;
     use quote::quote;
     use rsmt2::SmtConf;
-    use std::io::Write;
+    
 
     #[test_log::test]
     fn test_smt() {

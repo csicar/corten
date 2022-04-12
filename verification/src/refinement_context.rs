@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+
 use rsmt2::{Solver};
 use rustc_hir as hir;
 use tracing::trace;

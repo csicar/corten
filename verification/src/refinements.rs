@@ -101,7 +101,7 @@ fn rename_ref_in_expr(
             let mut new_path = expr_path.clone();
             match &path[..] {
                 [local_var] => {
-                    if (local_var.ident.to_string() == old_name) {
+                    if local_var.ident.to_string() == old_name {
                         let new_ident = syn::Ident::new(new_name, local_var.ident.span());
                         new_path.path.segments.first_mut().unwrap().ident = new_ident;
                         Ok(syn::Expr::Path(new_path))
@@ -109,7 +109,7 @@ fn rename_ref_in_expr(
                         Ok(expr.clone())
                     }
                 }
-                other => todo!(),
+                _other => todo!(),
             }
         }
         syn::Expr::Range(_) => todo!(),
@@ -171,7 +171,7 @@ pub fn encode_smt(expr: &syn::Expr) -> String {
             syn::Lit::Char(_) => todo!(),
             syn::Lit::Int(lit) => lit.to_token_stream().to_string(),
             syn::Lit::Float(_) => todo!(),
-            syn::Lit::Bool(bool) => lit.to_token_stream().to_string(),
+            syn::Lit::Bool(_bool) => lit.to_token_stream().to_string(),
             syn::Lit::Verbatim(_) => todo!(),
         },
         syn::Expr::Path(syn::ExprPath {

@@ -1,6 +1,7 @@
 use crate::hir_ext::TyExt;
 use anyhow::anyhow;
 use rustc_hir as hir;
+use tracing::trace;
 
 use core::fmt::Display;
 use quote::quote;
@@ -164,6 +165,14 @@ pub fn encode_smt(expr: &syn::Expr) -> String {
             };
             format!("({} {} {})", smt_op, encode_smt(left), encode_smt(right))
         }
+        syn::Expr::Unary(syn::ExprUnary { op, expr, .. }) => {
+            let smt_op = match op {
+                syn::UnOp::Deref(_) => todo!(),
+                syn::UnOp::Not(_) => "not",
+                syn::UnOp::Neg(_) => "-",
+            };
+            format!("({} {})", smt_op, encode_smt(expr))
+        }
         syn::Expr::Lit(syn::ExprLit { lit, .. }) => match lit {
             syn::Lit::Str(str) => todo!("{:?}", str),
             syn::Lit::ByteStr(_) => todo!(),
@@ -178,14 +187,93 @@ pub fn encode_smt(expr: &syn::Expr) -> String {
             path: syn::Path { segments, .. },
             ..
         }) => match segments.first() {
-            Some(syn::PathSegment { ident, .. }) => format!("{}", ident),
+            Some(syn::PathSegment { ident, .. }) => encode_ident(ident),
             _ => todo!(),
         },
+        syn::Expr::Paren(syn::ExprParen { expr, .. }) => {
+            format!("{}", encode_smt(expr))
+        }
+        syn::Expr::Block(syn::ExprBlock {
+            block: syn::Block { stmts, .. },
+            label: None,
+            ..
+        }) => {
+            // This occurs is necessary for typing some conditions like:
+            // typing cond: cond={ let _t = a > 0; _t } then_expr={ a } else_expr={ 1 as Refinement<i32, , > }
+            // Rust HIR decides to introduce a tmp var for the condition
+            // => translate to `(let (_t (> a 0)) _t)`
+
+            if let Some((syn::Stmt::Expr(in_expr), var_declarations)) = stmts.split_last() {
+                let converted = var_declarations
+                    .iter()
+                    .map(|decl| encode_let_binding_smt(decl).unwrap())
+                    .collect::<Vec<String>>();
+                let block_enc = format!("(let ({}) {})", converted.join(" "), encode_smt(in_expr));
+                trace!("encoding of block is {}", block_enc);
+                block_enc
+            } else {
+                todo!()
+            }
+        }
         _other => todo!("expr: {:?}", expr),
     }
+}
+
+/// Given `let _t = a > 0;` returns `(_t (> a 0))`
+/// ```
+/// use syn;
+/// let input = parse_quote! { let _t = a > 0; }
+/// let output = encode_let_binding_smt(input);
+/// assert_eq(output, "(_t (> a 0))");
+/// ```
+fn encode_let_binding_smt(decl: &syn::Stmt) -> anyhow::Result<String> {
+    match decl {
+        syn::Stmt::Local(syn::Local {
+            pat:
+                syn::Pat::Ident(syn::PatIdent {
+                    attrs: _,
+                    mutability: None,
+                    by_ref: None,
+                    subpat: None,
+                    ident,
+                }),
+            init: Some((_, expr)),
+            ..
+        }) => {
+            trace!(?ident, ?expr, "encode binding");
+
+            Ok(format!("({} {})", encode_ident(ident), encode_smt(expr)))
+        }
+        other => todo!("unknown: {:?}", other),
+    }
+}
+
+fn encode_ident(ident: &syn::Ident) -> String {
+    format!("|{}|", ident)
 }
 
 fn parse_predicate(raw_predicate: &str) -> anyhow::Result<syn::Expr> {
     let parsed = syn::parse_str::<syn::Expr>(raw_predicate)?;
     Ok(parsed)
+}
+#[cfg(test)]
+mod test {
+    use syn::parse_quote;
+    use pretty_assertions as pretty;
+
+    use super::*;
+
+    #[test_log::test]
+    fn test_encode_let_binding() {
+        let input : Vec<_> = parse_quote! { let _t = a > 0; };
+        let output = encode_let_binding_smt(&input[0]).unwrap();
+        pretty::assert_eq!(output, "(|_t| (> |a| 0))");
+    }
+
+    #[test_log::test]
+    fn test_encode_expr_with_let() {
+        let input = parse_quote! { { let _t = a > 0; _t } };
+        let output = encode_smt(&input);
+        pretty::assert_eq!(output, "(let ((|_t| (> |a| 0))) |_t|)");
+    }
 }

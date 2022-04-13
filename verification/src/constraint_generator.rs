@@ -636,16 +636,15 @@ mod test {
         .unwrap();
     }
 
-    #[should_panic]
     #[test_log::test]
-    fn test_type_ite_neg_partial() {
+    fn test_type_ite_partial() {
         with_item(
             &quote! {
                 type Refinement<T, const B: &'static str, const R: &'static str> = T;
 
                 fn f(a : Refinement<i32, "x", "x > 0">) -> Refinement<i32, "v", "v > 0"> {
-                    if a >= 0 { a } else { 1 as Refinement<i32, "y", "y > 0"> }
-                    //          ^--- x >= 0 |- :: {==x} ≼ {x > 0}
+                    if a > 1 { a } else { 1 as Refinement<i32, "y", "y > 0"> }
+                    //         ^--- x > 1 |- {==x} ≼ {x > 0}
                 }
             }
             .to_string(),

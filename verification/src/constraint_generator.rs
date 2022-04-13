@@ -218,7 +218,7 @@ where
                     "typing cond:"
                 );
                 solver.comment("< typing if expr >").into_anyhow()?;
-                
+
                 // type check then_expr
                 let mut then_ctx = ctx.clone();
                 let then_cond = symbolic_execute(&cond, tcx, ctx, local_ctx)?;
@@ -408,7 +408,7 @@ fn require_is_subtype_of<'tcx, P>(
     solver.flush()?;
     trace!("checking: {} ≼ {}", sub_ty, super_ty);
     let is_sat = solver.check_sat().into_anyhow()?;
-    solver.comment("done!").into_anyhow()?;
+    solver.comment(&format!("done! is sat: {}", is_sat)).into_anyhow()?;
 
     solver.pop(2).into_anyhow()?;
     if is_sat {
@@ -615,15 +615,17 @@ mod test {
         .unwrap();
     }
 
+
     #[should_panic]
     #[test_log::test]
-    fn test_type_ite_neg() {
+    fn test_type_ite_neg_simple() {
         with_item(
             &quote! {
                 type Refinement<T, const B: &'static str, const R: &'static str> = T;
 
                 fn f(a : Refinement<i32, "x", "x > 0">) -> Refinement<i32, "v", "v > 0"> {
-                    if a > 0 { a } else { 0 }
+                    if a > 1 { a } else { 0 as Refinement<i32, "y", "y > 0"> }
+                    //                    ^--- 0 does not have type v > 0
                 }
             }
             .to_string(),
@@ -634,13 +636,34 @@ mod test {
         .unwrap();
     }
 
+    #[should_panic]
+    #[test_log::test]
+    fn test_type_ite_neg_partial() {
+        with_item(
+            &quote! {
+                type Refinement<T, const B: &'static str, const R: &'static str> = T;
+
+                fn f(a : Refinement<i32, "x", "x > 0">) -> Refinement<i32, "v", "v > 0"> {
+                    if a >= 0 { a } else { 1 as Refinement<i32, "y", "y > 0"> }
+                    //          ^--- x >= 0 |- :: {==x} ≼ {x > 0}
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let _ty = type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
+
+
     #[test_log::test]
     fn test_type_ite() {
         with_item(
             &quote! {
                 type Refinement<T, const B: &'static str, const R: &'static str> = T;
 
-                fn f(a : Refinement<i32, "x", "x > 0">) -> Refinement<i32, "v", "v > 0"> {
+                fn f(a : Refinement<i32, "x", "true">) -> Refinement<i32, "v", "v > 0"> {
                     if a > 0 { a } else { 1 as Refinement<i32, "y", "y > 0"> }
                 }
             }
@@ -660,6 +683,25 @@ mod test {
 
                 fn f(a : Refinement<i32, "x", "x > 0">) -> Refinement<i32, "v", "v > 0"> {
                     if 1 == 2 { 0 } else { 1 as Refinement<i32, "y", "y > 0"> }
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let _ty = type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
+
+    #[test_log::test]
+    fn test_type_ite_true_cond_by_ctx() {
+        with_item(
+            &quote! {
+                type Refinement<T, const B: &'static str, const R: &'static str> = T;
+
+                fn f(a : Refinement<i32, "x", "x > 0">) -> Refinement<i32, "v", "v > 0"> {
+                    if a > 0 { a } else { 0 }
+                    // ^^^^^ --- is always true in ctx `x > 0` => else branch can have any type
                 }
             }
             .to_string(),

@@ -35,6 +35,7 @@ impl<'a> RContext<'a> {
     }
 
     pub fn encode_smt<P>(&self, solver: &mut Solver<P>) -> anyhow::Result<()> {
+        solver.comment("<Context>").into_anyhow()?;
         solver.push(1).into_anyhow()?;
         self.entries.iter().try_for_each(|entry| match entry {
             CtxEntry::Typed { ident: _, ty } => {
@@ -55,7 +56,7 @@ impl<'a> RContext<'a> {
             }
         })?;
         trace!("done encode_smt context");
-
+        solver.comment("</Context>").into_anyhow()?;
         Ok(())
     }
 }

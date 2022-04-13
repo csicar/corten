@@ -16,6 +16,7 @@ use rustc_hir::{Expr, ExprKind};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::ty::TypeckResults;
 use rustc_span::source_map::Spanned;
+use syn::Token;
 use tracing::error;
 
 use syn::parse_quote;
@@ -87,7 +88,9 @@ where
 
             let conf = SmtConf::default_z3();
             let mut solver = conf.spawn(()).unwrap();
-            solver.path_tee(format!("/tmp/z3-fn-{:?}.lisp", SystemTime::now())).unwrap();
+            solver
+                .path_tee(format!("/tmp/z3-fn-{:?}.lisp", SystemTime::now()))
+                .unwrap();
 
             let actual_ty = type_of(&body.value, &tcx, &ctx, local_ctx, &mut solver)?;
             trace!(%actual_ty, "actual function type");
@@ -172,17 +175,6 @@ where
                 hir::def::Res::Def(_, _) => todo!(),
                 other => anyhow::bail!("reference to unexpected resolution {:?}", other),
             }
-            // match path {
-            //     hir::QPath::Resolved(None, hir::Path { res, .. }) => match res {
-            //         hir::def::Res::Local(hir_id) => ctx.lookup_hir(hir_id).ok_or(anyhow!(
-            //             "could not find refinement type definition of {:?} in refinement context",
-            //             hir_id
-            //         )),
-            //         hir::def::Res::Def(_, _) => todo!(),
-            //         other => anyhow::bail!("reference to unexpected resolution {:?}", other),
-            //     },
-            //     other => todo!(),
-            // }
         }
         ExprKind::Box(_) => todo!(),
         ExprKind::ConstBlock(_) => todo!(),
@@ -225,31 +217,44 @@ where
                     else_expr=%else_expr.pretty_print(),
                     "typing cond:"
                 );
+                solver.comment("< typing if expr >").into_anyhow()?;
+                
                 // type check then_expr
                 let mut then_ctx = ctx.clone();
-                let then_cond = syn::parse_str(&cond.pretty_print())?;
+                let then_cond = symbolic_execute(&cond, tcx, ctx, local_ctx)?;
                 then_ctx.add_entry(CtxEntry::Formula { expr: then_cond });
                 let then_ty = type_of(then_expr, tcx, &then_ctx, local_ctx, solver)?;
+                trace!(?then_ctx, "then_ctx");
 
                 // type check else_expr
                 let mut else_ctx = ctx.clone();
-                let syn_cond: syn::Expr = syn::parse_str(&cond.pretty_print())?;
+                let syn_cond: syn::Expr = symbolic_execute(&cond, tcx, ctx, local_ctx)?;
                 let else_cond = syn::parse_quote! { ! (#syn_cond) };
                 else_ctx.add_entry(CtxEntry::Formula { expr: else_cond });
+                trace!(?else_ctx, "else_ctx");
                 let else_ty = type_of(else_expr, tcx, &else_ctx, local_ctx, solver)?;
 
-                // either else_ty ≼ then_ty OR then_ty ≼ else_ty
-                // and we choose the lesser type
+                // We try to be a little clever here:
+                // instead of requiring the user to specify the type of the if-then-else expression all the time
+                // we make sure that it is sufficient, that either one of the branches has a general enough type to
+                // cover both.
+                // This means, that either else_ty ≼ then_ty OR then_ty ≼ else_ty. The complete expression
+                // then has the lesser of both types.
+                // subtype checking is done in the refinement type context of the subtype, because
+                // it needs to show, that it is a sub type of the postulated complete type *in its context*
 
-                let complete_ty =
-                    if let Ok(()) = require_is_subtype_of(&else_ty, &then_ty, ctx, solver) {
-                        then_ty
-                    } else if let Ok(()) = require_is_subtype_of(&then_ty, &else_ty, ctx, solver) {
-                        else_ty
-                    } else {
-                        anyhow::bail!("Error while typing the if-then-else expression: Neither else_ty ≼ then_ty nor then_ty ≼ else_ty. (then_ty: {}, else_ty: {})", then_ty, else_ty)
-                    };
+                let complete_ty = if let Ok(()) =
+                    require_is_subtype_of(&else_ty, &then_ty, &else_ctx, solver)
+                {
+                    then_ty
+                } else if let Ok(()) = require_is_subtype_of(&then_ty, &else_ty, &then_ctx, solver) {
+                    else_ty
+                } else {
+                    anyhow::bail!("Error while typing the if-then-else expression: Neither else_ty ≼ then_ty nor then_ty ≼ else_ty. (then_ty: {}, else_ty: {})", then_ty, else_ty)
+                };
                 trace!(%complete_ty, "condition has type");
+                solver.comment("</ typing if expr >").into_anyhow()?;
+
                 anyhow::Ok(complete_ty)
             }
             None => todo!(),
@@ -271,6 +276,99 @@ where
         ExprKind::Yield(_, _) => todo!(),
         ExprKind::Err => todo!(),
         e => todo!("expr: {:?}", e),
+    }
+}
+
+/// This executes e.g. a condition in an if-then-else expression to be used as
+/// as formula in smt
+/// In our case, symbolic executing entails replacing variable references (like `a`)
+/// with their refinement type binder (like `av`)
+/// Example
+/// ```no run
+/// fn f(a: ty!{av: i32 | ...}) {
+///     if a {...} else {...}
+/// }
+/// ```
+fn symbolic_execute<'a, 'b, 'c, 'tcx>(
+    expr: &'a Expr<'tcx>,
+    tcx: &'b TyCtxt<'tcx>,
+    ctx: &'c RContext<'tcx>,
+    local_ctx: &'a TypeckResults<'a>,
+) -> anyhow::Result<syn::Expr> {
+    match &expr.kind {
+        ExprKind::Box(_) => todo!(),
+        ExprKind::ConstBlock(_) => todo!(),
+        ExprKind::Array(_) => todo!(),
+        ExprKind::Call(_, _) => todo!(),
+        ExprKind::MethodCall(_, _, _) => todo!(),
+        ExprKind::Tup(_) => todo!(),
+        ExprKind::Binary(Spanned { node: bin_op, .. }, left, right) => {
+            let syn_op = syn::parse_str::<syn::BinOp>(bin_op.as_str())?;
+            let left_syn = symbolic_execute(left, tcx, ctx, local_ctx)?;
+            let right_syn = symbolic_execute(right, tcx, ctx, local_ctx)?;
+            Ok(syn::Expr::Binary(syn::ExprBinary {
+                attrs: vec![],
+                left: Box::new(left_syn),
+                op: syn_op,
+                right: Box::new(right_syn),
+            }))
+        }
+        ExprKind::Unary(_, _) => todo!(),
+        ExprKind::Lit(_) =>  {
+            let lit = syn::parse_str(&expr.pretty_print())?;
+            Ok(lit)
+        },
+        ExprKind::Cast(_, _) => todo!(),
+        ExprKind::Type(_, _) => todo!(),
+        ExprKind::DropTemps(expr) => {
+            trace!(?expr, "drop temps: ");
+            symbolic_execute(expr, tcx, ctx, local_ctx)
+        }
+        ExprKind::Let(_) => todo!(),
+        ExprKind::If(_, _, _) => todo!(),
+        ExprKind::Loop(_, _, _, _) => todo!(),
+        ExprKind::Match(_, _, _) => todo!(),
+        ExprKind::Closure(_, _, _, _, _) => todo!(),
+        ExprKind::Block(_, _) => todo!(),
+        ExprKind::Assign(_, _, _) => todo!(),
+        ExprKind::AssignOp(_, _, _) => todo!(),
+        ExprKind::Field(_, _) => todo!(),
+        ExprKind::Index(_, _) => todo!(),
+        ExprKind::Path(path) => {
+            // this is a variable reference
+            // for
+            // ```rust
+            //  fn f(a: ty!{av : i32 | av > 0}) -> {
+            //     a
+            //  }
+            // ```
+            // Generates constraint `v: i32 | v > 0 && av == v`
+            //
+            let res = local_ctx.qpath_res(&path, expr.hir_id);
+            match res {
+                hir::def::Res::Local(hir_id) => {
+                    let ty_in_context = ctx.lookup_hir(&hir_id).ok_or(anyhow!(
+                        "could not find refinement type definition of {:?} in refinement context",
+                        hir_id
+                    ))?;
+                    trace!(?ty_in_context, "found refinement type:");
+                    
+                    let refinement_ident = format_ident!("{}", &ty_in_context.binder);
+                    Ok(parse_quote! { #refinement_ident })
+                }
+                hir::def::Res::Def(_, _) => todo!(),
+                other => anyhow::bail!("reference to unexpected resolution {:?}", other),
+            }
+        }
+        ExprKind::AddrOf(_, _, _) => todo!(),
+        ExprKind::Break(_, _) => todo!(),
+        ExprKind::Continue(_) => todo!(),
+        ExprKind::Ret(_) => todo!(),
+        ExprKind::InlineAsm(_) => todo!(),
+        ExprKind::Struct(_, _, _) => todo!(),
+        ExprKind::Repeat(_, _) => todo!(),
+        ExprKind::Yield(_, _) => todo!(),
+        ExprKind::Err => todo!(),
     }
 }
 
@@ -304,24 +402,9 @@ fn require_is_subtype_of<'tcx, P>(
         ))
         .into_anyhow()?;
 
-    // solver
-    //     .define_fun(
-    //         "super_ty",
-    //         &[(&super_ty.binder, "Int")],
-    //         "Bool",
-    //         refinements::encode_smt(&super_ty.predicate),
-    //     )
-    //     .into_anyhow()?;
-    // solver
-    //     .define_fun(
-    //         "sub_ty",
-    //         &[(&sub_ty.binder, "Int")],
-    //         "Bool",
-    //         refinements::encode_smt(&sub_ty.predicate),
-    //     )
-    //     .into_anyhow()?;
-
-    solver.comment(&format!("checking: {} ≼ {}", sub_ty, super_ty)).into_anyhow()?;
+    solver
+        .comment(&format!("checking: {} ≼ {}", sub_ty, super_ty))
+        .into_anyhow()?;
     solver.flush()?;
     trace!("checking: {} ≼ {}", sub_ty, super_ty);
     let is_sat = solver.check_sat().into_anyhow()?;
@@ -559,6 +642,24 @@ mod test {
 
                 fn f(a : Refinement<i32, "x", "x > 0">) -> Refinement<i32, "v", "v > 0"> {
                     if a > 0 { a } else { 1 as Refinement<i32, "y", "y > 0"> }
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let _ty = type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
+
+    #[test_log::test]
+    fn test_type_ite_false() {
+        with_item(
+            &quote! {
+                type Refinement<T, const B: &'static str, const R: &'static str> = T;
+
+                fn f(a : Refinement<i32, "x", "x > 0">) -> Refinement<i32, "v", "v > 0"> {
+                    if 1 == 2 { 0 } else { 1 as Refinement<i32, "y", "y > 0"> }
                 }
             }
             .to_string(),

@@ -714,4 +714,44 @@ mod test {
         )
         .unwrap();
     }
+
+    #[test_log::test]
+    fn test_type_max() {
+        with_item(
+            &quote! {
+                type Refinement<T, const B: &'static str, const R: &'static str> = T;
+
+                fn max(a : Refinement<i32, "av", "true">, b: Refinement<i32, "bv", "true">) -> Refinement<i32, "v", "v >= av && v >= bv"> {
+                    if a > b { a as Refinement<i32, "x", "x >= av && x >= bv"> } else { b }
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= av && v >= bv }");
+            },
+        )
+        .unwrap();
+    }
+
+    #[should_panic]
+    #[test_log::test]
+    fn test_type_max_neg() {
+        with_item(
+            &quote! {
+                type Refinement<T, const B: &'static str, const R: &'static str> = T;
+
+                fn f(a : Refinement<i32, "av", "true">, b: Refinement<i32, "bv", "true">) 
+                    -> Refinement<i32, "v", "v >= av && v < bv"> {
+                    if a > b { a as Refinement<i32, "x", "x >= av && x < bv"> } else { b }
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= av && v >= bv }");
+            },
+        )
+        .unwrap();
+    }
 }

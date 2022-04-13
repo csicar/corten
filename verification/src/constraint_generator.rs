@@ -649,7 +649,8 @@ mod test {
             }
             .to_string(),
             |item, tcx| {
-                let _ty = type_check_function(item, &tcx).unwrap();
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
             },
         )
         .unwrap();
@@ -668,7 +669,8 @@ mod test {
             }
             .to_string(),
             |item, tcx| {
-                let _ty = type_check_function(item, &tcx).unwrap();
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
             },
         )
         .unwrap();
@@ -681,12 +683,13 @@ mod test {
                 type Refinement<T, const B: &'static str, const R: &'static str> = T;
 
                 fn f(a : Refinement<i32, "x", "x > 0">) -> Refinement<i32, "v", "v > 0"> {
-                    if 1 == 2 { 0 } else { 1 as Refinement<i32, "y", "y > 0"> }
+                    if false { 0 } else { 1 as Refinement<i32, "y", "y > 0"> }
                 }
             }
             .to_string(),
             |item, tcx| {
-                let _ty = type_check_function(item, &tcx).unwrap();
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
             },
         )
         .unwrap();
@@ -705,7 +708,8 @@ mod test {
             }
             .to_string(),
             |item, tcx| {
-                let _ty = type_check_function(item, &tcx).unwrap();
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
             },
         )
         .unwrap();

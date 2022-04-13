@@ -13,6 +13,7 @@ use rustc_middle::ty::TyCtxt;
 use rustc_middle::ty::TypeckResults;
 use rustc_session::config;
 use rustc_span::source_map;
+use tracing::warn;
 use std::path;
 use std::process;
 use std::str;
@@ -101,7 +102,7 @@ where
     with_hir(
         |hir, tcx| match hir {
             hir::Node::Item(item) => callback(item, tcx),
-            o => error!(node=?o, "parsing input resulted in different stuff"),
+            o => warn!(node=?o, "parsing input resulted in different stuff"),
         },
         input,
     )

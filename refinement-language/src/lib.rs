@@ -112,14 +112,12 @@ impl Parse for RefinedFunction {
     fn parse(input: ParseStream) -> Result<Self> {
         input.parse::<Token![fn]>()?;
         let name = input.parse()?;
-        // input.parse::<Token![fn]>()?;
         let content;
         parenthesized!(content in input);
         let params = content.parse_terminated(RefinedParam::parse)?;
 
         input.parse::<Token![->]>()?;
         let RefinementInMacro(return_type) = input.parse()?;
-        // input.parse::<Token![=>]>()?;
         let body = input.parse()?;
         Ok(RefinedFunction {
             name,

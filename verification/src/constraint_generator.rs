@@ -4,6 +4,8 @@ use std::time::SystemTime;
 use crate::refinement_context::CtxEntry;
 use crate::refinement_context::RContext;
 use crate::refinements;
+use crate::refinements::ImmRefType;
+use crate::refinements::Refinement;
 use crate::smtlib_ext::SmtResExt;
 use anyhow::anyhow;
 
@@ -124,11 +126,16 @@ where
             trace!(pred=?predicate, "Expr Literal gets predicate");
             let base = local_ctx.node_type(expr.hir_id);
 
-            anyhow::Ok(RefinementType {
-                base,
-                binder: "v".to_string(),
-                predicate,
-            })
+            anyhow::Ok(
+                ImmRefType {
+                    base,
+                    refinement: Refinement {
+                        binder: "v".to_string(),
+                        predicate,
+                    },
+                }
+                .into(),
+            )
         }
         ExprKind::Block(hir::Block { stmts, expr, .. }, None) => {
             assert_eq!(stmts.len(), 0, "unexpected stmts {:?}", stmts);
@@ -153,24 +160,24 @@ where
             let res = local_ctx.qpath_res(path, expr.hir_id);
             match res {
                 hir::def::Res::Local(hir_id) => {
-                    let ty_in_context = ctx.lookup_hir(&hir_id).ok_or(anyhow!(
-                        "could not find refinement type definition of {:?} in refinement context",
-                        hir_id
-                    ))?;
+                    let ty_in_context = ctx.lookup_hir_immutable(&hir_id)?;
                     let var_ty = ty_in_context.rename_binder("v_new_todo")?;
                     let combined_predicate = {
-                        let new_pred = &var_ty.predicate;
-                        let new_name = format_ident!("{}", &var_ty.binder);
-                        let old_name = format_ident!("{}", &ty_in_context.binder);
+                        let new_pred = &var_ty.refinement.predicate;
+                        let new_name = format_ident!("{}", &var_ty.refinement.binder);
+                        let old_name = format_ident!("{}", &ty_in_context.refinement.binder);
                         parse_quote! {
                             #new_pred && #new_name == #old_name
                         }
                     };
-                    let var_ty_with_eq_constraint = RefinementType {
-                        predicate: combined_predicate,
+                    let var_ty_with_eq_constraint = ImmRefType {
+                        refinement: Refinement {
+                            predicate: combined_predicate,
+                            ..var_ty.refinement
+                        },
                         ..var_ty
                     };
-                    Ok(var_ty_with_eq_constraint)
+                    Ok(var_ty_with_eq_constraint.into())
                 }
                 hir::def::Res::Def(_, _) => todo!(),
                 other => anyhow::bail!("reference to unexpected resolution {:?}", other),
@@ -185,11 +192,14 @@ where
             let tuple_type = local_ctx.expr_ty(expr);
             info!(?tuple_type);
             let ty = match contents {
-                [] => RefinementType {
+                [] => ImmRefType {
                     base: tuple_type,
-                    binder: "v".to_string(),
-                    predicate: parse_quote! { true },
-                },
+                    refinement: Refinement {
+                        binder: "v_fresh_todo".to_string(),
+                        predicate: parse_quote! { true },
+                    },
+                }
+                .into(),
                 _o => todo!(),
             };
             anyhow::Ok(ty)
@@ -247,7 +257,8 @@ where
                     require_is_subtype_of(&else_ty, &then_ty, &else_ctx, solver)
                 {
                     then_ty
-                } else if let Ok(()) = require_is_subtype_of(&then_ty, &else_ty, &then_ctx, solver) {
+                } else if let Ok(()) = require_is_subtype_of(&then_ty, &else_ty, &then_ctx, solver)
+                {
                     else_ty
                 } else {
                     anyhow::bail!("Error while typing the if-then-else expression: Neither else_ty ≼ then_ty nor then_ty ≼ else_ty. (then_ty: {}, else_ty: {})", then_ty, else_ty)
@@ -314,10 +325,10 @@ fn symbolic_execute<'a, 'b, 'c, 'tcx>(
             }))
         }
         ExprKind::Unary(_, _) => todo!(),
-        ExprKind::Lit(_) =>  {
+        ExprKind::Lit(_) => {
             let lit = syn::parse_str(&expr.pretty_print())?;
             Ok(lit)
-        },
+        }
         ExprKind::Cast(_, _) => todo!(),
         ExprKind::Type(_, _) => todo!(),
         ExprKind::DropTemps(expr) => {
@@ -347,13 +358,14 @@ fn symbolic_execute<'a, 'b, 'c, 'tcx>(
             let res = local_ctx.qpath_res(&path, expr.hir_id);
             match res {
                 hir::def::Res::Local(hir_id) => {
-                    let ty_in_context = ctx.lookup_hir(&hir_id).ok_or(anyhow!(
-                        "could not find refinement type definition of {:?} in refinement context",
-                        hir_id
-                    ))?;
+                    let ty_in_context = ctx.lookup_hir(&hir_id)?;
                     trace!(?ty_in_context, "found refinement type:");
-                    
-                    let refinement_ident = format_ident!("{}", &ty_in_context.binder);
+
+                    let refinement_ident = match ty_in_context {
+                        RefinementType::Mut(_) => todo!(),
+                        RefinementType::Imm(imm) => format_ident!("{}", &imm.refinement.binder),
+                    };
+
                     Ok(parse_quote! { #refinement_ident })
                 }
                 hir::def::Res::Def(_, _) => todo!(),
@@ -378,27 +390,44 @@ fn require_is_subtype_of<'tcx, P>(
     ctx: &RContext<'tcx>,
     solver: &mut Solver<P>,
 ) -> anyhow::Result<()> {
+    match (sub_ty, super_ty) {
+        (RefinementType::Mut(_), RefinementType::Mut(_)) => todo!(),
+        (RefinementType::Mut(_), RefinementType::Imm(_)) => todo!(),
+        (RefinementType::Imm(_), RefinementType::Mut(_)) => todo!(),
+        (RefinementType::Imm(imm_sub_ty), RefinementType::Imm(imm_super_ty)) => {
+            require_is_immutable_subtype_of(imm_sub_ty, imm_super_ty, ctx, solver)
+        },
+    }
+}
+
+
+fn require_is_immutable_subtype_of<'tcx, P>(
+    sub_ty: &ImmRefType<'tcx>,
+    super_ty: &ImmRefType<'tcx>,
+    ctx: &RContext<'tcx>,
+    solver: &mut Solver<P>,
+) -> anyhow::Result<()> {
     info!("need to do subtyping judgement: {} ≼ {}", sub_ty, super_ty);
     solver.push(1).into_anyhow()?;
     ctx.encode_smt(solver)?;
 
-    solver.declare_const(&sub_ty.binder, "Int").into_anyhow()?;
+    solver.declare_const(&sub_ty.refinement.binder, "Int").into_anyhow()?;
     solver
-        .assert(refinements::encode_smt(&sub_ty.predicate))
+        .assert(refinements::encode_smt(&sub_ty.refinement.predicate))
         .into_anyhow()?;
 
     solver
-        .declare_const(&super_ty.binder, "Int")
+        .declare_const(&super_ty.refinement.binder, "Int")
         .into_anyhow()?;
 
     solver
-        .assert(format!("(= {} {})", &super_ty.binder, &sub_ty.binder))
+        .assert(format!("(= {} {})", &super_ty.refinement.binder, &sub_ty.refinement.binder))
         .into_anyhow()?;
 
     solver
         .assert(format!(
             "(not {})",
-            refinements::encode_smt(&super_ty.predicate)
+            refinements::encode_smt(&super_ty.refinement.predicate)
         ))
         .into_anyhow()?;
 
@@ -408,7 +437,9 @@ fn require_is_subtype_of<'tcx, P>(
     solver.flush()?;
     trace!("checking: {} ≼ {}", sub_ty, super_ty);
     let is_sat = solver.check_sat().into_anyhow()?;
-    solver.comment(&format!("done! is sat: {}", is_sat)).into_anyhow()?;
+    solver
+        .comment(&format!("done! is sat: {}", is_sat))
+        .into_anyhow()?;
 
     solver.pop(2).into_anyhow()?;
     if is_sat {
@@ -615,7 +646,6 @@ mod test {
         .unwrap();
     }
 
-
     #[should_panic]
     #[test_log::test]
     fn test_type_ite_neg_simple() {
@@ -655,7 +685,6 @@ mod test {
         )
         .unwrap();
     }
-
 
     #[test_log::test]
     fn test_type_ite() {
@@ -721,8 +750,13 @@ mod test {
             &quote! {
                 type Refinement<T, const B: &'static str, const R: &'static str> = T;
 
-                fn max(a : Refinement<i32, "av", "true">, b: Refinement<i32, "bv", "true">) -> Refinement<i32, "v", "v >= av && v >= bv"> {
-                    if a > b { a as Refinement<i32, "x", "x >= av && x >= bv"> } else { b }
+                fn max(a : Refinement<i32, "av", "true">, b: Refinement<i32, "bv", "true">)
+                    -> Refinement<i32, "v", "v >= av && v >= bv"> {
+                    if a > b { // in ref: av > bv
+                        a as Refinement<i32, "x", "x >= av && x >= bv">
+                    } else {
+                        b
+                    }
                 }
             }
             .to_string(),
@@ -741,9 +775,31 @@ mod test {
             &quote! {
                 type Refinement<T, const B: &'static str, const R: &'static str> = T;
 
-                fn f(a : Refinement<i32, "av", "true">, b: Refinement<i32, "bv", "true">) 
+                fn f(a : Refinement<i32, "av", "true">, b: Refinement<i32, "bv", "true">)
                     -> Refinement<i32, "v", "v >= av && v < bv"> {
                     if a > b { a as Refinement<i32, "x", "x >= av && x < bv"> } else { b }
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= av && v >= bv }");
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_mut() {
+        with_item(
+            &quote! {
+                type Refinement<T, const B: &'static str, const R: &'static str> = T;
+                type MutRefinement<T, const B: &'static str, const R: &'static str, const BA: &'static str, const RA: &'static str> = T;
+
+                fn f(a : &mut MutRefinement<i32, "av", "true", "af", "af == 0">) 
+                    -> Refinement<i32, "v", "true"> {
+                    *a = 0;
+                    1337
                 }
             }
             .to_string(),

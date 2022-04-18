@@ -11,7 +11,7 @@ fn main() -> ty! { v: () | true } {
 
 
 fn t(_a: ty! {ra: i32 | ra < 10}) -> ty! {v: i32 | v > 0} {
-    2 as ty!{v : i32 | v < 0}
+    2 as ty!{x : i32 | x < 0}
 }
 
 // #[refined]

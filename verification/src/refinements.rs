@@ -9,10 +9,42 @@ use quote::ToTokens;
 use rustc_middle::ty::{Ty, TyCtxt};
 
 #[derive(Debug, Clone)]
-pub struct RefinementType<'tcx> {
+pub enum RefinementType<'tcx> {
+    Mut(MutRefType<'tcx>),
+    Imm(ImmRefType<'tcx>),
+}
+
+#[derive(Debug, Clone)]
+pub struct MutRefType<'tcx> {
     pub base: Ty<'tcx>,
+    pub before: Refinement,
+    pub after: Refinement,
+}
+
+
+/// Immutable refinement type
+/// `ty!{ x: i32 | x > 0 }`
+/// - `base` is `i32`
+/// - `refinement` is `x, x > 0`
+#[derive(Debug, Clone)]
+pub struct ImmRefType<'tcx> {
+    pub base: Ty<'tcx>,
+    pub refinement: Refinement,
+}
+
+#[derive(Debug, Clone)]
+pub struct Refinement {
     pub binder: String,
     pub predicate: syn::Expr,
+}
+
+impl<'tcx> RefinementType<'tcx> {
+    fn base(&self) -> Ty<'tcx> {
+        match self {
+            RefinementType::Mut(m) => m.base,
+            RefinementType::Imm(i) => i.base,
+        }
+    }
 }
 
 impl<'a> RefinementType<'a> {
@@ -23,11 +55,13 @@ impl<'a> RefinementType<'a> {
     ) -> anyhow::Result<RefinementType<'a>> {
         if let Some((_base, binder, raw_predicate)) = raw_type.try_into_refinement(tcx) {
             let predicate = parse_predicate(raw_predicate.as_str())?;
-            Ok(RefinementType {
+            Ok(RefinementType::Imm(ImmRefType {
                 base: base_ty,
-                binder: binder.as_str().to_string(),
-                predicate,
-            })
+                refinement: Refinement {
+                    binder: binder.as_str().to_string(),
+                    predicate,
+                },
+            }))
         } else {
             Err(anyhow!(
                 "type {:?} does not seem to be a refinement type, when one was expected",
@@ -35,19 +69,68 @@ impl<'a> RefinementType<'a> {
             ))
         }
     }
+}
 
-    pub fn rename_binder(&self, new_name: &str) -> anyhow::Result<RefinementType<'a>> {
-        Ok(RefinementType {
+impl<'tcx> Into<RefinementType<'tcx>> for MutRefType<'tcx> {
+    fn into(self) -> RefinementType<'tcx> {
+        RefinementType::Mut(self)
+    }
+}
+
+impl<'tcx> Display for MutRefType<'tcx> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let pred_before = &self.before.predicate;
+        let pred_after = &self.after.predicate;
+        write!(
+            f,
+            "ty!{{ {} : {:?} | {} => {} | {} }}",
+            self.before.binder,
+            self.base,
+            quote! { #pred_before },
+            self.after.binder,
+            quote! { #pred_after }
+        )
+    }
+}
+
+impl<'tcx> ImmRefType<'tcx> {
+    pub fn rename_binder(&self, new_name: &str) -> anyhow::Result<ImmRefType<'tcx>> {
+        Ok(ImmRefType {
             base: self.base,
-            binder: new_name.to_string(),
-            predicate: rename_ref_in_expr(&self.predicate, &self.binder, new_name)?,
+            refinement: Refinement {
+                binder: new_name.to_string(),
+                predicate: rename_ref_in_expr(
+                    &self.refinement.predicate,
+                    &self.refinement.binder,
+                    new_name,
+                )?,
+            },
         })
     }
 
     pub fn encode_smt(&self, name: &str) -> String {
-        let body = encode_smt(&self.predicate);
-        let args = format!("({} Int)", self.binder);
+        let body = encode_smt(&self.refinement.predicate);
+        let args = format!("({} Int)", self.refinement.binder);
         format!("(define-fun {} ({}) Bool ({})", name, args, body)
+    }
+}
+
+impl<'tcx> Into<RefinementType<'tcx>> for ImmRefType<'tcx> {
+    fn into(self) -> RefinementType<'tcx> {
+        RefinementType::Imm(self)
+    }
+}
+
+impl<'tcx> Display for ImmRefType<'tcx> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let pred = &self.refinement.predicate;
+        write!(
+            f,
+            "ty!{{ {} : {:?} | {} }}",
+            self.refinement.binder,
+            self.base,
+            quote! { #pred }
+        )
     }
 }
 
@@ -133,14 +216,10 @@ fn rename_ref_in_expr(
 
 impl<'a> Display for RefinementType<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let pred = &self.predicate;
-        write!(
-            f,
-            "ty!{{ {} : {:?} | {} }}",
-            self.binder,
-            self.base,
-            quote! { #pred }
-        )
+        match self {
+            RefinementType::Mut(m) => m.fmt(f),
+            RefinementType::Imm(i) => i.fmt(f),
+        }
     }
 }
 
@@ -258,14 +337,14 @@ fn parse_predicate(raw_predicate: &str) -> anyhow::Result<syn::Expr> {
 }
 #[cfg(test)]
 mod test {
-    use syn::parse_quote;
     use pretty_assertions as pretty;
+    use syn::parse_quote;
 
     use super::*;
 
     #[test_log::test]
     fn test_encode_let_binding() {
-        let input : Vec<_> = parse_quote! { let _t = a > 0; };
+        let input: Vec<_> = parse_quote! { let _t = a > 0; };
         let output = encode_let_binding_smt(&input[0]).unwrap();
         pretty::assert_eq!(output, "(|_t| (> |a| 0))");
     }

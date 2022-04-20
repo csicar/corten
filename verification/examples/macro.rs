@@ -8,11 +8,15 @@ fn main() -> ty! { v: () | true } {
     ()
 }
 
-
-
-fn t(_a: ty! {ra: i32 | ra < 10}) -> ty! {v: i32 | v > 0} {
-    2 as ty!{x : i32 | x < 0}
-}
+fn test() {
+    let mut a = 1;
+    let mut b = 4;
+    a = 3;
+    while a > 3 {
+      b = 3;
+    }
+    a = 9;
+  }
 
 // #[refined]
 // fn max(a: ty!{ra : i32 | true}, b: ty!{rb :i32 | true}) -> ty!(v: i32 | v >= ra && v >= rb) {

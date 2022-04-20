@@ -27,6 +27,7 @@ rsmt2 = { version = "0.14.1" }
 anyhow = "*"
 quote = "1.0.17"
 tempfile="3.3.0"
+petgraph="0.6.0"
 
 
 [dev-dependencies]

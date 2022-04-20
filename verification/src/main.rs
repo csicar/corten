@@ -47,6 +47,7 @@ mod refinements;
 #[cfg(test)]
 mod test_with_rustc;
 mod smtlib_ext;
+mod program_analysis;
 
 struct MyLint;
 

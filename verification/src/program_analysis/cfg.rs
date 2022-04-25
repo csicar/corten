@@ -51,7 +51,7 @@ impl<'a, 'v, 'tcx> Visitor<'v> for CfgVisitor<'tcx, 'a> {
                 else_expr.map(|e| walk_expr(self, e));
                 let else_exit = self.current_pred;
 
-                let whole_idx = self.cfg.add_node(Entry::new(ex.hir_id, &self.tcx));
+                let whole_idx = self.cfg.add_node(Entry{hir_id: ex.hir_id, code: "ite".to_string()});
                 self.cfg.add_edge(then_exit, whole_idx, ());
                 self.cfg.add_edge(else_exit, whole_idx, ());
                 self.current_pred = whole_idx;
@@ -60,14 +60,20 @@ impl<'a, 'v, 'tcx> Visitor<'v> for CfgVisitor<'tcx, 'a> {
                 // Loop has two targets:
                 // 1. the loop entry point (designated block.hir_id)
                 // 2. the loop exit point (designated ex.hir_id, because that is where break.target_id points to)
-                let entry_idx = self.cfg.add_node(Entry::new(block.hir_id, &self.tcx));
-                let exit_idx = self.cfg.add_node(Entry::new(ex.hir_id, &self.tcx));
+                let entry_idx = self.cfg.add_node(Entry {
+                    hir_id: block.hir_id,
+                    code: "loop_entry".to_string(),
+                });
+                let exit_idx = self.cfg.add_node(Entry {
+                    hir_id: ex.hir_id,
+                    code: "loop exit".to_string(),
+                });
 
                 let while_pred = self.current_pred;
 
                 trace!(entry_id=?block.hir_id, exit_id=?ex.hir_id);
                 self.cfg.add_edge(while_pred, entry_idx, ());
-                
+
                 // self.cfg.add_edge(entry_idx, exit_idx, ());
                 // self.cfg.add_edge(entry_idx, entry_idx, ());
                 // self.cfg.add_edge(exit_idx, exit_idx, ());
@@ -85,6 +91,8 @@ impl<'a, 'v, 'tcx> Visitor<'v> for CfgVisitor<'tcx, 'a> {
                     todo!()
                 }
                 let idx = self.cfg.add_node(Entry::new(ex.hir_id, &self.tcx));
+                self.cfg.add_edge(self.current_pred, idx, ());
+
                 let dest_hir_id = destination.target_id.unwrap();
                 let dest_idx = self
                     .cfg
@@ -109,7 +117,7 @@ impl<'a, 'v, 'tcx> Visitor<'v> for CfgVisitor<'tcx, 'a> {
     }
 
     fn visit_stmt(&mut self, s: &'v rustc_hir::Stmt<'v>) {
-        trace!(stmt=?s.hir_id,"visit stmt");
+        trace!(stmt=?s.hir_id, "visit stmt");
         walk_stmt(self, s);
         let idx = self.cfg.add_node(Entry::new(s.hir_id, &self.tcx));
         self.cfg.add_edge(self.current_pred, idx, ());
@@ -181,22 +189,17 @@ mod test {
                 let graph = calculate_cfg(&tcx, expr);
                 let only_code = graph.map(|_, node| node.code.clone(), |_, e| "");
 
-                let actual_dot = format!(
-                    "{}",
-                    Dot::with_config(
-                        &only_code,
-                        &[Config::EdgeNoLabel]
+                let actual_dot =
+                    format!("{}", Dot::with_config(&only_code, &[Config::EdgeNoLabel]));
+                let actual_dot_full = format!(
+                    "{:#?}",
+                    Dot::with_attr_getters(
+                        &graph,
+                        &[Config::EdgeNoLabel],
+                        &|_, _| "".to_string(),
+                        &|_, _| ", shape=rounded".to_string(),
                     )
                 );
-                let actual_dot_full = format!(
-                  "{:#?}",
-                  Dot::with_attr_getters(
-                      &graph,
-                      &[Config::EdgeNoLabel],
-                      &|_, _| "".to_string(),
-                      &|_, _| ", shape=rounded".to_string(),
-                  )
-              );
                 write_dot_file("/tmp/graph-test_cfg_if.dot", &actual_dot_full);
 
                 let expected = r#"
@@ -282,14 +285,18 @@ mod test {
                 let graph = calculate_cfg(&tcx, expr);
                 let only_code = graph.map(|_, node| node.code.clone(), |_, _| "");
 
-                let vis_graph = graph.map(|_, node| format!("{{ {} }} | {{ lid {:?} }}", node.code, node.hir_id.local_id), |_, _| "");
-                let actual_dot = format!(
-                    "{}",
-                    Dot::with_config(
-                        &only_code,
-                        &[Config::EdgeNoLabel],
-                    )
+                let vis_graph = graph.map(
+                    |_, node| {
+                        format!(
+                            "{{ {} | lid {:?} }}",
+                            node.code.replace("<", "&lt;").replace(">", "&gt;"),
+                            node.hir_id.local_id
+                        )
+                    },
+                    |_, _| "",
                 );
+                let actual_dot =
+                    format!("{}", Dot::with_config(&only_code, &[Config::EdgeNoLabel],));
                 let actual_dot_full = format!(
                     "{}",
                     Dot::with_attr_getters(

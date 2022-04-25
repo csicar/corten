@@ -25,7 +25,7 @@ use rustc_middle::{hir::map::Map, ty::TyCtxt};
 
 use crate::hir_ext::NodeExt;
 
-fn calculate_reachable_definitions<'tcx, 'hir>(
+fn calculate_reaching_definitions<'tcx, 'hir>(
     tcx: &TyCtxt<'hir>,
     start: &Expr<'tcx>,
 ) -> HashMap<HirId, HashSet<HirId>>
@@ -41,6 +41,14 @@ where
       step(tcx, next, &mut worklist, &mut defs);
     }
     defs
+}
+
+fn gen() {
+
+}
+
+fn kill() {
+  
 }
 
 fn step<'tcx, 'hir>(
@@ -113,7 +121,7 @@ mod test {
 
     use crate::test_with_rustc::with_expr;
 
-    use super::calculate_reachable_definitions;
+    use super::calculate_reaching_definitions;
     use pretty_assertions as pretty;
     use quote::quote;
 
@@ -128,7 +136,7 @@ mod test {
             }
             .to_string(),
             |expr, tcx, local_ctx| {
-                let res = calculate_reachable_definitions(&tcx, expr);
+                let res = calculate_reaching_definitions(&tcx, expr);
                 pretty::assert_eq!(res, HashMap::new());
             },
         )

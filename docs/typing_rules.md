@@ -22,6 +22,15 @@ Typing Rules as Implemented
 
 Analogous for $`\text{IF-Else}`$
 
+We try to be a little clever here:
+instead of requiring the user to specify the type of the if-then-else expression all the time
+we make sure that it is sufficient, that either one of the branches has a general enough type to
+cover both.
+This means, that either else_ty ≼ then_ty OR then_ty ≼ else_ty. The complete expression
+then has the lesser of both types.
+subtype checking is done in the refinement type context of the subtype, because
+it needs to show, that it is a sub type of the postulated complete type *in its context*
+
 Subtyping Rules as Implemented
 ==============================
 

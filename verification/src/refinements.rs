@@ -8,7 +8,7 @@ use quote::quote;
 use quote::ToTokens;
 use rustc_middle::ty::{Ty, TyCtxt};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RefinementType<'tcx> {
     pub base: Ty<'tcx>,
     pub binder: String,
@@ -16,6 +16,7 @@ pub struct RefinementType<'tcx> {
 }
 
 impl<'a> RefinementType<'a> {
+    /// Extracts the Refinement Type from a `Refinement<T, B, P>` type alias
     pub fn from_type_alias<'b, 'tcx>(
         raw_type: &'a hir::Ty<'a>,
         tcx: &'b TyCtxt<'tcx>,

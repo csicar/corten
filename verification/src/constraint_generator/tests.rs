@@ -284,7 +284,7 @@ fn test_type_ite_true_cond_by_ctx() {
             pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
         },
     )
-    .expect("Error running Rustc");
+    .unwrap();
 }
 
 #[test_log::test]
@@ -324,6 +324,28 @@ fn test_type_max_neg() {
                 }
             }
         ]
+        .to_string(),
+        |item, tcx| {
+            let ty = type_check_function(item, &tcx).unwrap();
+            pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= av && v >= bv }");
+        },
+    )
+    .unwrap();
+}
+
+/// Mutability
+#[test_log::test]
+fn test_assign_simple() {
+    with_item(
+        &quote! {
+            type Refinement<T, const B: &'static str, const R: &'static str> = T;
+
+            fn max() -> Refinement<i32, "v", "true"> {
+                let mut a = 7;
+                a = 9;
+                a
+            }
+        }
         .to_string(),
         |item, tcx| {
             let ty = type_check_function(item, &tcx).unwrap();

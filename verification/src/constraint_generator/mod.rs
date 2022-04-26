@@ -148,7 +148,24 @@ where
             ))
         }
         ExprKind::Block(hir::Block { stmts, expr, .. }, None) => {
-            assert_eq!(stmts.len(), 0, "unexpected stmts {:?}", stmts);
+            // assert_eq!(stmts.len(), 0, "unexpected stmts {:?}", stmts);
+            let ctx_for_expr = stmts.iter().try_fold(ctx.clone(), |mut curr_ctx, stmt| {
+                let new_ctx = match stmt.kind {
+                    hir::StmtKind::Local(local) => {
+                        let initializer = local.init.ok_or(anyhow!("All declarations are expected to contain initializers"))?;
+
+                        let (type_of_init, ctx_after_init) = type_of(initializer, tcx, ctx, local_ctx, solver)?;
+                        assert!(local.ty.is_none(), "Type Annotations on `let` not yet supported");
+                        curr_ctx.add_ty(local.hir_id, type_of_init);
+                        curr_ctx
+                    },
+                    hir::StmtKind::Item(_) => todo!(),
+                    hir::StmtKind::Expr(inner_expr) => type_of(&inner_expr, tcx, &curr_ctx, &local_ctx, solver)?.1,
+                    hir::StmtKind::Semi(inner_expr) => type_of(&inner_expr, tcx, &curr_ctx, &local_ctx, solver)?.1,
+                };
+
+                anyhow::Ok(new_ctx)
+            });
             match expr {
                 Some(expr) => type_of(expr, tcx, ctx, local_ctx, solver),
                 None => todo!("dont know how to handle block without expr (yet)"),

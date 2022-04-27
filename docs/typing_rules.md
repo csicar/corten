@@ -29,7 +29,25 @@ cover both.
 This means, that either else_ty ≼ then_ty OR then_ty ≼ else_ty. The complete expression
 then has the lesser of both types.
 subtype checking is done in the refinement type context of the subtype, because
+
 it needs to show, that it is a sub type of the postulated complete type *in its context*
+
+## SEQ
+
+
+```math
+\text{SEQ}
+\frac
+  {
+    \begin{aligned}
+      \Gamma \vdash s_1 : \tau_{dontcare} \Rightarrow \Gamma'
+      \qquad
+      \Gamma' \vdash \bar s : \tau \Rightarrow \Gamma''
+    \end{aligned}
+  }
+  {\Gamma \vdash s_1 ; \bar s : \tau \Rightarrow \Gamma''}
+```
+This also works with variables declarations: In that case $`\Gamma'`$ contains a new variable
 
 Subtyping Rules as Implemented
 ==============================

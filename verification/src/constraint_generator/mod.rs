@@ -124,12 +124,15 @@ pub fn type_of<'a, 'b, 'c, 'tcx, P>(
     ctx: &'c RContext<'tcx>,
     local_ctx: &'a TypeckResults<'a>,
     solver: &mut Solver<P>,
-) -> anyhow::Result<(RefinementType<'a>, RContext<'tcx>)>
+) -> anyhow::Result<(RefinementType<'a>, RContext<'a>)>
 where
     // 'tcx at least as long as 'a
     'tcx: 'a,
+    // 'a at least as long as 'c
+    'a: 'c,
 {
-    match &expr.kind {
+    let tcx_clone = tcx.clone();
+    match &expr.clone().kind {
         ExprKind::Lit(Spanned { node: _, span: _ }) => {
             let lit: syn::Expr = syn::parse_str(&expr.pretty_print())?;
             let predicate = parse_quote! {
@@ -160,14 +163,15 @@ where
                         curr_ctx
                     },
                     hir::StmtKind::Item(_) => todo!(),
-                    hir::StmtKind::Expr(inner_expr) => type_of(&inner_expr, tcx, &curr_ctx, &local_ctx, solver)?.1,
-                    hir::StmtKind::Semi(inner_expr) => type_of(&inner_expr, tcx, &curr_ctx, &local_ctx, solver)?.1,
+                    hir::StmtKind::Expr(inner_expr) => type_of(inner_expr, tcx, ctx, &local_ctx, solver)?.1,
+                    hir::StmtKind::Semi(inner_expr) => type_of(inner_expr, tcx,ctx, &local_ctx, solver)?.1,
+                    // _ => todo!()
                 };
 
                 anyhow::Ok(new_ctx)
             });
             match expr {
-                Some(expr) => type_of(expr, tcx, ctx, local_ctx, solver),
+                Some(expr) => type_of(expr, tcx, todo!() /* ctx_for_expr*/, local_ctx, solver),
                 None => todo!("dont know how to handle block without expr (yet)"),
             }
         }
@@ -184,7 +188,7 @@ where
             // ```
             // Generates constraint `v: i32 | v > 0 && av == v`
             //
-            let res = local_ctx.qpath_res(path, expr.hir_id);
+            let res = local_ctx.qpath_res(&path, expr.hir_id);
             match res {
                 hir::def::Res::Local(hir_id) => {
                     let ty_in_context = ctx.lookup_hir(&hir_id).ok_or(anyhow!(

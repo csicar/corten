@@ -118,6 +118,30 @@ where
     }
 }
 
+pub fn transition_stmt<'a, 'b, 'c, 'tcx, P>(stmts: &'a [hir::Stmt<'tcx>],  tcx: &'b TyCtxt<'tcx>,
+ctx: &'c RContext<'tcx>,
+local_ctx: &'a TypeckResults<'a>,
+solver: &mut Solver<P>) -> anyhow::Result<RContext<'tcx>> {
+    stmts.iter().try_fold(ctx.clone(), |mut curr_ctx, stmt| {
+                let new_ctx = match stmt.kind {
+                    hir::StmtKind::Local(local) => {
+                        let initializer = local.init.ok_or(anyhow!("All declarations are expected to contain initializers"))?;
+
+                        let (type_of_init, ctx_after_init) = type_of(initializer, tcx, ctx, local_ctx, solver)?;
+                        assert!(local.ty.is_none(), "Type Annotations on `let` not yet supported");
+                        curr_ctx.add_ty(local.hir_id, type_of_init);
+                        curr_ctx
+                    },
+                    hir::StmtKind::Item(_) => todo!(),
+                    hir::StmtKind::Expr(inner_expr) => type_of(inner_expr, tcx, ctx, &local_ctx, solver)?.1,
+                    hir::StmtKind::Semi(inner_expr) => type_of(inner_expr, tcx,ctx, &local_ctx, solver)?.1,
+                    // _ => todo!()
+                };
+
+                anyhow::Ok(new_ctx)
+            })
+}
+
 pub fn type_of<'a, 'b, 'c, 'tcx, P>(
     expr: &'a Expr<'tcx>,
     tcx: &'b TyCtxt<'tcx>,
@@ -152,26 +176,27 @@ where
         }
         ExprKind::Block(hir::Block { stmts, expr, .. }, None) => {
             // assert_eq!(stmts.len(), 0, "unexpected stmts {:?}", stmts);
-            let ctx_for_expr = stmts.iter().try_fold(ctx.clone(), |mut curr_ctx, stmt| {
-                let new_ctx = match stmt.kind {
-                    hir::StmtKind::Local(local) => {
-                        let initializer = local.init.ok_or(anyhow!("All declarations are expected to contain initializers"))?;
+            
+            // let ctx_for_expr = stmts.iter().try_fold(ctx.clone(), |mut curr_ctx, stmt| {
+            //     let new_ctx = match stmt.kind {
+            //         hir::StmtKind::Local(local) => {
+            //             let initializer = local.init.ok_or(anyhow!("All declarations are expected to contain initializers"))?;
 
-                        let (type_of_init, ctx_after_init) = type_of(initializer, tcx, ctx, local_ctx, solver)?;
-                        assert!(local.ty.is_none(), "Type Annotations on `let` not yet supported");
-                        curr_ctx.add_ty(local.hir_id, type_of_init);
-                        curr_ctx
-                    },
-                    hir::StmtKind::Item(_) => todo!(),
-                    hir::StmtKind::Expr(inner_expr) => type_of(inner_expr, tcx, ctx, &local_ctx, solver)?.1,
-                    hir::StmtKind::Semi(inner_expr) => type_of(inner_expr, tcx,ctx, &local_ctx, solver)?.1,
-                    // _ => todo!()
-                };
+            //             let (type_of_init, ctx_after_init) = type_of(initializer, tcx, ctx, local_ctx, solver)?;
+            //             assert!(local.ty.is_none(), "Type Annotations on `let` not yet supported");
+            //             curr_ctx.add_ty(local.hir_id, type_of_init);
+            //             curr_ctx
+            //         },
+            //         hir::StmtKind::Item(_) => todo!(),
+            //         hir::StmtKind::Expr(inner_expr) => type_of(inner_expr, tcx, ctx, &local_ctx, solver)?.1,
+            //         hir::StmtKind::Semi(inner_expr) => type_of(inner_expr, tcx,ctx, &local_ctx, solver)?.1,
+            //         // _ => todo!()
+            //     };
 
-                anyhow::Ok(new_ctx)
-            });
+            //     anyhow::Ok(new_ctx)
+            // })?;
             match expr {
-                Some(expr) => type_of(expr, tcx, todo!() /* ctx_for_expr*/, local_ctx, solver),
+                Some(expr) => type_of(expr, tcx,/* todo!() */ ctx /*&ctx_for_expr*/, local_ctx, solver),
                 None => todo!("dont know how to handle block without expr (yet)"),
             }
         }
@@ -315,7 +340,23 @@ where
         ExprKind::Loop(_, _, _, _) => todo!(),
         ExprKind::Match(_, _, _) => todo!(),
         ExprKind::Closure(_, _, _, _, _) => todo!(),
-        ExprKind::Assign(_, _, _) => todo!(),
+        ExprKind::Assign(lhs, rhs, _span) => {
+            match &lhs.kind {
+                ExprKind::Path(path) => {
+                    let res = local_ctx.qpath_res(&path, lhs.hir_id);
+                    match res {
+                        hir::def::Res::Local(hir_id) => {
+                            let (rhs_ty, mut ctx_after_expr) = type_of(rhs, tcx, ctx, local_ctx, solver)?;
+                            ctx_after_expr.update_ty(hir_id, rhs_ty.clone());
+                            anyhow::Ok((rhs_ty, ctx_after_expr))
+                        }
+                        hir::def::Res::Def(_, _) => todo!(),
+                        other => anyhow::bail!("reference to unexpected resolution {:?}", other),
+                    }
+                },
+                other => todo!()
+            }
+        },
         ExprKind::AssignOp(_, _, _) => todo!(),
         ExprKind::Field(_, _) => todo!(),
         ExprKind::Index(_, _) => todo!(),

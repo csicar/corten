@@ -25,6 +25,11 @@ impl<'a> RContext<'a> {
         self.formulas.push(formula);
     }
 
+    pub fn update_ty(&mut self, hir: hir::HirId, ty: RefinementType<'a>) {
+        self.types.remove(&hir);
+        self.add_ty(hir, ty);
+    }
+
     pub fn add_ty(&mut self, hir: hir::HirId, ty: RefinementType<'a>) {
         assert!(!self.types.contains_key(&hir));
         self.types.insert(hir, ty);

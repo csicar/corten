@@ -49,6 +49,20 @@ it needs to show, that it is a sub type of the postulated complete type *in its 
 ```
 This also works with variables declarations: In that case $`\Gamma'`$ contains a new variable
 
+## ASSIGN
+
+
+```math
+\text{ASSIGN}
+\frac
+  {
+    \begin{aligned}
+      \Gamma \vdash e : \tau \Rightarrow \Gamma'
+    \end{aligned}
+  }
+  {\Gamma \vdash x = e : \tau \Rightarrow \Gamma' [x \rightarrow \tau]}
+```
+
 Subtyping Rules as Implemented
 ==============================
 

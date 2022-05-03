@@ -104,7 +104,7 @@ where
                 .path_tee(format!("/tmp/z3-fn-{:?}.lisp", SystemTime::now()))
                 .unwrap();
 
-            let (actual_ty, actual_ctx) = type_of(&body.value, &tcx, &ctx, local_ctx, &mut solver)?;
+            let actual_ty = type_of(&body.value, &tcx, &mut ctx, local_ctx, &mut solver)?;
             //TODO: check actual_ctx ≼ parameter_after_ctx
 
             trace!(%actual_ty, "actual function type");
@@ -118,75 +118,54 @@ where
     }
 }
 
-
-
 pub fn transition_stmt<'a, 'b, 'c, 'd, 'tcx, P>(
     stmts: &'a [hir::Stmt<'tcx>],
     tcx: &'b TyCtxt<'tcx>,
-    ctx: &'c RContext<'tcx>,
-    local_ctx: &'d TypeckResults<'a>,
+    ctx: &'c mut RContext<'a>,
+    local_ctx: &'a TypeckResults<'a>,
     solver: &mut Solver<P>,
-) -> anyhow::Result<RContext<'a>> where 'tcx: 'a, 'd: 'a{
+) -> anyhow::Result<()>
+where
+    // 'tcx at least as long as 'a
+    'tcx: 'a,
+    // 'a at least as long as 'c
+    'a: 'c,
+{
     let l_st = stmts.clone();
-    let res = l_st.iter().try_fold(ctx.clone(), |mut curr_ctx, stmt| {
-        let new_ctx = match stmt.kind {
+
+    for stmt in stmts {
+        match stmt.kind {
             hir::StmtKind::Local(local) => {
                 let initializer = local.init.ok_or(anyhow!(
                     "All declarations are expected to contain initializers"
                 ))?;
 
-                let (type_of_init, ctx_after_init) =
+                let type_of_init =
                     type_of(initializer, tcx, ctx, local_ctx, solver)?;
                 assert!(
                     local.ty.is_none(),
                     "Type Annotations on `let` not yet supported"
                 );
-                curr_ctx.add_ty(local.hir_id, type_of_init);
-                curr_ctx
+                ctx.add_ty(local.hir_id, type_of_init.clone());
+                type_of_init
             }
             hir::StmtKind::Item(_) => todo!(),
-            hir::StmtKind::Expr(inner_expr) => type_of(inner_expr, tcx, ctx, &local_ctx, solver)?.1,
-            hir::StmtKind::Semi(inner_expr) => type_of(inner_expr, tcx, ctx, &local_ctx, solver)?.1,
+            hir::StmtKind::Expr(inner_expr) => type_of(inner_expr, tcx, ctx, &local_ctx, solver)?,
+            hir::StmtKind::Semi(inner_expr) => type_of(inner_expr, tcx, ctx, &local_ctx, solver)?,
             // _ => todo!()
         };
-
-        anyhow::Ok(new_ctx)
-    })?;
-    anyhow::Ok(res.clone())
-}
-
-
-
-pub fn minimize<'a, 'b, 'c, 'd,'tcx, P>(
-    _stmts: &'a [hir::Stmt<'tcx>],
-    tcx: &'b TyCtxt<'tcx>,
-    ctx: &'c RContext<'tcx>,
-    local_ctx: &'d TypeckResults<'a>,
-    solver: &mut Solver<P>,
-) -> anyhow::Result<RContext<'a>> where 'tcx: 'a, 'd: 'a {
-    let l_st : &[hir::Stmt]= &[]; //stmts.clone();
-    let mut curr_ctx = ctx.clone();
-    for stmt in l_st {
-        match stmt.kind {
-            hir::StmtKind::Local(local) => {
-                let (type_of_init, ctx_after_init) =
-                    type_of(todo!(), todo!(), todo!(), local_ctx.clone(), todo!() as &mut Solver<P>)?;
-
-                    curr_ctx.add_ty(local.hir_id, type_of_init);
-            }
-            _ => todo!()
-        };
     }
-    anyhow::Ok(curr_ctx) //asdlkjabsdlkajb
+
+    anyhow::Ok(())
 }
 
 pub fn type_of<'a, 'b, 'c, 'tcx, P>(
     expr: &'a Expr<'tcx>,
     tcx: &'b TyCtxt<'tcx>,
-    ctx: &'c RContext<'tcx>,
+    ctx: &'c mut RContext<'a>,
     local_ctx: &'a TypeckResults<'a>,
     solver: &mut Solver<P>,
-) -> anyhow::Result<(RefinementType<'a>, RContext<'a>)>
+) -> anyhow::Result<(RefinementType<'a>)>
 where
     // 'tcx at least as long as 'a
     'tcx: 'a,
@@ -204,18 +183,16 @@ where
             trace!(pred=?predicate, "Expr Literal gets predicate");
             let base = local_ctx.node_type(expr.hir_id);
 
-            anyhow::Ok((
-                RefinementType {
-                    base,
-                    binder: "v".to_string(),
-                    predicate,
-                },
-                ctx.clone(),
-            ))
+            anyhow::Ok(RefinementType {
+                base,
+                binder: "v".to_string(),
+                predicate,
+            })
         }
         ExprKind::Block(hir::Block { stmts, expr, .. }, None) => {
             // assert_eq!(stmts.len(), 0, "unexpected stmts {:?}", stmts);
 
+            transition_stmt(stmts, tcx, ctx, local_ctx, solver)?;
             // let ctx_for_expr = stmts.iter().try_fold(ctx.clone(), |mut curr_ctx, stmt| {
             //     let new_ctx = match stmt.kind {
             //         hir::StmtKind::Local(local) => {
@@ -275,7 +252,7 @@ where
                         predicate: combined_predicate,
                         ..var_ty
                     };
-                    Ok((var_ty_with_eq_constraint, ctx.clone()))
+                    Ok(var_ty_with_eq_constraint)
                 }
                 hir::def::Res::Def(_, _) => todo!(),
                 other => anyhow::bail!("reference to unexpected resolution {:?}", other),
@@ -297,22 +274,22 @@ where
                 },
                 _o => todo!(),
             };
-            anyhow::Ok((ty, ctx.clone()))
+            anyhow::Ok(ty)
         }
         ExprKind::Binary(_, _, _) => todo!(),
         ExprKind::Unary(_, _) => todo!(),
         ExprKind::Cast(expr, cast_ty) => {
             // Generate sub-typing constraint
-            let (expr_ty, ctx_after_expr) = type_of(expr, tcx, ctx, local_ctx, solver)?;
+            let expr_ty = type_of(expr, tcx, ctx, local_ctx, solver)?;
 
             let super_ty = RefinementType::from_type_alias(cast_ty, tcx, local_ctx.expr_ty(&expr))?;
 
             // SMT Subtyping
             // Why ctx_after_expr vs. ctx: For `a += 2 as ty!{v | v > 2}`, Type of `a += 2` will need to be a subtype
             // in the context of its execution effect (\Gamma' i.e. ctx_after_expr)
-            require_is_subtype_of(&expr_ty, &super_ty, &ctx_after_expr, solver)?;
+            require_is_subtype_of(&expr_ty, &super_ty, &ctx, solver)?;
 
-            anyhow::Ok((super_ty, ctx_after_expr))
+            anyhow::Ok(super_ty)
         }
         ExprKind::Type(_, _) => todo!(),
         ExprKind::DropTemps(_) => todo!(),
@@ -330,7 +307,7 @@ where
                 let mut then_ctx = ctx.clone();
                 let then_cond = symbolic_execute(&cond, tcx, ctx, local_ctx)?;
                 then_ctx.add_formula(then_cond);
-                let (then_ty, then_ctx) = type_of(then_expr, tcx, &then_ctx, local_ctx, solver)?;
+                let then_ty = type_of(then_expr, tcx, &mut then_ctx, local_ctx, solver)?;
                 trace!(?then_ctx, "then_ctx");
 
                 // type check else_expr
@@ -339,7 +316,7 @@ where
                 let else_cond = syn::parse_quote! { ! (#syn_cond) };
                 else_ctx.add_formula(else_cond);
                 trace!(?else_ctx, "else_ctx");
-                let (else_ty, else_ctx) = type_of(else_expr, tcx, &else_ctx, local_ctx, solver)?;
+                let else_ty = type_of(else_expr, tcx, &mut else_ctx, local_ctx, solver)?;
 
                 // We try to be a little clever here:
                 // instead of requiring the user to specify the type of the if-then-else expression all the time
@@ -350,11 +327,11 @@ where
                 // subtype checking is done in the refinement type context of the subtype, because
                 // it needs to show, that it is a sub type of the postulated complete type *in its context*
 
-                let (complete_ty, complete_ctx) = if let Ok(()) =
+                let complete_ty = if let Ok(()) =
                     require_is_subtype_of(&else_ty, &then_ty, &else_ctx, solver)
                 {
                     if let Ok(()) = is_sub_context(&else_ctx, &then_ctx) {
-                        (then_ty, then_ctx)
+                        then_ty
                     } else {
                         anyhow::bail!(
                             "types follow the sub typing constraints, but their contexts do not"
@@ -363,7 +340,7 @@ where
                 } else if let Ok(()) = require_is_subtype_of(&then_ty, &else_ty, &then_ctx, solver)
                 {
                     if let Ok(()) = is_sub_context(&then_ctx, &else_ctx) {
-                        (else_ty, else_ctx)
+                        else_ty
                     } else {
                         anyhow::bail!(
                             "types follow the sub typing constraints, but their contexts do not"
@@ -374,10 +351,9 @@ where
                 };
                 trace!(%complete_ty, "condition has type");
                 solver.comment("</ typing if expr >").into_anyhow()?;
-
-                anyhow::Ok((complete_ty, complete_ctx))
+                anyhow::Ok(complete_ty)
             }
-            None => todo!(),
+            None => todo!("missing else branch not supported yet"),
         },
         ExprKind::Loop(_, _, _, _) => todo!(),
         ExprKind::Match(_, _, _) => todo!(),
@@ -387,10 +363,9 @@ where
                 let res = local_ctx.qpath_res(&path, lhs.hir_id);
                 match res {
                     hir::def::Res::Local(hir_id) => {
-                        let (rhs_ty, mut ctx_after_expr) =
-                            type_of(rhs, tcx, ctx, local_ctx, solver)?;
-                        ctx_after_expr.update_ty(hir_id, rhs_ty.clone());
-                        anyhow::Ok((rhs_ty, ctx_after_expr))
+                        let rhs_ty = type_of(rhs, tcx, ctx, local_ctx, solver)?;
+                        ctx.update_ty(hir_id, rhs_ty.clone());
+                        anyhow::Ok(rhs_ty)
                     }
                     hir::def::Res::Def(_, _) => todo!(),
                     other => anyhow::bail!("reference to unexpected resolution {:?}", other),
@@ -435,7 +410,7 @@ fn is_sub_context<'tcx>(
 fn symbolic_execute<'a, 'b, 'c, 'tcx>(
     expr: &'a Expr<'tcx>,
     tcx: &'b TyCtxt<'tcx>,
-    ctx: &'c RContext<'tcx>,
+    ctx: &'c RContext<'a>,
     local_ctx: &'a TypeckResults<'a>,
 ) -> anyhow::Result<syn::Expr> {
     match &expr.kind {

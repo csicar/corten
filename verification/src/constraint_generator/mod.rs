@@ -1,7 +1,6 @@
 use std::io::Write;
 use std::time::SystemTime;
 
-use crate::refinement_context::CtxEntry;
 use crate::refinement_context::RContext;
 use crate::refinements;
 use crate::smtlib_ext::SmtResExt;
@@ -30,7 +29,7 @@ pub struct Fresh {
 
 impl Fresh {
     fn new() -> Self {
-        Fresh {current: 0}
+        Fresh { current: 0 }
     }
 
     fn fresh_ident(&mut self) -> String {
@@ -111,7 +110,14 @@ where
 
             let mut fresh = Fresh::new();
 
-            let actual_ty = type_of_mut(&body.value, &tcx, &mut ctx, local_ctx, &mut solver, &mut fresh)?;
+            let actual_ty = type_of_mut(
+                &body.value,
+                &tcx,
+                &mut ctx,
+                local_ctx,
+                &mut solver,
+                &mut fresh,
+            )?;
             //TODO: check actual_ctx ≼ parameter_after_ctx
 
             trace!(%actual_ty, "actual function type");
@@ -151,14 +157,38 @@ where
                     local.ty.is_none(),
                     "Type Annotations on `let` not yet supported"
                 );
-                ctx.add_ty(local.hir_id, type_of_init.clone());
+                if let hir::PatKind::Binding(
+                    hir::BindingAnnotation::Mutable | hir::BindingAnnotation::Unannotated,
+                    _,
+                    _,
+                    None,
+                ) = local.pat.kind
+                {
+                } else {
+                    panic!(
+                        "Only `let <var>` assignment supported at the moment, but got {:?}",
+                        local.pat.kind
+                    )
+                }
+                trace!(
+                    "adding type {} to local {:?} in ctx. Stmt hir id: {}",
+                    &type_of_init,
+                    &local,
+                    local.pat.hir_id
+                );
+                ctx.add_ty(local.pat.hir_id, type_of_init.clone());
                 type_of_init
             }
             hir::StmtKind::Item(_) => todo!(),
-            hir::StmtKind::Expr(inner_expr) => type_of_mut(inner_expr, tcx, ctx, &local_ctx, solver, fresh)?,
-            hir::StmtKind::Semi(inner_expr) => type_of_mut(inner_expr, tcx, ctx, &local_ctx, solver, fresh)?,
+            hir::StmtKind::Expr(inner_expr) => {
+                type_of_mut(inner_expr, tcx, ctx, &local_ctx, solver, fresh)?
+            }
+            hir::StmtKind::Semi(inner_expr) => {
+                type_of_mut(inner_expr, tcx, ctx, &local_ctx, solver, fresh)?
+            }
             // _ => todo!()
         };
+        trace!(?ctx, "stmt transition: current ctx is");
     }
 
     anyhow::Ok(())
@@ -262,10 +292,11 @@ where
             match res {
                 hir::def::Res::Local(hir_id) => {
                     let ty_in_context = ctx.lookup_hir(&hir_id).ok_or(anyhow!(
-                        "could not find refinement type definition of {:?} in refinement context",
-                        hir_id
+                        "could not find refinement type definition of {} in refinement context",
+                        tcx.hir().node_to_string(hir_id)
                     ))?;
-                    let var_ty = ty_in_context.rename_binder("v_new_todo")?;
+                    let new_name = fresh.fresh_ident();
+                    let var_ty = ty_in_context.rename_binder(&new_name)?;
                     let combined_predicate = {
                         let new_pred = &var_ty.predicate;
                         let new_name = format_ident!("{}", &var_ty.binder);
@@ -333,7 +364,8 @@ where
                 let mut then_ctx = ctx.clone();
                 let then_cond = symbolic_execute(&cond, tcx, ctx, local_ctx)?;
                 then_ctx.add_formula(then_cond);
-                let (then_ty, then_ctx) = type_of(then_expr, tcx, &mut then_ctx, local_ctx, solver, fresh)?;
+                let (then_ty, then_ctx) =
+                    type_of(then_expr, tcx, &mut then_ctx, local_ctx, solver, fresh)?;
                 trace!(?then_ctx, "then_ctx");
 
                 // type check else_expr
@@ -342,7 +374,8 @@ where
                 let else_cond = syn::parse_quote! { ! (#syn_cond) };
                 else_ctx.add_formula(else_cond);
                 trace!(?else_ctx, "else_ctx");
-                let (else_ty, else_ctx) = type_of(else_expr, tcx, &mut else_ctx, local_ctx, solver, fresh)?;
+                let (else_ty, else_ctx) =
+                    type_of(else_expr, tcx, &mut else_ctx, local_ctx, solver, fresh)?;
 
                 // We try to be a little clever here:
                 // instead of requiring the user to specify the type of the if-then-else expression all the time
@@ -392,6 +425,7 @@ where
                     hir::def::Res::Local(hir_id) => {
                         let rhs_ty = type_of_mut(rhs, tcx, ctx, local_ctx, solver, fresh)?;
                         ctx.update_ty(hir_id, rhs_ty.clone());
+                        trace!(%rhs_ty, "rhs_ty is");
                         anyhow::Ok(rhs_ty)
                     }
                     hir::def::Res::Def(_, _) => todo!(),

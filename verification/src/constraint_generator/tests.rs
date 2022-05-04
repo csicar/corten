@@ -1,6 +1,7 @@
 use super::*;
 use crate::test_with_rustc::{with_expr, with_item};
 use pretty_assertions as pretty;
+use unindent::unindent;
 use quote::quote;
 use rsmt2::SmtConf;
 
@@ -337,6 +338,38 @@ fn test_type_max_neg() {
 }
 
 /// Mutability
+/// 
+
+#[test_log::test]
+fn test_assign_single() {
+    with_expr(
+        &quote! {
+            type Refinement<T, const B: &'static str, const R: &'static str> = T;
+
+            fn f() ->i32{ let mut a = 3; a = 4; a = 8; 0 }
+        }
+        .to_string(),
+        |expr, tcx, local_ctx| {
+            let conf = SmtConf::default_z3();
+            let mut solver = conf.spawn(()).unwrap();
+            solver.path_tee("/tmp/z3").unwrap();
+            let ctx = RContext::new();
+            
+            let (ty, ctx_after) = type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
+            pretty::assert_eq!(ctx_after.with_tcx(&tcx).to_string(), unindent("
+                RContext {
+                // formulas
+                // types
+                    local mut a (hir_id=HirId { owner: DefId(0:7 ~ rust_out[9149]::f), local_id: 4 }) : ty!{ _2 : i32 | _2 == 8 }
+                }
+                "));
+            pretty::assert_eq!(ty.to_string(), "ty!{ _3 : i32 | _3 == 0 }");
+            info!("expr has type {}", ty);
+        },
+    )
+    .unwrap();
+}
+
 #[test_log::test]
 fn test_assign_simple() {
     with_item(
@@ -352,7 +385,51 @@ fn test_assign_simple() {
         .to_string(),
         |item, tcx| {
             let ty = type_check_function(item, &tcx).unwrap();
-            pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= av && v >= bv }");
+            pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | true }");
+        },
+    )
+    .unwrap();
+}
+
+#[test_log::test]
+fn test_assign_pred() {
+    with_item(
+        &quote! {
+            type Refinement<T, const B: &'static str, const R: &'static str> = T;
+
+            fn max() -> Refinement<i32, "v", "v == 9"> {
+                let mut a = 7;
+                a = 9;
+                a
+            }
+        }
+        .to_string(),
+        |item, tcx| {
+            let ty = type_check_function(item, &tcx).unwrap();
+            pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == 9 }");
+        },
+    )
+    .unwrap();
+}
+
+
+#[test_log::test]
+fn test_assign_non_lit() {
+    with_item(
+        &quote! {
+            type Refinement<T, const B: &'static str, const R: &'static str> = T;
+
+            fn max() -> Refinement<i32, "v", "v > 0"> {
+                let mut a = 7;
+                let b  = 2 as Refinement<i32, "a", "a > 0">;
+                a = b;
+                a
+            }
+        }
+        .to_string(),
+        |item, tcx| {
+            let ty = type_check_function(item, &tcx).unwrap();
+            pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == 9 }");
         },
     )
     .unwrap();

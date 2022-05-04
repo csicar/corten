@@ -1,8 +1,10 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 use crate::smtlib_ext::SmtResExt;
 use rsmt2::Solver;
 use rustc_hir as hir;
+use rustc_hir_pretty::id_to_string;
+use rustc_middle::ty::TyCtxt;
 use tracing::trace;
 
 use crate::refinements::{self, RefinementType};
@@ -58,15 +60,30 @@ impl<'a> RContext<'a> {
         solver.comment("</Context>").into_anyhow()?;
         Ok(())
     }
+
+    #[cfg(test)]
+    pub fn with_tcx<'b, 'c>(&'a self, tcx: &'b TyCtxt<'c>) -> FormatContext<'b, 'a, 'c>{
+        FormatContext { ctx: self, tcx}
+    }
 }
 
-#[derive(Debug, Clone)]
-pub enum CtxEntry<'a> {
-    Typed {
-        ident: hir::HirId,
-        ty: RefinementType<'a>,
-    },
-    Formula {
-        expr: syn::Expr,
-    },
+pub struct FormatContext<'a, 'b, 'c> {
+    ctx: &'a RContext<'b>,
+    tcx: &'a TyCtxt<'c>,
+}
+
+impl<'a, 'b, 'c> Display for FormatContext<'a, 'b, 'c> {
+    fn fmt<'tcx>(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "RContext {{")?;
+        writeln!(f, "// formulas")?;
+        for formula in &self.ctx.formulas {
+            writeln!(f, "   {:?}", formula)?;
+        }
+        writeln!(f, "// types")?;
+        for (id, ty) in &self.ctx.types {
+            let c = self.tcx.hir().node_to_string(*id);
+            writeln!(f, "    {} : {}", c, ty)?;
+        }
+        writeln!(f, "}}")
+    }
 }

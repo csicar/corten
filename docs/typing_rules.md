@@ -2,6 +2,20 @@
 Typing Rules as Implemented
 ===========================
 
+## VAR
+
+```math
+\text{VAR}
+\frac
+  {
+    \begin{aligned}
+      x: \{ v : b \mid p\} \in \Gamma \qquad 
+     
+    \end{aligned}
+  }
+  {\Gamma \vdash x : \{v':b \mid p \wedge v = v'\} \Rightarrow \Gamma}
+```
+
 ## IF
 
 ```math
@@ -11,13 +25,13 @@ Typing Rules as Implemented
     \begin{aligned}
       \Gamma_c, \neg c \vdash c_e : \tau_e \Rightarrow \Gamma_e \\
       \Gamma_c, c \vdash c_t :\tau_t \Rightarrow \Gamma_t  
-        & \qquad \Gamma_e \preceq \Gamma'\\
+        & \qquad \Gamma_e \preceq \Gamma_t\\
       \Gamma \vdash c : \text{bool} 
         & \qquad \Gamma_c,\neg c \vdash \tau_e \preceq \tau_t  \\
      
     \end{aligned}
   }
-  {\Gamma \vdash \text{if } c \text{ then }c_t\text{ else } c_e : \tau \Rightarrow \Gamma'}
+  {\Gamma \vdash \text{if } c \text{ then }c_t\text{ else } c_e : \tau \Rightarrow \Gamma_t}
 ```
 
 Analogous for $`\text{IF-Else}`$

@@ -434,3 +434,56 @@ fn test_assign_non_lit() {
     )
     .unwrap();
 }
+
+
+#[test_log::test]
+fn test_assign_ite() {
+    with_item(
+        &quote! {
+            type Refinement<T, const B: &'static str, const R: &'static str> = T;
+
+            fn max(b: Refinement<i32, "b", "true">) -> Refinement<i32, "v", "v > 0"> {
+                let mut a = 2;
+                if b > 0 {
+                    a = b; 0
+                } else { 0
+                };
+                a
+            }
+        }
+        .to_string(),
+        |item, tcx| {
+            let ty = type_check_function(item, &tcx).unwrap();
+            pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
+        },
+    )
+    .unwrap();
+}
+
+
+#[should_panic]
+#[test_log::test]
+fn test_assign_ite_neg() {
+    with_item(
+        &quote! {
+            type Refinement<T, const B: &'static str, const R: &'static str> = T;
+
+            fn max(b: Refinement<i32, "b", "true">) -> Refinement<i32, "v", "v < 0"> {
+                let mut a = 2;
+                if b > 0 {
+                    a = b; 0
+                } else { 0
+                };
+                a
+            }
+        }
+        .to_string(),
+        |item, tcx| {
+            let ty = type_check_function(item, &tcx).unwrap();
+            pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
+        },
+    )
+    .unwrap();
+}
+
+

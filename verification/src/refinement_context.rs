@@ -66,7 +66,6 @@ impl<'a> RContext<'a> {
         Ok(())
     }
 
-    #[cfg(test)]
     pub fn with_tcx<'b, 'c>(&'a self, tcx: &'b TyCtxt<'c>) -> FormatContext<'b, 'a, 'c>{
         FormatContext { ctx: self, tcx}
     }

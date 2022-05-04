@@ -246,27 +246,8 @@ where
             })
         }
         ExprKind::Block(hir::Block { stmts, expr, .. }, None) => {
-            // assert_eq!(stmts.len(), 0, "unexpected stmts {:?}", stmts);
-
             transition_stmt(stmts, tcx, ctx, local_ctx, solver, fresh)?;
-            // let ctx_for_expr = stmts.iter().try_fold(ctx.clone(), |mut curr_ctx, stmt| {
-            //     let new_ctx = match stmt.kind {
-            //         hir::StmtKind::Local(local) => {
-            //             let initializer = local.init.ok_or(anyhow!("All declarations are expected to contain initializers"))?;
-
-            //             let (type_of_init, ctx_after_init) = type_of(initializer, tcx, ctx, local_ctx, solver)?;
-            //             assert!(local.ty.is_none(), "Type Annotations on `let` not yet supported");
-            //             curr_ctx.add_ty(local.hir_id, type_of_init);
-            //             curr_ctx
-            //         },
-            //         hir::StmtKind::Item(_) => todo!(),
-            //         hir::StmtKind::Expr(inner_expr) => type_of(inner_expr, tcx, ctx, &local_ctx, solver)?.1,
-            //         hir::StmtKind::Semi(inner_expr) => type_of(inner_expr, tcx,ctx, &local_ctx, solver)?.1,
-            //         // _ => todo!()
-            //     };
-
-            //     anyhow::Ok(new_ctx)
-            // })?;
+           
             match expr {
                 Some(expr) => type_of_mut(
                     expr, tcx, /* todo!() */ ctx, /*&ctx_for_expr*/
@@ -286,7 +267,7 @@ where
             //     a
             //  }
             // ```
-            // Generates constraint `v: i32 | v > 0 && av == v`
+            // Generates constraint `_7: i32 | _7 > 0 && av == _7`
             //
             let res = local_ctx.qpath_res(&path, expr.hir_id);
             match res {
@@ -326,7 +307,7 @@ where
             let ty = match contents {
                 [] => RefinementType {
                     base: tuple_type,
-                    binder: "v".to_string(),
+                    binder: fresh.fresh_ident(),
                     predicate: parse_quote! { true },
                 },
                 _o => todo!(),
@@ -361,21 +342,21 @@ where
                 solver.comment("< typing if expr >").into_anyhow()?;
 
                 // type check then_expr
-                let mut then_ctx = ctx.clone();
+                let mut then_ctx_before = ctx.clone();
                 let then_cond = symbolic_execute(&cond, tcx, ctx, local_ctx)?;
-                then_ctx.add_formula(then_cond);
+                then_ctx_before.add_formula(then_cond);
                 let (then_ty, then_ctx) =
-                    type_of(then_expr, tcx, &mut then_ctx, local_ctx, solver, fresh)?;
+                    type_of(then_expr, tcx, &then_ctx_before, local_ctx, solver, fresh)?;
                 trace!(?then_ctx, "then_ctx");
 
                 // type check else_expr
-                let mut else_ctx = ctx.clone();
+                let mut else_ctx_before = ctx.clone();
                 let syn_cond: syn::Expr = symbolic_execute(&cond, tcx, ctx, local_ctx)?;
                 let else_cond = syn::parse_quote! { ! (#syn_cond) };
-                else_ctx.add_formula(else_cond);
-                trace!(?else_ctx, "else_ctx");
+                else_ctx_before.add_formula(else_cond);
                 let (else_ty, else_ctx) =
-                    type_of(else_expr, tcx, &mut else_ctx, local_ctx, solver, fresh)?;
+                    type_of(else_expr, tcx, &else_ctx_before, local_ctx, solver, fresh)?;
+                trace!(?else_ctx, "else_ctx");
 
                 // We try to be a little clever here:
                 // instead of requiring the user to specify the type of the if-then-else expression all the time

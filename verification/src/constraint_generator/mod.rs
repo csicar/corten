@@ -188,7 +188,7 @@ where
             }
             // _ => todo!()
         };
-        trace!(?ctx, "stmt transition: current ctx is");
+        trace!(ctx=%ctx.with_tcx(&tcx), "stmt transition: current ctx is");
     }
 
     anyhow::Ok(())
@@ -583,7 +583,7 @@ fn require_is_subtype_of<'tcx, P>(
         .into_anyhow()?;
 
     solver
-        .comment(&format!("checking: {} ≼ {}", sub_ty, super_ty))
+        .comment(&format!("checking: {} ≼  {}", sub_ty, super_ty))
         .into_anyhow()?;
     solver.flush()?;
     trace!("checking: {} ≼  {}", sub_ty, super_ty);
@@ -593,6 +593,7 @@ fn require_is_subtype_of<'tcx, P>(
         .into_anyhow()?;
 
     solver.pop(2).into_anyhow()?;
+    solver.comment(&"-".repeat(80)).into_anyhow()?;
     if is_sat {
         let msg = format!(
             "Subtyping judgement failed: {} is not a sub_ty of {}",

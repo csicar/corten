@@ -45,7 +45,12 @@ impl<'a> RContext<'a> {
         solver.comment("<Context>").into_anyhow()?;
         solver.push(1).into_anyhow()?;
         self.types.iter().try_for_each(|(ident, ty)| {
+            solver.comment(&format!("decl for {}", ident)).into_anyhow()?;
             solver.declare_const(&ty.binder, "Int").into_anyhow()?;
+            anyhow::Ok(())
+        })?;
+        self.types.iter().try_for_each(|(ident, ty)| {
+            solver.comment(&format!("predicate for {} {}", ty.binder, ident)).into_anyhow()?;
             solver
                 .assert(refinements::encode_smt(&ty.predicate))
                 .into_anyhow()?;

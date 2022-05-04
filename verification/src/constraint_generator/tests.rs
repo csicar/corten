@@ -421,7 +421,7 @@ fn test_assign_non_lit() {
 
             fn max() -> Refinement<i32, "v", "v > 0"> {
                 let mut a = 7;
-                let b  = 2 as Refinement<i32, "a", "a > 0">;
+                let b  = 2 as Refinement<i32, "x", "x > 0">;
                 a = b;
                 a
             }
@@ -429,7 +429,7 @@ fn test_assign_non_lit() {
         .to_string(),
         |item, tcx| {
             let ty = type_check_function(item, &tcx).unwrap();
-            pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == 9 }");
+            pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
         },
     )
     .unwrap();

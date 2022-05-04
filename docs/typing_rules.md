@@ -83,7 +83,7 @@ Subtyping Rules as Implemented
 ```math
 \text{$\preceq$-BASE}
 \frac
-  {\text{SMT-SAT}([\Gamma] \wedge v_1 = v_2 \wedge [e_1]\wedge \neg[e_2] )}
+  {\neg\text{SMT-SAT}([\Gamma] \wedge v_1 = v_2 \wedge [e_1]\wedge \neg[e_2] )}
   {\Gamma \vdash \{ v_1: b \mid e_1\} \preceq \{ v_2: b \mid e_2\}}
 ```
 

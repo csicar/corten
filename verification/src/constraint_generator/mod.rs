@@ -21,17 +21,22 @@ use tracing::error;
 
 use syn::parse_quote;
 use tracing::info;
+use tracing::instrument;
 use tracing::trace;
 
-struct Fresh {
+pub struct Fresh {
     current: u32,
 }
 
 impl Fresh {
+    fn new() -> Self {
+        Fresh {current: 0}
+    }
+
     fn fresh_ident(&mut self) -> String {
         let counter = self.current;
         self.current += 1;
-        format!("${}", counter)
+        format!("_{}", counter)
     }
 }
 
@@ -104,7 +109,9 @@ where
                 .path_tee(format!("/tmp/z3-fn-{:?}.lisp", SystemTime::now()))
                 .unwrap();
 
-            let actual_ty = type_of(&body.value, &tcx, &mut ctx, local_ctx, &mut solver)?;
+            let mut fresh = Fresh::new();
+
+            let actual_ty = type_of_mut(&body.value, &tcx, &mut ctx, local_ctx, &mut solver, &mut fresh)?;
             //TODO: check actual_ctx ≼ parameter_after_ctx
 
             trace!(%actual_ty, "actual function type");
@@ -124,6 +131,7 @@ pub fn transition_stmt<'a, 'b, 'c, 'd, 'tcx, P>(
     ctx: &'c mut RContext<'a>,
     local_ctx: &'a TypeckResults<'a>,
     solver: &mut Solver<P>,
+    fresh: &mut Fresh,
 ) -> anyhow::Result<()>
 where
     // 'tcx at least as long as 'a
@@ -131,8 +139,6 @@ where
     // 'a at least as long as 'c
     'a: 'c,
 {
-    let l_st = stmts.clone();
-
     for stmt in stmts {
         match stmt.kind {
             hir::StmtKind::Local(local) => {
@@ -140,8 +146,7 @@ where
                     "All declarations are expected to contain initializers"
                 ))?;
 
-                let type_of_init =
-                    type_of(initializer, tcx, ctx, local_ctx, solver)?;
+                let type_of_init = type_of_mut(initializer, tcx, ctx, local_ctx, solver, fresh)?;
                 assert!(
                     local.ty.is_none(),
                     "Type Annotations on `let` not yet supported"
@@ -150,8 +155,8 @@ where
                 type_of_init
             }
             hir::StmtKind::Item(_) => todo!(),
-            hir::StmtKind::Expr(inner_expr) => type_of(inner_expr, tcx, ctx, &local_ctx, solver)?,
-            hir::StmtKind::Semi(inner_expr) => type_of(inner_expr, tcx, ctx, &local_ctx, solver)?,
+            hir::StmtKind::Expr(inner_expr) => type_of_mut(inner_expr, tcx, ctx, &local_ctx, solver, fresh)?,
+            hir::StmtKind::Semi(inner_expr) => type_of_mut(inner_expr, tcx, ctx, &local_ctx, solver, fresh)?,
             // _ => todo!()
         };
     }
@@ -159,40 +164,61 @@ where
     anyhow::Ok(())
 }
 
+/// Computes the type of [`expr`] and returns the it, together with the ctx after execution
 pub fn type_of<'a, 'b, 'c, 'tcx, P>(
     expr: &'a Expr<'tcx>,
     tcx: &'b TyCtxt<'tcx>,
-    ctx: &'c mut RContext<'a>,
+    ctx: &'c RContext<'a>,
     local_ctx: &'a TypeckResults<'a>,
     solver: &mut Solver<P>,
-) -> anyhow::Result<(RefinementType<'a>)>
+    fresh: &mut Fresh,
+) -> anyhow::Result<(RefinementType<'a>, RContext<'a>)>
 where
     // 'tcx at least as long as 'a
     'tcx: 'a,
     // 'a at least as long as 'c
     'a: 'c,
 {
-    let tcx_clone = tcx.clone();
-    let expr_clone = &*expr.clone();
-    match &expr_clone.kind {
+    let mut ctx_after = ctx.clone();
+    let ty = type_of_mut(expr, tcx, &mut ctx_after, local_ctx, solver, fresh)?;
+    Ok((ty, ctx_after))
+}
+
+/// Computes the type of [`expr`], but mutates the `ctx` according to the execution
+pub fn type_of_mut<'a, 'b, 'c, 'tcx, P>(
+    expr: &'a Expr<'tcx>,
+    tcx: &'b TyCtxt<'tcx>,
+    ctx: &'c mut RContext<'a>,
+    local_ctx: &'a TypeckResults<'a>,
+    solver: &mut Solver<P>,
+    fresh: &mut Fresh,
+) -> anyhow::Result<RefinementType<'a>>
+where
+    // 'tcx at least as long as 'a
+    'tcx: 'a,
+    // 'a at least as long as 'c
+    'a: 'c,
+{
+    match &expr.kind {
         ExprKind::Lit(Spanned { node: _, span: _ }) => {
             let lit: syn::Expr = syn::parse_str(&expr.pretty_print())?;
+            let ident = quote::format_ident!("{}", fresh.fresh_ident());
             let predicate = parse_quote! {
-                v == #lit
+                #ident == #lit
             };
             trace!(pred=?predicate, "Expr Literal gets predicate");
             let base = local_ctx.node_type(expr.hir_id);
 
             anyhow::Ok(RefinementType {
                 base,
-                binder: "v".to_string(),
+                binder: ident.to_string(),
                 predicate,
             })
         }
         ExprKind::Block(hir::Block { stmts, expr, .. }, None) => {
             // assert_eq!(stmts.len(), 0, "unexpected stmts {:?}", stmts);
 
-            transition_stmt(stmts, tcx, ctx, local_ctx, solver)?;
+            transition_stmt(stmts, tcx, ctx, local_ctx, solver, fresh)?;
             // let ctx_for_expr = stmts.iter().try_fold(ctx.clone(), |mut curr_ctx, stmt| {
             //     let new_ctx = match stmt.kind {
             //         hir::StmtKind::Local(local) => {
@@ -212,9 +238,9 @@ where
             //     anyhow::Ok(new_ctx)
             // })?;
             match expr {
-                Some(expr) => type_of(
+                Some(expr) => type_of_mut(
                     expr, tcx, /* todo!() */ ctx, /*&ctx_for_expr*/
-                    local_ctx, solver,
+                    local_ctx, solver, fresh,
                 ),
                 None => todo!("dont know how to handle block without expr (yet)"),
             }
@@ -280,7 +306,7 @@ where
         ExprKind::Unary(_, _) => todo!(),
         ExprKind::Cast(expr, cast_ty) => {
             // Generate sub-typing constraint
-            let expr_ty = type_of(expr, tcx, ctx, local_ctx, solver)?;
+            let expr_ty = type_of_mut(expr, tcx, ctx, local_ctx, solver, fresh)?;
 
             let super_ty = RefinementType::from_type_alias(cast_ty, tcx, local_ctx.expr_ty(&expr))?;
 
@@ -307,7 +333,7 @@ where
                 let mut then_ctx = ctx.clone();
                 let then_cond = symbolic_execute(&cond, tcx, ctx, local_ctx)?;
                 then_ctx.add_formula(then_cond);
-                let then_ty = type_of(then_expr, tcx, &mut then_ctx, local_ctx, solver)?;
+                let (then_ty, then_ctx) = type_of(then_expr, tcx, &mut then_ctx, local_ctx, solver, fresh)?;
                 trace!(?then_ctx, "then_ctx");
 
                 // type check else_expr
@@ -316,7 +342,7 @@ where
                 let else_cond = syn::parse_quote! { ! (#syn_cond) };
                 else_ctx.add_formula(else_cond);
                 trace!(?else_ctx, "else_ctx");
-                let else_ty = type_of(else_expr, tcx, &mut else_ctx, local_ctx, solver)?;
+                let (else_ty, else_ctx) = type_of(else_expr, tcx, &mut else_ctx, local_ctx, solver, fresh)?;
 
                 // We try to be a little clever here:
                 // instead of requiring the user to specify the type of the if-then-else expression all the time
@@ -339,7 +365,8 @@ where
                     }
                 } else if let Ok(()) = require_is_subtype_of(&then_ty, &else_ty, &then_ctx, solver)
                 {
-                    if let Ok(()) = is_sub_context(&then_ctx, &else_ctx) {
+                    *ctx = else_ctx;
+                    if let Ok(()) = is_sub_context(&then_ctx, &ctx) {
                         else_ty
                     } else {
                         anyhow::bail!(
@@ -363,7 +390,7 @@ where
                 let res = local_ctx.qpath_res(&path, lhs.hir_id);
                 match res {
                     hir::def::Res::Local(hir_id) => {
-                        let rhs_ty = type_of(rhs, tcx, ctx, local_ctx, solver)?;
+                        let rhs_ty = type_of_mut(rhs, tcx, ctx, local_ctx, solver, fresh)?;
                         ctx.update_ty(hir_id, rhs_ty.clone());
                         anyhow::Ok(rhs_ty)
                     }
@@ -490,6 +517,7 @@ fn symbolic_execute<'a, 'b, 'c, 'tcx>(
     }
 }
 
+#[instrument(skip_all, fields(%sub_ty, %super_ty))]
 fn require_is_subtype_of<'tcx, P>(
     sub_ty: &RefinementType<'tcx>,
     super_ty: &RefinementType<'tcx>,
@@ -524,7 +552,7 @@ fn require_is_subtype_of<'tcx, P>(
         .comment(&format!("checking: {} ≼ {}", sub_ty, super_ty))
         .into_anyhow()?;
     solver.flush()?;
-    trace!("checking: {} ≼ {}", sub_ty, super_ty);
+    trace!("checking: {} ≼  {}", sub_ty, super_ty);
     let is_sat = solver.check_sat().into_anyhow()?;
     solver
         .comment(&format!("done! is sat: {}", is_sat))

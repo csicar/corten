@@ -2,6 +2,7 @@ use std::io::Write;
 use std::time::SystemTime;
 
 use crate::refinement_context::RContext;
+use crate::refinement_context::is_sub_context;
 use crate::refinements;
 use crate::smtlib_ext::SmtResExt;
 use anyhow::anyhow;
@@ -185,8 +186,7 @@ where
             }
             hir::StmtKind::Semi(inner_expr) => {
                 type_of_mut(inner_expr, tcx, ctx, &local_ctx, solver, fresh)?
-            }
-            // _ => todo!()
+            } // _ => todo!()
         };
         trace!(ctx=%ctx.with_tcx(&tcx), "stmt transition: current ctx is");
     }
@@ -247,7 +247,7 @@ where
         }
         ExprKind::Block(hir::Block { stmts, expr, .. }, None) => {
             transition_stmt(stmts, tcx, ctx, local_ctx, solver, fresh)?;
-           
+
             match expr {
                 Some(expr) => type_of_mut(
                     expr, tcx, /* todo!() */ ctx, /*&ctx_for_expr*/
@@ -370,22 +370,20 @@ where
                 let complete_ty = if let Ok(()) =
                     require_is_subtype_of(&else_ty, &then_ty, &else_ctx, solver)
                 {
-                    if let Ok(()) = is_sub_context(&else_ctx, &then_ctx) {
-                        then_ty
-                    } else {
-                        anyhow::bail!(
-                            "types follow the sub typing constraints, but their contexts do not"
-                        )
+                    match is_sub_context(&else_ctx, &then_ctx, tcx, solver) {
+                        Ok(()) => then_ty,
+                        Err(err) =>  anyhow::bail!(
+                            "types follow the sub typing constraints, but their contexts do not {}"
+                        , err)
                     }
                 } else if let Ok(()) = require_is_subtype_of(&then_ty, &else_ty, &then_ctx, solver)
                 {
                     *ctx = else_ctx;
-                    if let Ok(()) = is_sub_context(&then_ctx, &ctx) {
-                        else_ty
-                    } else {
-                        anyhow::bail!(
-                            "types follow the sub typing constraints, but their contexts do not"
-                        )
+                    match is_sub_context(&then_ctx, &ctx, tcx, solver) {
+                        Ok(()) => else_ty,
+                        Err(err) =>  anyhow::bail!(
+                            "types follow the sub typing constraints, but their contexts do not {}"
+                        , err)
                     }
                 } else {
                     anyhow::bail!("Error while typing the if-then-else expression: Neither else_ty ≼ then_ty nor then_ty ≼ else_ty. (then_ty: {}, else_ty: {})", then_ty, else_ty)
@@ -431,13 +429,6 @@ where
     }
 }
 
-fn is_sub_context<'tcx>(
-    super_ctx: &RContext<'tcx>,
-    sub_ctx: &RContext<'tcx>,
-) -> anyhow::Result<()> {
-    //TODO
-    Ok(())
-}
 
 /// This executes e.g. a condition in an if-then-else expression to be used as
 /// as formula in smt

@@ -35,7 +35,7 @@ fn test_type_of_lit() {
             let conf = SmtConf::default_z3();
             let mut solver = conf.spawn(()).unwrap();
 
-            let ctx = RContext::new();
+            let ctx = RContext::<hir::HirId>::new();
             
             let (ty, ctx_after) = type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
             pretty::assert_eq!(ty.to_string(), "ty!{ _0 : i32 | _0 == 1 }");
@@ -59,7 +59,7 @@ fn test_subtype_lit_pos() {
             let conf = SmtConf::default_z3();
             let mut solver = conf.spawn(()).unwrap();
             solver.path_tee("/tmp/z3").unwrap();
-            let ctx = RContext::new();
+            let ctx = RContext::<hir::HirId>::new();
             let (ty, ctx_after) = type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
             pretty::assert_eq!(ty.to_string(), "ty!{ x : i32 | x > 0 }");
             pretty::assert_eq!(ctx, ctx_after);
@@ -83,7 +83,7 @@ fn test_subtype_lit_neg() {
             let conf = SmtConf::default_z3();
             let mut solver = conf.spawn(()).unwrap();
             solver.path_tee("/tmp/z3").unwrap();
-            let ctx = RContext::new();
+            let ctx = RContext::<hir::HirId>::new();
             let mut ctx_after = ctx.clone();
             let _ty = type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
             // ^- panic happens here
@@ -105,7 +105,7 @@ fn test_subtype_lit_pos_nested() {
             let conf = SmtConf::default_z3();
             let mut solver = conf.spawn(()).unwrap();
             solver.path_tee("/tmp/z3").unwrap();
-            let ctx = RContext::new();
+            let ctx = RContext::<hir::HirId>::new();
             
             let (ty, ctx_after) = type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
             pretty::assert_eq!(ty.to_string(), "ty!{ y : i32 | y > 1 }");
@@ -353,7 +353,7 @@ fn test_assign_single() {
             let conf = SmtConf::default_z3();
             let mut solver = conf.spawn(()).unwrap();
             solver.path_tee("/tmp/z3").unwrap();
-            let ctx = RContext::new();
+            let ctx = RContext::<hir::HirId>::new();
             
             let (ty, ctx_after) = type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
             pretty::assert_eq!(ctx_after.with_tcx(&tcx).to_string(), unindent("

@@ -83,7 +83,7 @@ where
             trace!(?fn_sig);
 
             // get refinements for inputs
-            let mut ctx = RContext::new();
+            let mut ctx = RContext::<hir::HirId>::new();
             for ((hir_ty, middle_ty), param) in inputs.iter().zip(fn_sig.inputs()).zip(body.params)
             {
                 let refinement = RefinementType::from_type_alias(hir_ty, &tcx, middle_ty.clone())?;

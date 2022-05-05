@@ -12,16 +12,18 @@ use rustc_hir_pretty::id_to_string;
 use rustc_middle::ty::TyCtxt;
 use syn::parse_quote;
 use tracing::trace;
+use std::fmt::Debug;
+use std::hash::Hash;
 
 use crate::refinements::{self, RefinementType};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RContext<'tcx> {
+pub struct RContext<'tcx, K : Debug + Eq + Hash + Display + SmtFmt = hir::HirId > {
     pub formulas: Vec<syn::Expr>,
-    pub types: HashMap<hir::HirId, RefinementType<'tcx>>,
+    pub types: HashMap<K, RefinementType<'tcx>>,
 }
 
-impl<'a> RContext<'a> {
+impl<'a, K> RContext<'a, K > where K: Debug + Eq + Hash + Display + SmtFmt {
     pub fn new() -> RContext<'a> {
         RContext {
             formulas: Vec::new(),
@@ -33,17 +35,17 @@ impl<'a> RContext<'a> {
         self.formulas.push(formula);
     }
 
-    pub fn update_ty(&mut self, hir: hir::HirId, ty: RefinementType<'a>) {
+    pub fn update_ty(&mut self, hir: K, ty: RefinementType<'a>) {
         self.types.remove(&hir);
         self.add_ty(hir, ty);
     }
 
-    pub fn add_ty(&mut self, hir: hir::HirId, ty: RefinementType<'a>) {
+    pub fn add_ty(&mut self, hir: K, ty: RefinementType<'a>) {
         assert!(!self.types.contains_key(&hir));
         self.types.insert(hir, ty);
     }
 
-    pub fn lookup_hir<'b>(&self, hir: &hir::HirId) -> Option<RefinementType<'a>> {
+    pub fn lookup_hir<'b>(&self, hir: &K) -> Option<RefinementType<'a>> {
         self.types.get(&hir).map(|entry| entry.clone())
     }
 
@@ -63,7 +65,7 @@ impl<'a> RContext<'a> {
     pub fn encode_declaration<P>(
         &self,
         solver: &mut Solver<P>,
-        ident: &hir::HirId,
+        ident: &K,
         ty: &RefinementType<'a>,
     ) -> anyhow::Result<()> {
         solver
@@ -103,14 +105,14 @@ impl<'a> RContext<'a> {
         Ok(())
     }
 
-    pub fn with_tcx<'b, 'c>(&'a self, tcx: &'b TyCtxt<'c>) -> FormatContext<'b, 'a, 'c> {
+    pub fn with_tcx<'b, 'c>(&'a self, tcx: &'b TyCtxt<'c>) -> FormatContext<'b, 'a, 'c, K> {
         FormatContext { ctx: self, tcx }
     }
 }
 
-pub fn is_sub_context<'tcx, 'a, P>(
-    super_ctx: &RContext<'tcx>,
-    sub_ctx: &RContext<'tcx>,
+pub fn is_sub_context<'tcx, 'a, K : Debug + Eq + Hash + Display + SmtFmt, P>(
+    super_ctx: &RContext<'tcx, K>,
+    sub_ctx: &RContext<'tcx, K>,
     tcx: &TyCtxt<'a>,
     solver: &mut Solver<P>,
 ) -> anyhow::Result<()> {
@@ -165,12 +167,22 @@ pub fn is_sub_context<'tcx, 'a, P>(
     Ok(())
 }
 
-pub struct FormatContext<'a, 'b, 'c> {
-    ctx: &'a RContext<'b>,
+pub struct FormatContext<'a, 'b, 'c, K: Debug + Eq + Hash + Display + SmtFmt> {
+    ctx: &'a RContext<'b, K>,
     tcx: &'a TyCtxt<'c>,
 }
 
-impl<'a, 'b, 'c> Display for FormatContext<'a, 'b, 'c> {
+pub trait SmtFmt {
+    fn fmt_str<'tcx>(&self, tcx: &TyCtxt<'tcx>) -> String;
+}
+
+impl SmtFmt for hir::HirId {
+    fn fmt_str<'tcx>(&self, tcx: &TyCtxt<'tcx>) -> String {
+        tcx.hir().node_to_string(*self)
+    }
+}
+
+impl<'a, 'b, 'c, K: SmtFmt + Debug + Eq + Hash + Display + SmtFmt> Display for FormatContext<'a, 'b, 'c, K> {
     fn fmt<'tcx>(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "RContext {{")?;
         writeln!(f, "// formulas")?;
@@ -179,8 +191,7 @@ impl<'a, 'b, 'c> Display for FormatContext<'a, 'b, 'c> {
         }
         writeln!(f, "// types")?;
         for (id, ty) in &self.ctx.types {
-            let c = self.tcx.hir().node_to_string(*id);
-            writeln!(f, "    {} : {}", c, ty)?;
+            writeln!(f, "    {} : {}", id.fmt_str(self.tcx), ty)?;
         }
         writeln!(f, "}}")
     }

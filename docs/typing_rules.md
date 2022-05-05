@@ -26,7 +26,7 @@ Typing Rules as Implemented
       \Gamma_c, \neg c \vdash c_e : \tau_e \Rightarrow \Gamma_e \\
       \Gamma_c, c \vdash c_t :\tau_t \Rightarrow \Gamma_t  
         & \qquad \Gamma_e \preceq \Gamma_t\\
-      \Gamma \vdash c : \text{bool} 
+      \Gamma \vdash c : \text{bool} \Rightarrow \Gamma_c 
         & \qquad \Gamma_c,\neg c \vdash \tau_e \preceq \tau_t  \\
      
     \end{aligned}
@@ -87,4 +87,14 @@ Subtyping Rules as Implemented
   {\Gamma \vdash \{ v_1: b \mid e_1\} \preceq \{ v_2: b \mid e_2\}}
 ```
 
+
+Refinement Context Subtyping as Implemented
+===========================================
+
+
 ```math
+\text{$\preceq$-BASE}
+\frac
+  {\neg\text{SMT-SAT}([\Gamma] \wedge v_1 = v_2 \wedge [e_1]\wedge \neg[e_2] )}
+  {\Gamma \vdash \{ v_1: b \mid e_1\} \preceq \{ v_2: b \mid e_2\}}
+```

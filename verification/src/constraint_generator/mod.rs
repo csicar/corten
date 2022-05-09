@@ -227,11 +227,11 @@ where
             }, ctx.clone()))
         }
         ExprKind::Block(hir::Block { stmts, expr, .. }, None) => {
-            transition_stmt(stmts, tcx, ctx, local_ctx, solver, fresh)?;
+            let ctx_after_stmts = transition_stmt(stmts, tcx, ctx, local_ctx, solver, fresh)?;
 
             match expr {
                 Some(expr) => type_of(
-                    expr, tcx, /* todo!() */ ctx, /*&ctx_for_expr*/
+                    expr, tcx, &ctx_after_stmts,
                     local_ctx, solver, fresh,
                 ),
                 None => todo!("dont know how to handle block without expr (yet)"),

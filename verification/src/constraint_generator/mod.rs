@@ -122,7 +122,7 @@ where
             //TODO: check actual_ctx ≼ parameter_after_ctx
 
             trace!(%actual_ty, "actual function type");
-            require_is_subtype_of(&actual_ty, &expected_type, &ctx, &mut solver)?;
+            require_is_subtype_of(&actual_ty, &expected_type, &ctx_after, &mut solver)?;
             anyhow::Ok(expected_type)
         }
         other => Err(anyhow!(

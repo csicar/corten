@@ -488,19 +488,25 @@ fn test_assign_ite_neg() {
 
 
 #[should_panic]
-#[test_log::test]
+#[test]
 fn test_subtype_ctx_neg() {
+    let subscriber = ::tracing_subscriber::FmtSubscriber::builder()
+        .with_env_filter(::tracing_subscriber::EnvFilter::from_default_env())
+        .pretty()
+        .finish();
+    let _ = ::tracing::subscriber::set_global_default(subscriber);
     with_item(
         &quote! {
             type Refinement<T, const B: &'static str, const R: &'static str> = T;
 
-            fn max(b: Refinement<i32, "b", "true">) -> Refinement<i32, "v", "v > 0"> {
+            fn max(b: Refinement<i32, "bv", "true">) -> Refinement<i32, "v", "v > 0"> {
                 let mut a = 2;
                 if b > 0 {
                     a = 0; 0
+                    //- `a` is set to 0: contraticts "v > 0"
                 } else { 0
                 };
-                a
+                a // but `a` is returned here
             }
         }
         .to_string(),

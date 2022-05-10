@@ -11,7 +11,7 @@ use rustc_hir as hir;
 use rustc_hir_pretty::id_to_string;
 use rustc_middle::ty::TyCtxt;
 use syn::parse_quote;
-use tracing::trace;
+use tracing::{trace, instrument};
 use std::fmt::Debug;
 use std::hash::Hash;
 
@@ -23,7 +23,7 @@ pub struct RContext<'tcx, K : Debug + Eq + Hash + Display + SmtFmt = hir::HirId 
     pub types: HashMap<K, RefinementType<'tcx>>,
 }
 
-impl<'a, K> RContext<'a, K > where K: Debug + Eq + Hash + Display + SmtFmt {
+impl<'a, K> RContext<'a, K > where K: Debug + Eq + Hash + Display + SmtFmt + Clone {
     pub fn new() -> RContext<'a> {
         RContext {
             formulas: Vec::new(),
@@ -33,6 +33,10 @@ impl<'a, K> RContext<'a, K > where K: Debug + Eq + Hash + Display + SmtFmt {
 
     pub fn add_formula(&mut self, formula: syn::Expr) {
         self.formulas.push(formula);
+    }
+
+    pub fn without_formula(&self, formula: &syn::Expr) -> Self {
+        RContext { types: self.types.clone(), formulas: self.formulas.clone().into_iter().filter(|f| f != formula).collect() }
     }
 
     pub fn update_ty(&mut self, hir: K, ty: RefinementType<'a>) {
@@ -110,12 +114,14 @@ impl<'a, K> RContext<'a, K > where K: Debug + Eq + Hash + Display + SmtFmt {
     }
 }
 
-pub fn is_sub_context<'tcx, 'a, K : Debug + Eq + Hash + Display + SmtFmt, P>(
+#[instrument(skip_all, ret)]
+pub fn is_sub_context<'tcx, 'a, K : Debug + Eq + Hash + Display + SmtFmt + Clone, P>(
     super_ctx: &RContext<'tcx, K>,
     sub_ctx: &RContext<'tcx, K>,
     tcx: &TyCtxt<'a>,
     solver: &mut Solver<P>,
 ) -> anyhow::Result<()> {
+    trace!(super_ctx=%(super_ctx.with_tcx(tcx)), sub_ctx=%(sub_ctx.with_tcx(tcx)), "check");
     solver.push(1).into_anyhow()?;
 
     assert_eq!(
@@ -164,7 +170,11 @@ pub fn is_sub_context<'tcx, 'a, K : Debug + Eq + Hash + Display + SmtFmt, P>(
         .into_anyhow()?;
     solver.pop(1).into_anyhow()?;
 
-    Ok(())
+    if is_sat {
+        Err(anyhow::anyhow!("{} is not a sub context of {}, which is required here", sub_ctx.with_tcx(tcx), super_ctx.with_tcx(tcx)))
+    } else {
+        anyhow::Ok(())
+    }
 }
 
 pub struct FormatContext<'a, 'b, 'c, K: Debug + Eq + Hash + Display + SmtFmt> {
@@ -185,11 +195,11 @@ impl SmtFmt for hir::HirId {
 impl<'a, 'b, 'c, K: SmtFmt + Debug + Eq + Hash + Display + SmtFmt> Display for FormatContext<'a, 'b, 'c, K> {
     fn fmt<'tcx>(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "RContext {{")?;
-        writeln!(f, "// formulas")?;
+        writeln!(f, "    // formulas")?;
         for formula in &self.ctx.formulas {
-            writeln!(f, "   {:?}", formula)?;
+            writeln!(f, "    {}", quote! { #formula })?;
         }
-        writeln!(f, "// types")?;
+        writeln!(f, "    // types")?;
         for (id, ty) in &self.ctx.types {
             writeln!(f, "    {} : {}", id.fmt_str(self.tcx), ty)?;
         }

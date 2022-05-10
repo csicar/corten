@@ -358,8 +358,8 @@ fn test_assign_single() {
             let (ty, ctx_after) = type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
             pretty::assert_eq!(ctx_after.with_tcx(&tcx).to_string(), unindent("
                 RContext {
-                // formulas
-                // types
+                    // formulas
+                    // types
                     local mut a (hir_id=HirId { owner: DefId(0:7 ~ rust_out[9149]::f), local_id: 4 }) : ty!{ _2 : i32 | _2 == 8 }
                 }
                 "));

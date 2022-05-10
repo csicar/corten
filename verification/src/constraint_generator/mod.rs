@@ -1,8 +1,8 @@
 use std::io::Write;
 use std::time::SystemTime;
 
-use crate::refinement_context::RContext;
 use crate::refinement_context::is_sub_context;
+use crate::refinement_context::RContext;
 use crate::refinements;
 use crate::smtlib_ext::SmtResExt;
 use anyhow::anyhow;
@@ -132,6 +132,7 @@ where
     }
 }
 
+#[instrument(skip_all)]
 pub fn transition_stmt<'a, 'b, 'c, 'd, 'tcx, P>(
     stmts: &'a [hir::Stmt<'tcx>],
     tcx: &'b TyCtxt<'tcx>,
@@ -154,7 +155,8 @@ where
                     "All declarations are expected to contain initializers"
                 ))?;
 
-                let (type_of_init, mut ctx_after) = type_of(initializer, tcx, &curr_ctx, local_ctx, solver, fresh)?;
+                let (type_of_init, mut ctx_after) =
+                    type_of(initializer, tcx, &curr_ctx, local_ctx, solver, fresh)?;
                 assert!(
                     local.ty.is_none(),
                     "Type Annotations on `let` not yet supported"
@@ -196,6 +198,7 @@ where
 }
 
 /// Computes the type of [`expr`], but mutates the `ctx` according to the execution
+#[instrument(skip_all, fields(expr=?expr.pretty_print()))]
 pub fn type_of<'a, 'b, 'c, 'tcx, P>(
     expr: &'a Expr<'tcx>,
     tcx: &'b TyCtxt<'tcx>,
@@ -220,20 +223,20 @@ where
             trace!(pred=?predicate, "Expr Literal gets predicate");
             let base = local_ctx.node_type(expr.hir_id);
 
-            anyhow::Ok((RefinementType {
-                base,
-                binder: ident.to_string(),
-                predicate,
-            }, ctx.clone()))
+            anyhow::Ok((
+                RefinementType {
+                    base,
+                    binder: ident.to_string(),
+                    predicate,
+                },
+                ctx.clone(),
+            ))
         }
         ExprKind::Block(hir::Block { stmts, expr, .. }, None) => {
             let ctx_after_stmts = transition_stmt(stmts, tcx, ctx, local_ctx, solver, fresh)?;
 
             match expr {
-                Some(expr) => type_of(
-                    expr, tcx, &ctx_after_stmts,
-                    local_ctx, solver, fresh,
-                ),
+                Some(expr) => type_of(expr, tcx, &ctx_after_stmts, local_ctx, solver, fresh),
                 None => todo!("dont know how to handle block without expr (yet)"),
             }
         }
@@ -324,8 +327,8 @@ where
 
                 // type check then_expr
                 let mut then_ctx_before = ctx.clone();
-                let then_cond = symbolic_execute(&cond, tcx, ctx, local_ctx)?;
-                then_ctx_before.add_formula(then_cond);
+                let then_cond: syn::Expr = symbolic_execute(&cond, tcx, ctx, local_ctx)?;
+                then_ctx_before.add_formula(then_cond.clone());
                 let (then_ty, then_ctx) =
                     type_of(then_expr, tcx, &then_ctx_before, local_ctx, solver, fresh)?;
                 trace!(?then_ctx, "then_ctx");
@@ -333,8 +336,8 @@ where
                 // type check else_expr
                 let mut else_ctx_before = ctx.clone();
                 let syn_cond: syn::Expr = symbolic_execute(&cond, tcx, ctx, local_ctx)?;
-                let else_cond = syn::parse_quote! { ! (#syn_cond) };
-                else_ctx_before.add_formula(else_cond);
+                let else_cond: syn::Expr = syn::parse_quote! { ! (#syn_cond) };
+                else_ctx_before.add_formula(else_cond.clone());
                 let (else_ty, else_ctx) =
                     type_of(else_expr, tcx, &else_ctx_before, local_ctx, solver, fresh)?;
                 trace!(?else_ctx, "else_ctx");
@@ -351,19 +354,31 @@ where
                 let (complete_ty, ctx_after) = if let Ok(()) =
                     require_is_subtype_of(&else_ty, &then_ty, &else_ctx, solver)
                 {
-                    match is_sub_context(&else_ctx, &then_ctx, tcx, solver) {
+                    match is_sub_context(
+                        &else_ctx.without_formula(&else_cond),
+                        &then_ctx.without_formula(&then_cond),
+                        tcx,
+                        solver,
+                    ) {
                         Ok(()) => (then_ty, else_ctx), // TODO fix: need to remove if-condition formula from else_ctx
-                        Err(err) =>  anyhow::bail!(
-                            "types follow the sub typing constraints, but their contexts do not {}"
-                        , err)
+                        Err(err) => anyhow::bail!(
+                            "types follow the sub typing constraints, but their contexts do not {}",
+                            err
+                        ),
                     }
                 } else if let Ok(()) = require_is_subtype_of(&then_ty, &else_ty, &then_ctx, solver)
                 {
-                    match is_sub_context(&then_ctx, &ctx, tcx, solver) {
+                    match is_sub_context(
+                        &then_ctx.without_formula(&then_cond),
+                        &else_ctx.without_formula(&else_cond),
+                        tcx,
+                        solver,
+                    ) {
                         Ok(()) => (else_ty, then_ctx),
-                        Err(err) =>  anyhow::bail!(
-                            "types follow the sub typing constraints, but their contexts do not {}"
-                        , err)
+                        Err(err) => anyhow::bail!(
+                            "types follow the sub typing constraints, but their contexts do not {}",
+                            err
+                        ),
                     }
                 } else {
                     anyhow::bail!("Error while typing the if-then-else expression: Neither else_ty ≼ then_ty nor then_ty ≼ else_ty. (then_ty: {}, else_ty: {})", then_ty, else_ty)
@@ -382,7 +397,8 @@ where
                 let res = local_ctx.qpath_res(&path, lhs.hir_id);
                 match res {
                     hir::def::Res::Local(hir_id) => {
-                        let (rhs_ty, mut after_rhs) = type_of(rhs, tcx, ctx, local_ctx, solver, fresh)?;
+                        let (rhs_ty, mut after_rhs) =
+                            type_of(rhs, tcx, ctx, local_ctx, solver, fresh)?;
                         after_rhs.update_ty(hir_id, rhs_ty.clone());
                         trace!(%rhs_ty, "rhs_ty is");
                         anyhow::Ok((rhs_ty, after_rhs))
@@ -408,7 +424,6 @@ where
         e => todo!("expr: {:?}", e),
     }
 }
-
 
 /// This executes e.g. a condition in an if-then-else expression to be used as
 /// as formula in smt

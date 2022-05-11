@@ -360,7 +360,7 @@ where
                         tcx,
                         solver,
                     ) {
-                        Ok(()) => (then_ty, else_ctx), // TODO fix: need to remove if-condition formula from else_ctx
+                        Ok(()) => (then_ty, else_ctx.without_formula(&else_cond)),
                         Err(err) => anyhow::bail!(
                             "types follow the sub typing constraints, but their contexts do not {}",
                             err
@@ -374,7 +374,7 @@ where
                         tcx,
                         solver,
                     ) {
-                        Ok(()) => (else_ty, then_ctx),
+                        Ok(()) => (else_ty, then_ctx.without_formula(&then_cond)),
                         Err(err) => anyhow::bail!(
                             "types follow the sub typing constraints, but their contexts do not {}",
                             err

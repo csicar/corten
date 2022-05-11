@@ -528,9 +528,10 @@ fn test_subtype_ctx() {
 
             fn max(b: Refinement<i32, "b", "true">) -> Refinement<i32, "v", "v > 0"> {
                 let mut a = 2;
-                if b > 0 {
-                    a = 0; 0
-                } else { 0
+                if !(b > 0) {
+                    0
+                } else { 
+                    a = b as Refinement<i32, "b2", "b2 > 0">; 0
                 };
                 a
             }

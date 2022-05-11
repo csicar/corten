@@ -75,14 +75,21 @@ impl<'a, K> RContext<'a, K > where K: Debug + Eq + Hash + Display + SmtFmt + Clo
         solver
             .comment(&format!("decl for {}", ident))
             .into_anyhow()?;
-        solver.declare_const(&ty.binder, "Int").into_anyhow()?;
+
+        let smt_ty = match ty.base.kind() {
+            rustc_middle::ty::TyKind::Bool => "Bool",
+            rustc_middle::ty::TyKind::Char => todo!(),
+            rustc_middle::ty::TyKind::Int(_) => "Int", // todo: respect size
+            rustc_middle::ty::TyKind::Uint(_) => "Int", // Todo respect unsigned
+            other => todo!("don't know how to encode ty {:?} in smt", other)
+        };
+        solver.declare_const(&ty.binder, smt_ty).into_anyhow()?;
         Ok(())
     }
 
     pub fn encode_declarations<P>(&self, solver: &mut Solver<P>) -> anyhow::Result<()> {
         self.types.iter().try_for_each(|(ident, ty)| {
-            self.encode_declaration(solver, ident, ty);
-            anyhow::Ok(())
+            self.encode_declaration(solver, ident, ty)
         })?;
         Ok(())
     }

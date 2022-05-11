@@ -21,7 +21,7 @@ tracing-subscriber = { version = "0.3.9", features = [
   "ansi",
 ] }
 "serde" = "*"
-syn = { version = "1.0", features = ["full"] }
+syn = { version = "1.0.93", features = ["full"] }
 syn-serde = { version = "0.2", features = ["json"] }
 rsmt2 = { version = "0.14.1" }
 anyhow = "*"

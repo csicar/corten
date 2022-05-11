@@ -12,6 +12,7 @@ use rsmt2::SmtConf;
 use rsmt2::Solver;
 use rustc_hir as hir;
 
+use quote::quote;
 use rustc_hir::{Expr, ExprKind};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::ty::TypeckResults;
@@ -122,7 +123,7 @@ where
             //TODO: check actual_ctx ≼ parameter_after_ctx
 
             trace!(%actual_ty, "actual function type");
-            require_is_subtype_of(&actual_ty, &expected_type, &ctx_after, &mut solver)?;
+            require_is_subtype_of(&actual_ty, &expected_type, &ctx_after, tcx, &mut solver)?;
             anyhow::Ok(expected_type)
         }
         other => Err(anyhow!(
@@ -309,7 +310,7 @@ where
             // SMT Subtyping
             // Why ctx_after_expr vs. ctx: For `a += 2 as ty!{v | v > 2}`, Type of `a += 2` will need to be a subtype
             // in the context of its execution effect (\Gamma' i.e. ctx_after_expr)
-            require_is_subtype_of(&expr_ty, &super_ty, &ctx, solver)?;
+            require_is_subtype_of(&expr_ty, &super_ty, &ctx, tcx, solver)?;
 
             anyhow::Ok((super_ty, ctx_after))
         }
@@ -336,7 +337,10 @@ where
                 // type check else_expr
                 let mut else_ctx_before = ctx.clone();
                 let syn_cond: syn::Expr = symbolic_execute(&cond, tcx, ctx, local_ctx)?;
-                let else_cond: syn::Expr = syn::parse_quote! { ! (#syn_cond) };
+                let not = syn::parse_str::<syn::UnOp>("!")?;
+                let else_cond: syn::Expr = syn::Expr::Unary(syn::ExprUnary { attrs: Vec::new(), op: not, expr: Box::new(syn_cond) });
+                info!(else_cond=%quote!{#else_cond}, "else_cond_formula: ");
+
                 else_ctx_before.add_formula(else_cond.clone());
                 let (else_ty, else_ctx) =
                     type_of(else_expr, tcx, &else_ctx_before, local_ctx, solver, fresh)?;
@@ -352,7 +356,7 @@ where
                 // it needs to show, that it is a sub type of the postulated complete type *in its context*
 
                 let (complete_ty, ctx_after) = if let Ok(()) =
-                    require_is_subtype_of(&else_ty, &then_ty, &else_ctx, solver)
+                    require_is_subtype_of(&else_ty, &then_ty, &else_ctx, tcx, solver)
                 {
                     match is_sub_context(
                         &else_ctx.without_formula(&else_cond),
@@ -366,7 +370,8 @@ where
                             err
                         ),
                     }
-                } else if let Ok(()) = require_is_subtype_of(&then_ty, &else_ty, &then_ctx, solver)
+                } else if let Ok(()) =
+                    require_is_subtype_of(&then_ty, &else_ty, &then_ctx, tcx, solver)
                 {
                     match is_sub_context(
                         &then_ctx.without_formula(&then_cond),
@@ -459,17 +464,22 @@ fn symbolic_execute<'a, 'b, 'c, 'tcx>(
                 right: Box::new(right_syn),
             }))
         }
-        ExprKind::Unary(_, _) => todo!(),
+        ExprKind::Unary(op, inner) => {
+            let syn_op = syn::parse_str::<syn::UnOp>(op.as_str())?;
+            let inner_syn = symbolic_execute(inner, tcx, ctx, local_ctx)?;
+            Ok(syn::Expr::Unary(syn::ExprUnary {
+                attrs: vec![],
+                expr: Box::new(inner_syn),
+                op: syn_op,
+            }))
+        }
         ExprKind::Lit(_) => {
             let lit = syn::parse_str(&expr.pretty_print())?;
             Ok(lit)
         }
         ExprKind::Cast(_, _) => todo!(),
         ExprKind::Type(_, _) => todo!(),
-        ExprKind::DropTemps(expr) => {
-            trace!(?expr, "drop temps: ");
-            symbolic_execute(expr, tcx, ctx, local_ctx)
-        }
+        ExprKind::DropTemps(expr) => symbolic_execute(expr, tcx, ctx, local_ctx),
         ExprKind::Let(_) => todo!(),
         ExprKind::If(_, _, _) => todo!(),
         ExprKind::Loop(_, _, _, _) => todo!(),
@@ -518,14 +528,20 @@ fn symbolic_execute<'a, 'b, 'c, 'tcx>(
     }
 }
 
-#[instrument(skip_all, fields(%sub_ty, %super_ty))]
+#[instrument(skip_all, fields(%sub_ty, %super_ty, ctx=%ctx.with_tcx(tcx)))]
 fn require_is_subtype_of<'tcx, P>(
     sub_ty: &RefinementType<'tcx>,
     super_ty: &RefinementType<'tcx>,
     ctx: &RContext<'tcx>,
+    tcx: &TyCtxt<'tcx>,
     solver: &mut Solver<P>,
 ) -> anyhow::Result<()> {
-    info!("need to do subtyping judgement: {} ≼ {}", sub_ty, super_ty);
+    info!(
+        "need to do subtyping judgement: {} ≼ {} in ctx {}",
+        sub_ty,
+        super_ty,
+        ctx.with_tcx(tcx)
+    );
     solver.push(1).into_anyhow()?;
     ctx.encode_smt(solver)?;
 

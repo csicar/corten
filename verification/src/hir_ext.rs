@@ -1,9 +1,9 @@
+use hir::ExprKind;
 use rustc_hir as hir;
 use rustc_hir_pretty;
-use rustc_middle::ty::TyCtxt;
+use rustc_middle::ty::{TyCtxt, TypeckResults};
 use rustc_span as span;
 use rustc_span::source_map;
-
 
 //////////////////// Ty
 
@@ -72,6 +72,9 @@ pub trait ExprExt<'a> {
     /// tries to turn Expr `"my_name"` into Symbol `my_name`
     fn try_into_symbol(&'a self) -> Option<span::Symbol>;
 
+    /// tries to turn Expr `my_identifier` into the HirId that `my_identifier` refers to
+    fn try_into_path_hir_id<'tcx>(&'a self, typeck_results: &TypeckResults<'tcx>) -> anyhow::Result<hir::HirId>;
+
     /// Pretty prints the Expression
     fn pretty_print(&'a self) -> String;
 }
@@ -100,6 +103,20 @@ impl<'a> ExprExt<'a> for hir::Expr<'a> {
                 ..
             } => inner.try_into_symbol(),
             _other => None,
+        }
+    }
+
+    fn try_into_path_hir_id<'tcx>(&'a self, local_ctx: &TypeckResults<'tcx>, ) -> anyhow::Result<hir::HirId> {
+        match &self.kind {
+            ExprKind::Path(path) => {
+                let res = local_ctx.qpath_res(&path, self.hir_id);
+                match res {
+                    hir::def::Res::Local(hir_id) => Ok(hir_id),
+                    hir::def::Res::Def(_, _) => todo!(),
+                    other => anyhow::bail!("reference to unexpected resolution {:?}", other),
+                }
+            }
+            other => anyhow::bail!("given expr in not a path ({:?})", other)
         }
     }
 
@@ -151,7 +168,7 @@ pub trait NodeExt<'a, 'b> {
     fn try_into_expr(&'a self) -> Option<&'a hir::Expr<'b>>;
 }
 
-impl<'a : 'b, 'b> NodeExt<'a, 'b> for hir::Node<'a> {
+impl<'a: 'b, 'b> NodeExt<'a, 'b> for hir::Node<'a> {
     fn try_into_expr(&'a self) -> Option<&'a hir::Expr<'b>> {
         match self {
             hir::Node::Expr(expr) => Some(expr),

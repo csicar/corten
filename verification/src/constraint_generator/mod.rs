@@ -24,6 +24,7 @@ use syn::parse_quote;
 use tracing::info;
 use tracing::instrument;
 use tracing::trace;
+use tracing::warn;
 
 pub struct Fresh {
     current: u32,
@@ -254,32 +255,26 @@ where
             // ```
             // Generates constraint `_7: i32 | _7 > 0 && av == _7`
             //
-            let res = local_ctx.qpath_res(&path, expr.hir_id);
-            match res {
-                hir::def::Res::Local(hir_id) => {
-                    let ty_in_context = ctx.lookup_hir(&hir_id).ok_or(anyhow!(
-                        "could not find refinement type definition of {} in refinement context",
-                        tcx.hir().node_to_string(hir_id)
-                    ))?;
-                    let new_name = fresh.fresh_ident();
-                    let var_ty = ty_in_context.rename_binder(&new_name)?;
-                    let combined_predicate = {
-                        let new_pred = &var_ty.predicate;
-                        let new_name = format_ident!("{}", &var_ty.binder);
-                        let old_name = format_ident!("{}", &ty_in_context.binder);
-                        parse_quote! {
-                            #new_pred && #new_name == #old_name
-                        }
-                    };
-                    let var_ty_with_eq_constraint = RefinementType {
-                        predicate: combined_predicate,
-                        ..var_ty
-                    };
-                    Ok((var_ty_with_eq_constraint, ctx.clone()))
+            let dest_hir_id = expr.try_into_path_hir_id(local_ctx)?;
+            let ty_in_context = ctx.lookup_hir(&dest_hir_id).ok_or(anyhow!(
+                "could not find refinement type definition of {} in refinement context",
+                tcx.hir().node_to_string(dest_hir_id)
+            ))?;
+            let new_name = fresh.fresh_ident();
+            let var_ty = ty_in_context.rename_binder(&new_name)?;
+            let combined_predicate = {
+                let new_pred = &var_ty.predicate;
+                let new_name = format_ident!("{}", &var_ty.binder);
+                let old_name = format_ident!("{}", &ty_in_context.binder);
+                parse_quote! {
+                    #new_pred && #new_name == #old_name
                 }
-                hir::def::Res::Def(_, _) => todo!(),
-                other => anyhow::bail!("reference to unexpected resolution {:?}", other),
-            }
+            };
+            let var_ty_with_eq_constraint = RefinementType {
+                predicate: combined_predicate,
+                ..var_ty
+            };
+            Ok((var_ty_with_eq_constraint, ctx.clone()))
         }
         ExprKind::Box(_) => todo!(),
         ExprKind::ConstBlock(_) => todo!(),
@@ -303,7 +298,7 @@ where
         ExprKind::Unary(_, _) => todo!(),
         ExprKind::Cast(expr, cast_ty) => {
             // Generate sub-typing constraint
-            let (expr_ty, ctx_after) = type_of(expr, tcx, ctx, local_ctx, solver, fresh)?;
+            let (expr_ty, mut ctx_after) = type_of(expr, tcx, ctx, local_ctx, solver, fresh)?;
 
             let super_ty = RefinementType::from_type_alias(cast_ty, tcx, local_ctx.expr_ty(&expr))?;
 
@@ -311,6 +306,12 @@ where
             // Why ctx_after_expr vs. ctx: For `a += 2 as ty!{v | v > 2}`, Type of `a += 2` will need to be a subtype
             // in the context of its execution effect (\Gamma' i.e. ctx_after_expr)
             require_is_subtype_of(&expr_ty, &super_ty, &ctx, tcx, solver)?;
+
+            match expr.try_into_path_hir_id(local_ctx) {
+                Ok(dest_hir_id)  =>  ctx_after.update_ty(dest_hir_id, expr_ty),
+                Err(err) => warn!("no hir id found to set. Err: {}", err)
+            }
+           
 
             anyhow::Ok((super_ty, ctx_after))
         }
@@ -528,7 +529,7 @@ fn symbolic_execute<'a, 'b, 'c, 'tcx>(
     }
 }
 
-#[instrument(skip_all, fields(%sub_ty, %super_ty, ctx=%ctx.with_tcx(tcx)))]
+#[instrument(skip_all, fields(%sub_ty, %super_ty))]
 fn require_is_subtype_of<'tcx, P>(
     sub_ty: &RefinementType<'tcx>,
     super_ty: &RefinementType<'tcx>,

@@ -444,9 +444,10 @@ fn test_assign_ite() {
 
             fn max(b: Refinement<i32, "b", "true">) -> Refinement<i32, "v", "v > 0"> {
                 let mut a = 2;
-                if b > 0 {
-                    a = b; 0
-                } else { 0
+                if b <= 0 {
+                    0
+                } else {
+                    a = b as Refinement<i32, "l", "l > 0">; 0
                 };
                 a
             }

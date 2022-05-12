@@ -77,6 +77,28 @@ This also works with variables declarations: In that case $`\Gamma'`$ contains a
   {\Gamma \vdash x = e : \tau \Rightarrow \Gamma' [x \rightarrow \tau]}
 ```
 
+## WHILE
+
+```math
+\frac
+{\Gamma_!, c \vdash s \Rightarrow \Gamma_! \qquad \Gamma_b \preceq \Gamma_!}
+{\Gamma_b \vdash \texttt{while}(c) s \Rightarrow \Gamma_!,\neg c}
+```
+
+## BinOp
+
+```math
+\text{BinOP}
+\frac
+  {
+    \begin{aligned}
+      \Gamma \vdash e_1 : \{v:b \mid \varphi_1\} \Rightarrow \Gamma \\
+      \Gamma \vdash e_2 : \{v:b \mid \varphi_2\} \Rightarrow \Gamma
+    \end{aligned}
+  }
+  {\Gamma \vdash e_1 + e_2 : \{ v: b \mid v == [e_1] + [e_2]\} \Rightarrow \Gamma'}
+```
+
 Subtyping Rules as Implemented
 ==============================
 

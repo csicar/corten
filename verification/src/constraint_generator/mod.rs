@@ -7,6 +7,7 @@ use crate::refinements;
 use crate::smtlib_ext::SmtResExt;
 use anyhow::anyhow;
 
+use hir::LoopSource;
 use quote::format_ident;
 use rsmt2::SmtConf;
 use rsmt2::Solver;
@@ -328,7 +329,6 @@ where
                 Ok(dest_hir_id) => ctx_after.update_ty(dest_hir_id, super_ty.clone()),
                 Err(err) => warn!("no hir id found to set. Err: {}", err),
             }
-           
 
             anyhow::Ok((super_ty, ctx_after))
         }
@@ -356,7 +356,11 @@ where
                 let mut else_ctx_before = ctx.clone();
                 let syn_cond: syn::Expr = symbolic_execute(&cond, tcx, ctx, local_ctx)?;
                 let not = syn::parse_str::<syn::UnOp>("!")?;
-                let else_cond: syn::Expr = syn::Expr::Unary(syn::ExprUnary { attrs: Vec::new(), op: not, expr: Box::new(syn_cond) });
+                let else_cond: syn::Expr = syn::Expr::Unary(syn::ExprUnary {
+                    attrs: Vec::new(),
+                    op: not,
+                    expr: Box::new(syn_cond),
+                });
                 info!(else_cond=%quote!{#else_cond}, "else_cond_formula: ");
 
                 else_ctx_before.add_formula(else_cond.clone());
@@ -412,17 +416,33 @@ where
             }
             None => todo!("missing else branch not supported yet"),
         },
-        ExprKind::Loop(hir::Block {stmts: [], expr: Some(expr), .. }, None, LoopSource::While, _) => {
-            match &expr.kind {
+        ExprKind::Loop(
+            hir::Block {
+                stmts: [],
+                expr: Some(expr),
+                ..
+            },
+            None,
+            LoopSource::While,
+            _,
+        ) => {
+            let ctx_bang = match &expr.kind {
                 ExprKind::If(cond, then_expr, else_expr) => {
                     let (_ty, ctx_after) = type_of(then_expr, tcx, ctx, local_ctx, solver, fresh)?;
                     is_sub_context(ctx, &ctx_after, tcx, solver)?;
-                },
-                _other => todo!()
-            }
-            
-            todo!()
-        },
+                    ctx_after
+                }
+                _other => todo!(),
+            };
+            let unit_type = local_ctx.expr_ty(expr);
+            let refined_unit_type = RefinementType {
+                base: unit_type,
+                binder: fresh.fresh_ident(),
+                predicate: parse_quote! { true },
+            };
+
+            Ok((refined_unit_type, ctx_bang))
+        }
         ExprKind::Loop(_, _, _, _) => todo!(),
         ExprKind::Match(_, _, _) => todo!(),
         ExprKind::Closure(_, _, _, _, _) => todo!(),
@@ -430,10 +450,15 @@ where
             ExprKind::Path(path) => {
                 let res = local_ctx.qpath_res(&path, lhs.hir_id);
                 match res {
-                    hir::def::Res::Local(hir_id) => {
+                    hir::def::Res::Local(dest_hir_id) => {
                         let (rhs_ty, mut after_rhs) =
                             type_of(rhs, tcx, ctx, local_ctx, solver, fresh)?;
-                        after_rhs.update_ty(hir_id, rhs_ty.clone());
+                        let ty_in_context = ctx.lookup_hir(&dest_hir_id).ok_or(anyhow!(
+                            "could not find refinement type definition of {} in refinement context",
+                            tcx.hir().node_to_string(dest_hir_id)
+                        ))?;
+                        after_rhs
+                            .update_ty(dest_hir_id, rhs_ty.rename_binder(&ty_in_context.binder)?);
                         trace!(%rhs_ty, "rhs_ty is");
                         anyhow::Ok((rhs_ty, after_rhs))
                     }

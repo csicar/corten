@@ -578,11 +578,11 @@ fn test_loop() {
         &quote! {
             type Refinement<T, const B: &'static str, const R: &'static str> = T;
 
-            fn f() -> Refinement<i32, "v", "v == 10"> {
-                let mut res = 0;
-                
+            fn f() -> Refinement<i32, "v", "v > 0"> {
+                let mut res = 1;
+                res as Refinement<i32, "s", "s > 0">;
                 while res < 10 {
-                    res = 10; ()
+                    res = (res + 1) as Refinement<i32, "a", "a > 1">; ()
                 }
                 res
             }
@@ -590,7 +590,7 @@ fn test_loop() {
         .to_string(),
         |item, tcx| {
             let ty = type_check_function(item, &tcx).unwrap();
-            pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= a && v >= b }");
+            pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
         },
     )
     .unwrap();

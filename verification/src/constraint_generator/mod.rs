@@ -294,7 +294,22 @@ where
             };
             anyhow::Ok((ty, ctx.clone()))
         }
-        ExprKind::Binary(_, _, _) => todo!(),
+        ExprKind::Binary(Spanned { node: bin_op, .. }, left, right) => {
+            let sym = symbolic_execute(expr, tcx, ctx, local_ctx)?;
+            let ident = fresh.fresh_ident();
+            let new_name = format_ident!("{}", &ident);
+
+
+            let ty = RefinementType {
+                base: local_ctx.expr_ty(expr),
+                binder: ident,
+                predicate: parse_quote! {
+                    #sym == #new_name
+                },
+            };
+            //TODO check no mut in expr
+            anyhow::Ok((ty, ctx.clone()))
+        }
         ExprKind::Unary(_, _) => todo!(),
         ExprKind::Cast(expr, cast_ty) => {
             // Generate sub-typing constraint

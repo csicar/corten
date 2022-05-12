@@ -308,8 +308,8 @@ where
             require_is_subtype_of(&expr_ty, &super_ty, &ctx, tcx, solver)?;
 
             match expr.try_into_path_hir_id(local_ctx) {
-                Ok(dest_hir_id)  =>  ctx_after.update_ty(dest_hir_id, expr_ty),
-                Err(err) => warn!("no hir id found to set. Err: {}", err)
+                Ok(dest_hir_id) => ctx_after.update_ty(dest_hir_id, super_ty.clone()),
+                Err(err) => warn!("no hir id found to set. Err: {}", err),
             }
            
 

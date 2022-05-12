@@ -5,6 +5,14 @@ use unindent::unindent;
 use quote::quote;
 use rsmt2::SmtConf;
 
+fn init_tracing() {
+    let subscriber = ::tracing_subscriber::FmtSubscriber::builder()
+        .with_env_filter(::tracing_subscriber::EnvFilter::from_default_env())
+        .pretty()
+        .finish();
+    ::tracing::subscriber::set_global_default(subscriber);
+}
+
 #[test_log::test]
 fn test_smt() {
     let parser = ();
@@ -491,11 +499,7 @@ fn test_assign_ite_neg() {
 #[should_panic]
 #[test]
 fn test_subtype_ctx_neg() {
-    let subscriber = ::tracing_subscriber::FmtSubscriber::builder()
-        .with_env_filter(::tracing_subscriber::EnvFilter::from_default_env())
-        .pretty()
-        .finish();
-    let _ = ::tracing::subscriber::set_global_default(subscriber);
+    
     with_item(
         &quote! {
             type Refinement<T, const B: &'static str, const R: &'static str> = T;
@@ -540,6 +544,28 @@ fn test_subtype_ctx() {
         |item, tcx| {
             let ty = type_check_function(item, &tcx).unwrap();
             pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
+        },
+    )
+    .unwrap();
+}
+
+#[test]
+fn test_update_type() {
+    init_tracing();
+    with_item(
+        &quote! {
+            type Refinement<T, const B: &'static str, const R: &'static str> = T;
+
+            fn f() -> Refinement<i32, "v", "v > 0"> {
+                let mut tmp = 2;
+                tmp as Refinement<i32, "v1", "v1 > 0">;
+                tmp
+            }
+        }
+        .to_string(),
+        |item, tcx| {
+            let ty = type_check_function(item, &tcx).unwrap();
+            pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= a && v >= b }");
         },
     )
     .unwrap();

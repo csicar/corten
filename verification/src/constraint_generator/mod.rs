@@ -299,6 +299,8 @@ where
             let ident = fresh.fresh_ident();
             let new_name = format_ident!("{}", &ident);
 
+            let (_ty_left, ctx_after_left) = type_of(left, tcx, ctx, local_ctx, solver, fresh)?;
+            let (_ty_right, ctx_after_right) =  type_of(right, tcx, &ctx_after_left, local_ctx, solver, fresh)?;
 
             let ty = RefinementType {
                 base: local_ctx.expr_ty(expr),
@@ -308,7 +310,7 @@ where
                 },
             };
             //TODO check no mut in expr
-            anyhow::Ok((ty, ctx.clone()))
+            anyhow::Ok((ty, ctx_after_right))
         }
         ExprKind::Unary(_, _) => todo!(),
         ExprKind::Cast(expr, cast_ty) => {

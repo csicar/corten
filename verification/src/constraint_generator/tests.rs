@@ -570,3 +570,28 @@ fn test_update_type() {
     )
     .unwrap();
 }
+
+#[test]
+fn test_loop() {
+    init_tracing();
+    with_item(
+        &quote! {
+            type Refinement<T, const B: &'static str, const R: &'static str> = T;
+
+            fn f() -> Refinement<i32, "v", "v == 10"> {
+                let mut res = 0;
+                
+                while res < 10 {
+                    res = 10; ()
+                }
+                res
+            }
+        }
+        .to_string(),
+        |item, tcx| {
+            let ty = type_check_function(item, &tcx).unwrap();
+            pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= a && v >= b }");
+        },
+    )
+    .unwrap();
+}

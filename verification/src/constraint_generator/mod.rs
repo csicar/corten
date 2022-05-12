@@ -395,6 +395,17 @@ where
             }
             None => todo!("missing else branch not supported yet"),
         },
+        ExprKind::Loop(hir::Block {stmts: [], expr: Some(expr), .. }, None, LoopSource::While, _) => {
+            match &expr.kind {
+                ExprKind::If(cond, then_expr, else_expr) => {
+                    let (_ty, ctx_after) = type_of(then_expr, tcx, ctx, local_ctx, solver, fresh)?;
+                    is_sub_context(ctx, &ctx_after, tcx, solver)?;
+                },
+                _other => todo!()
+            }
+            
+            todo!()
+        },
         ExprKind::Loop(_, _, _, _) => todo!(),
         ExprKind::Match(_, _, _) => todo!(),
         ExprKind::Closure(_, _, _, _, _) => todo!(),

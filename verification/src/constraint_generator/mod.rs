@@ -223,7 +223,7 @@ where
             let predicate = parse_quote! {
                 #ident == #lit
             };
-            trace!(pred=?predicate, "Expr Literal gets predicate");
+            trace!(pred=%quote! { #predicate }, "Expr Literal gets predicate");
             let base = local_ctx.node_type(expr.hir_id);
 
             anyhow::Ok((
@@ -295,14 +295,14 @@ where
             };
             anyhow::Ok((ty, ctx.clone()))
         }
-        ExprKind::Binary(Spanned { node: bin_op, .. }, left, right) => {
+        ExprKind::Binary(Spanned { node: _bin_op, .. }, left, right) => {
             let sym = symbolic_execute(expr, tcx, ctx, local_ctx)?;
             let ident = fresh.fresh_ident();
             let new_name = format_ident!("{}", &ident);
 
             let (_ty_left, ctx_after_left) = type_of(left, tcx, ctx, local_ctx, solver, fresh)?;
-            let (_ty_right, ctx_after_right) =  type_of(right, tcx, &ctx_after_left, local_ctx, solver, fresh)?;
-
+            let (_ty_right, ctx_after_right) =
+                type_of(right, tcx, &ctx_after_left, local_ctx, solver, fresh)?;
             let ty = RefinementType {
                 base: local_ctx.expr_ty(expr),
                 binder: ident,
@@ -310,6 +310,8 @@ where
                     #sym == #new_name
                 },
             };
+            trace!(%ty,"type of binary expr");
+
             //TODO check no mut in expr
             anyhow::Ok((ty, ctx_after_right))
         }
@@ -428,7 +430,12 @@ where
         ) => {
             let ctx_bang = match &expr.kind {
                 ExprKind::If(cond, then_expr, else_expr) => {
-                    let (_ty, ctx_after) = type_of(then_expr, tcx, ctx, local_ctx, solver, fresh)?;
+                    let mut then_ctx_before = ctx.clone();
+                    let then_cond: syn::Expr = symbolic_execute(&cond, tcx, ctx, local_ctx)?;
+                    then_ctx_before.add_formula(then_cond.clone());
+
+                    let (_ty, ctx_after) =
+                        type_of(then_expr, tcx, &then_ctx_before, local_ctx, solver, fresh)?;
                     is_sub_context(ctx, &ctx_after, tcx, solver)?;
                     ctx_after
                 }
@@ -459,7 +466,7 @@ where
                         ))?;
                         after_rhs
                             .update_ty(dest_hir_id, rhs_ty.rename_binder(&ty_in_context.binder)?);
-                        trace!(%rhs_ty, "rhs_ty is");
+                        trace!(%rhs_ty, after_rhs=%after_rhs.with_tcx(tcx), "rhs_ty is");
                         anyhow::Ok((rhs_ty, after_rhs))
                     }
                     hir::def::Res::Def(_, _) => todo!(),
@@ -494,6 +501,7 @@ where
 ///     if a {...} else {...}
 /// }
 /// ```
+#[instrument(skip_all)]
 fn symbolic_execute<'a, 'b, 'c, 'tcx>(
     expr: &'a Expr<'tcx>,
     tcx: &'b TyCtxt<'tcx>,
@@ -561,7 +569,7 @@ fn symbolic_execute<'a, 'b, 'c, 'tcx>(
                         "could not find refinement type definition of {:?} in refinement context",
                         hir_id
                     ))?;
-                    trace!(?ty_in_context, "found refinement type:");
+                    trace!(%ty_in_context, "found refinement type:");
 
                     let refinement_ident = format_ident!("{}", &ty_in_context.binder);
                     Ok(parse_quote! { #refinement_ident })
@@ -597,7 +605,7 @@ fn require_is_subtype_of<'tcx, P>(
         ctx.with_tcx(tcx)
     );
     solver.push(1).into_anyhow()?;
-    ctx.encode_smt(solver)?;
+    ctx.encode_smt(solver, tcx)?;
 
     solver.declare_const(&sub_ty.binder, "Int").into_anyhow()?;
     solver
@@ -636,7 +644,7 @@ fn require_is_subtype_of<'tcx, P>(
             "Subtyping judgement failed: {} is not a sub_ty of {}",
             &sub_ty, &super_ty
         );
-        error!("{}", msg);
+        error!("{} in ctx {}", msg, ctx.with_tcx(tcx));
         Err(anyhow!(msg))?;
     } else {
         info!("no counterexample found 🮱")

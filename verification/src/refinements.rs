@@ -92,7 +92,13 @@ fn rename_ref_in_expr(
         syn::Expr::Macro(_) => todo!(),
         syn::Expr::Match(_) => todo!(),
         syn::Expr::MethodCall(_) => todo!(),
-        syn::Expr::Paren(_) => todo!(),
+        syn::Expr::Paren(syn::ExprParen { attrs, paren_token, expr : inner_expr}) => {
+            Ok(syn::Expr::Paren(syn::ExprParen {
+                expr: Box::new(rename_ref_in_expr(inner_expr, old_name, new_name)?),
+                attrs: attrs.clone(),
+                paren_token: paren_token.clone()
+            }))
+        },
         syn::Expr::Path(
             expr_path @ syn::ExprPath {
                 path: syn::Path { segments, .. },

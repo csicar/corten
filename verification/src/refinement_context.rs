@@ -53,11 +53,11 @@ impl<'a, K> RContext<'a, K > where K: Debug + Eq + Hash + Display + SmtFmt + Clo
         self.types.get(&hir).map(|entry| entry.clone())
     }
 
-    pub fn encode_smt<P>(&self, solver: &mut Solver<P>) -> anyhow::Result<()> {
+    pub fn encode_smt<P>(&self, solver: &mut Solver<P>, tcx: &TyCtxt<'a>) -> anyhow::Result<()> {
         solver.comment("<Context>").into_anyhow()?;
         solver.push(1).into_anyhow()?;
 
-        self.encode_declarations(solver)?;
+        self.encode_declarations(solver, tcx)?;
         self.encode_predicates(solver)?;
         self.encode_formulas(solver)?;
 
@@ -71,9 +71,10 @@ impl<'a, K> RContext<'a, K > where K: Debug + Eq + Hash + Display + SmtFmt + Clo
         solver: &mut Solver<P>,
         ident: &K,
         ty: &RefinementType<'a>,
+        tcx: &TyCtxt<'a>
     ) -> anyhow::Result<()> {
         solver
-            .comment(&format!("decl for {}", ident))
+            .comment(&format!("decl for {}", ident.fmt_str(tcx)))
             .into_anyhow()?;
 
         let smt_ty = match ty.base.kind() {
@@ -87,9 +88,9 @@ impl<'a, K> RContext<'a, K > where K: Debug + Eq + Hash + Display + SmtFmt + Clo
         Ok(())
     }
 
-    pub fn encode_declarations<P>(&self, solver: &mut Solver<P>) -> anyhow::Result<()> {
+    pub fn encode_declarations<P>(&self, solver: &mut Solver<P>, tcx: &TyCtxt<'a>) -> anyhow::Result<()> {
         self.types.iter().try_for_each(|(ident, ty)| {
-            self.encode_declaration(solver, ident, ty)
+            self.encode_declaration(solver, ident, ty, tcx)
         })?;
         Ok(())
     }
@@ -125,7 +126,7 @@ impl<'a, K> RContext<'a, K > where K: Debug + Eq + Hash + Display + SmtFmt + Clo
 pub fn is_sub_context<'tcx, 'a, K : Debug + Eq + Hash + Display + SmtFmt + Clone, P>(
     super_ctx: &RContext<'tcx, K>,
     sub_ctx: &RContext<'tcx, K>,
-    tcx: &TyCtxt<'a>,
+    tcx: &TyCtxt<'tcx>,
     solver: &mut Solver<P>,
 ) -> anyhow::Result<()> {
     trace!(super_ctx=%(super_ctx.with_tcx(tcx)), sub_ctx=%(sub_ctx.with_tcx(tcx)), "check");
@@ -138,9 +139,9 @@ pub fn is_sub_context<'tcx, 'a, K : Debug + Eq + Hash + Display + SmtFmt + Clone
 
     super_ctx.types.iter().try_for_each(|(hir_id, super_ty)| {
         let sub_ty = sub_ctx.lookup_hir(hir_id).expect("missing expected hir");
-        super_ctx.encode_declaration(solver, hir_id, super_ty)?;
+        super_ctx.encode_declaration(solver, hir_id, super_ty, tcx)?;
         if super_ty.binder != sub_ty.binder {
-            sub_ctx.encode_declaration(solver, hir_id, &sub_ty)?;
+            sub_ctx.encode_declaration(solver, hir_id, &sub_ty, tcx)?;
 
             let super_binder = format_ident!("{}", &super_ty.binder);
             let sub_binder = format_ident!("{}", &sub_ty.binder);
@@ -195,7 +196,9 @@ pub trait SmtFmt {
 
 impl SmtFmt for hir::HirId {
     fn fmt_str<'tcx>(&self, tcx: &TyCtxt<'tcx>) -> String {
-        tcx.hir().node_to_string(*self)
+        let node_str = tcx.hir().node_to_string(*self);
+        let span = tcx.hir().span(self.clone()).data();
+        format!("{:?} {}", span, node_str)
     }
 }
 

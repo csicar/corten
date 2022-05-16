@@ -75,7 +75,6 @@ where
     let sysroot = str::from_utf8(&out.stdout).unwrap().trim();
     let cb = RwLock::new(callback);
     let header = quote! {
-        #![feature(adt_const_params)]
         #![allow(dead_code)]
         #![allow(incomplete_features)]
 
@@ -105,6 +104,19 @@ where
             o => warn!(node=?o, "parsing input resulted in different stuff"),
         },
         input,
+    )
+}
+
+pub fn with_item_and_rt_lib<F>(input: &str, mut callback: F) -> Result<(), ErrorReported>
+where
+    F: for<'a> FnMut(&hir::Item<'a>, TyCtxt<'a>) -> () + Send,
+{
+    with_hir(
+        |hir, tcx| match hir {
+            hir::Node::Item(item) => callback(item, tcx),
+            o => warn!(node=?o, "parsing input resulted in different stuff"),
+        },
+        &(include_str!("../../runtime-library/src/lib.rs").to_string() + input),
     )
 }
 

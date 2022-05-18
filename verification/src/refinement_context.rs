@@ -19,7 +19,7 @@ use crate::refinements::{self, RefinementType};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RContext<'tcx, K : Debug + Eq + Hash + Display + SmtFmt = hir::HirId > {
-    pub formulas: Vec<syn::Expr>,
+    pub formulas: Vec<syn::Expr>, // stack of formulas
     pub types: HashMap<K, RefinementType<'tcx>>,
 }
 
@@ -31,12 +31,17 @@ impl<'a, K> RContext<'a, K > where K: Debug + Eq + Hash + Display + SmtFmt + Clo
         }
     }
 
-    pub fn add_formula(&mut self, formula: syn::Expr) {
+    pub fn push_formula(&mut self, formula: syn::Expr) {
         self.formulas.push(formula);
     }
 
-    pub fn without_formula(&self, formula: &syn::Expr) -> Self {
-        RContext { types: self.types.clone(), formulas: self.formulas.clone().into_iter().filter(|f| f != formula).collect() }
+    pub fn pop_formula(&self) -> Self {
+        let mut formulas = self.formulas.clone();
+        formulas.pop();
+        RContext {
+            formulas,
+            types: self.types.clone()
+        }
     }
 
     pub fn update_ty(&mut self, hir: K, ty: RefinementType<'a>) {

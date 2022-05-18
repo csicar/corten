@@ -343,7 +343,7 @@ where
                 // type check then_expr
                 let mut then_ctx_before = ctx.clone();
                 let then_cond: syn::Expr = symbolic_execute(&cond, tcx, ctx, local_ctx)?;
-                then_ctx_before.add_formula(then_cond.clone());
+                then_ctx_before.push_formula(then_cond.clone());
                 let (then_ty, then_ctx) =
                     type_of(then_expr, tcx, &then_ctx_before, local_ctx, solver, fresh)?;
                 trace!(?then_ctx, "then_ctx");
@@ -359,7 +359,7 @@ where
                 });
                 info!(else_cond=%quote!{#else_cond}, "else_cond_formula: ");
 
-                else_ctx_before.add_formula(else_cond.clone());
+                else_ctx_before.push_formula(else_cond.clone());
                 let (else_ty, else_ctx) =
                     type_of(else_expr, tcx, &else_ctx_before, local_ctx, solver, fresh)?;
                 trace!(?else_ctx, "else_ctx");
@@ -377,12 +377,12 @@ where
                     require_is_subtype_of(&else_ty, &then_ty, &else_ctx, tcx, solver)
                 {
                     match is_sub_context(
-                        &else_ctx.without_formula(&else_cond),
-                        &then_ctx.without_formula(&then_cond),
+                        &else_ctx.pop_formula(),
+                        &then_ctx.pop_formula(),
                         tcx,
                         solver,
                     ) {
-                        Ok(()) => (then_ty, else_ctx.without_formula(&else_cond)),
+                        Ok(()) => (then_ty, else_ctx.pop_formula()),
                         Err(err) => anyhow::bail!(
                             "types follow the sub typing constraints, but their contexts do not {}",
                             err
@@ -392,12 +392,12 @@ where
                     require_is_subtype_of(&then_ty, &else_ty, &then_ctx, tcx, solver)
                 {
                     match is_sub_context(
-                        &then_ctx.without_formula(&then_cond),
-                        &else_ctx.without_formula(&else_cond),
+                        &then_ctx.pop_formula(),
+                        &else_ctx.pop_formula(),
                         tcx,
                         solver,
                     ) {
-                        Ok(()) => (else_ty, then_ctx.without_formula(&then_cond)),
+                        Ok(()) => (else_ty, then_ctx.pop_formula()),
                         Err(err) => anyhow::bail!(
                             "types follow the sub typing constraints, but their contexts do not {}",
                             err
@@ -426,7 +426,7 @@ where
                 ExprKind::If(cond, then_expr, else_expr) => {
                     let mut then_ctx_before = ctx.clone();
                     let then_cond: syn::Expr = symbolic_execute(&cond, tcx, ctx, local_ctx)?;
-                    then_ctx_before.add_formula(then_cond.clone());
+                    then_ctx_before.push_formula(then_cond.clone());
 
                     let (_ty, ctx_after) =
                         type_of(then_expr, tcx, &then_ctx_before, local_ctx, solver, fresh)?;

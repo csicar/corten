@@ -80,9 +80,10 @@ This also works with variables declarations: In that case $`\Gamma'`$ contains a
 ## WHILE
 
 ```math
+\text{WHILE}
 \frac
-{\Gamma_!, c \vdash s \Rightarrow \Gamma_! \qquad \Gamma_b \preceq \Gamma_!}
-{\Gamma_b \vdash \texttt{while}(c) s \Rightarrow \Gamma_!,\neg c}
+  {\Gamma_!, c \vdash s \Rightarrow \Gamma_! \qquad \Gamma_b \preceq \Gamma_!}
+  {\Gamma_b \vdash \texttt{while}(c) s \Rightarrow \Gamma_!,\neg c}
 ```
 
 ## BinOp
@@ -96,7 +97,7 @@ This also works with variables declarations: In that case $`\Gamma'`$ contains a
       \Gamma \vdash e_2 : \{v:b \mid \varphi_2\} \Rightarrow \Gamma
     \end{aligned}
   }
-  {\Gamma \vdash e_1 + e_2 : \{ v: b \mid v == [e_1] + [e_2]\} \Rightarrow \Gamma'}
+  {\Gamma \vdash e_1 + e_2 : \{ v: b \mid v == [e_1] + [e_2]\} \Rightarrow \Gamma}
 ```
 
 Subtyping Rules as Implemented

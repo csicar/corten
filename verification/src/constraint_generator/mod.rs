@@ -104,7 +104,7 @@ where
                                     &tcx,
                                     middle_ty.clone(),
                                 )?;
-                                expected_end_state.add_ty(param.pat.hir_id, end);
+                            expected_end_state.add_ty(param.pat.hir_id, end);
                             start
                         }
                     };
@@ -138,7 +138,8 @@ where
                 &mut fresh,
             )?;
 
-            let actual_end_state = ctx_after.filter_hirs(|id| expected_end_state.types.contains_key(id));
+            let actual_end_state =
+                ctx_after.filter_hirs(|id| expected_end_state.types.contains_key(id));
 
             is_sub_context(&expected_end_state, &actual_end_state, tcx, &mut solver)?;
 
@@ -442,15 +443,31 @@ where
             _,
         ) => {
             let ctx_bang = match &expr.kind {
-                ExprKind::If(cond, then_expr, else_expr) => {
+                ExprKind::If(cond, then_expr, Some(else_expr)) => {
+                    match &else_expr.kind {
+                        ExprKind::Block(
+                            hir::Block {
+                                stmts:
+                                    [hir::Stmt {
+                                        kind: hir::StmtKind::Expr (Expr { kind: a, .. }),
+                                        ..
+                                    }],
+                                ..
+                            },
+                            None,
+                        ) => (),
+                        _other => panic!("unexpected else branch in loop: was not {{break;}}"),
+                    }
                     let mut then_ctx_before = ctx.clone();
                     let then_cond: syn::Expr = symbolic_execute(&cond, tcx, ctx, local_ctx)?;
                     then_ctx_before.push_formula(then_cond.clone());
 
                     let (_ty, ctx_after) =
                         type_of(then_expr, tcx, &then_ctx_before, local_ctx, solver, fresh)?;
-                    is_sub_context(ctx, &ctx_after, tcx, solver)?;
-                    ctx_after
+                    // pop `then_cond` off the path stack
+                    let ctx_bang = ctx_after.pop_formula();
+                    is_sub_context(&ctx_bang, ctx, tcx, solver)?;
+                    ctx_bang
                 }
                 _other => todo!(),
             };

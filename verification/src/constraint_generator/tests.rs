@@ -636,121 +636,127 @@ fn test_add_var_neg() {
     .unwrap();
 }
 
-#[test]
-fn test_loop() {
-    init_tracing();
-    with_item_and_rt_lib(
-        &quote! {
-            fn f() -> ty!{ v : i32 | v > 0 } {
-                let mut res = 1;
-                res as ty!{ s : i32 | s > 0 };
-                while res < 10 {
-                    res = (res + 1) as ty!{ a : i32 | a > 1 }; ()
+/// Loops
+///
+mod loops {
+    use super::*;
+    #[test]
+    fn test_loop_simple() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f() -> ty!{ v : i32 | v > 0 } {
+                    let mut res = 1;
+                    res as ty!{ s : i32 | s > 0 };
+                    while res < 10 {
+                        res = (res + 1) as ty!{ a : i32 | a > 0 };
+                        ()
+                    }
+                    res
                 }
-                res
             }
-        }
-        .to_string(),
-        |item, tcx| {
-            let ty = type_check_function(item, &tcx).unwrap();
-            pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
-        },
-    )
-    .unwrap();
-}
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
+            },
+        )
+        .unwrap();
+    }
 
-#[should_panic]
-#[test]
-fn test_loop_neg_trans() {
-    init_tracing();
-    with_item_and_rt_lib(
-        &quote! {
-            fn f() -> ty!{v : i32 | v > 0} {
-                let mut res = 1;
-                res as ty!{ s: i32 | s > 0};
-                while res < 10 {
-                    res = 0-1;
-                    ()
+    #[should_panic]
+    #[test]
+    fn test_loop_neg_trans() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f() -> ty!{v : i32 | v > 0} {
+                    let mut res = 1;
+                    res as ty!{ s: i32 | s > 0};
+                    while res < 10 {
+                        res = 0-1;
+                        ()
+                    }
+                    res
                 }
-                res
             }
-        }
-        .to_string(),
-        |item, tcx| {
-            let ty = type_check_function(item, &tcx).unwrap();
-        },
-    )
-    .unwrap();
-}
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
 
-#[should_panic]
-#[test]
-fn test_loop_neg_no_update() {
-    init_tracing();
-    with_item_and_rt_lib(
-        &quote! {
-            fn f() -> ty!{v : i32 | v < 0} {
-                let mut res = 1;
-                while res < 10 {
-                    ()
+    #[should_panic]
+    #[test]
+    fn test_loop_neg_no_update() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f() -> ty!{v : i32 | v < 0} {
+                    let mut res = 1;
+                    while res < 10 {
+                        ()
+                    }
+                    res
                 }
-                res
             }
-        }
-        .to_string(),
-        |item, tcx| {
-            let ty = type_check_function(item, &tcx).unwrap();
-        },
-    )
-    .unwrap();
-}
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
 
-#[should_panic]
-#[test]
-fn test_loop_neg_param() {
-    init_tracing();
-    with_item_and_rt_lib(
-        &quote! {
-            fn f(n: ty!{ n: i32 | n > 0 }) -> ty!{v : i32 | v >= n} {
-                let mut res = 1;
-                while res < 10 {
-                    ()
+    #[should_panic]
+    #[test]
+    fn test_loop_neg_param() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f(n: ty!{ n: i32 | n > 0 }) -> ty!{v : i32 | v >= n} {
+                    let mut res = 1;
+                    while res < 10 {
+                        ()
+                    }
+                    res
                 }
-                res
             }
-        }
-        .to_string(),
-        |item, tcx| {
-            let ty = type_check_function(item, &tcx).unwrap();
-        },
-    )
-    .unwrap();
-}
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
 
-#[test]
-fn test_loop_complex() {
-    init_tracing();
-    with_item_and_rt_lib(
-        &quote! {
-            fn bad_square(n: ty!{ nv : i32 | nv > 0 }) -> ty!{ v : i32 | v == n * n } {
-                let mut i = 0 as ty!{ iv : i32 | iv == 0};
-                let mut sum = 0 as ty!{ sv : i32 | sv == iv * nv };
-                i = i as ty!{iv2: i32 | iv2 <= nv};
-                while i < n {
-                    i = (i + 1) as ty!{ i2 : i32 | i2 <= nv };
-                    sum = (sum + n) as ty!{ s2 : i32 | s2 == iv * nv };
-                    ()
+    #[test]
+    fn test_loop_complex() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn bad_square(n: ty!{ nv : i32 | nv > 0 }) -> ty!{ v : i32 | v == n * n } {
+                    let mut i = 0 as ty!{ iv : i32 | iv == 0};
+                    let mut sum = 0 as ty!{ sv : i32 | sv == iv * nv };
+                    i = i as ty!{iv2: i32 | iv2 <= nv};
+                    while i < n {
+                        i = (i + 1) as ty!{ i2 : i32 | i2 <= nv };
+                        sum = (sum + n) as ty!{ s2 : i32 | s2 == iv * nv };
+                        ()
+                    }
+                    sum
                 }
-                sum
             }
-        }
-        .to_string(),
-        |item, tcx| {
-            let ty = type_check_function(item, &tcx).unwrap();
-            pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= n }");
-        },
-    )
-    .unwrap();
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= n }");
+            },
+        )
+        .unwrap();
+    }
 }
 
 /// Mutable Type Annotations

@@ -40,7 +40,7 @@ where
 
     pub fn pop_formula(&self) -> Self {
         let mut formulas = self.formulas.clone();
-        formulas.pop();
+        formulas.pop().unwrap();
         RContext {
             formulas,
             types: self.types.clone(),

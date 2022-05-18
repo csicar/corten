@@ -57,8 +57,17 @@ where
         self.types.insert(hir, ty);
     }
 
-    pub fn lookup_hir<'b>(&self, hir: &K) -> Option<RefinementType<'a>> {
+    pub fn lookup_hir(&self, hir: &K) -> Option<RefinementType<'a>> {
         self.types.get(&hir).map(|entry| entry.clone())
+    }
+
+    pub fn filter_hirs<F:  Fn(&K) -> bool>(&self, filter: F) -> RContext<'a, K> {
+        let mut types = self.types.clone();
+        types.retain(|key, _| filter(key));
+        RContext {
+            formulas: self.formulas.clone(),
+            types
+        }
     }
 
     pub fn encode_smt<P>(&self, solver: &mut Solver<P>, tcx: &TyCtxt<'a>) -> anyhow::Result<()> {
@@ -85,13 +94,19 @@ where
             .comment(&format!("decl for {}", ident.fmt_str(tcx)))
             .into_anyhow()?;
 
-        let smt_ty = match ty.base.kind() {
-            rustc_middle::ty::TyKind::Bool => "Bool",
-            rustc_middle::ty::TyKind::Char => todo!(),
-            rustc_middle::ty::TyKind::Int(_) => "Int", // todo: respect size
-            rustc_middle::ty::TyKind::Uint(_) => "Int", // Todo respect unsigned
-            other => todo!("don't know how to encode ty {:?} in smt", other),
-        };
+        fn encode_type<'tcx>(ty: &rustc_middle::ty::Ty<'tcx>) -> &'static str {
+            match ty.kind() {
+                rustc_middle::ty::TyKind::Bool => "Bool",
+                rustc_middle::ty::TyKind::Char => todo!(),
+                rustc_middle::ty::TyKind::Int(_) => "Int", // todo: respect size
+                rustc_middle::ty::TyKind::Uint(_) => "Int", // Todo respect unsigned
+                rustc_middle::ty::TyKind::Ref(_region, ref_type, _mut) => encode_type(ref_type),
+                other => todo!("don't know how to encode ty {:?} in smt", other),
+            }
+        }
+
+        let smt_ty = encode_type(&ty.base);
+
         solver.declare_const(&ty.binder, smt_ty).into_anyhow()?;
         Ok(())
     }
@@ -142,7 +157,7 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
     solver: &mut Solver<P>,
 ) -> anyhow::Result<()> {
     trace!(super_ctx=%(super_ctx.with_tcx(tcx)), sub_ctx=%(sub_ctx.with_tcx(tcx)), "check");
-    solver.comment("checking is_sub_context ...");
+    solver.comment("checking is_sub_context ...").into_anyhow()?;
     solver.push(1).into_anyhow()?;
 
     assert_eq!(
@@ -184,7 +199,7 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
         .collect::<Vec<_>>()
         .join("\n    ");
     solver
-        .assert(&format!("(not (and {}))", super_term))
+        .assert(&format!("(not (and true {}))", super_term))
         .into_anyhow()?;
 
     solver.comment("</SuperCtx>").into_anyhow()?;

@@ -52,6 +52,43 @@ impl<'a> RefinementType<'a> {
     }
 }
 
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MutRefinementType<'tcx> {
+    pub start: RefinementType<'tcx>,
+    pub end: RefinementType<'tcx>,
+}
+
+impl<'tcx> MutRefinementType<'tcx> {
+    pub fn from_type_alias(
+        raw_type: &hir::Ty<'tcx>,
+        tcx: &TyCtxt<'tcx>,
+        base_ty: Ty<'tcx>,
+    ) -> anyhow::Result<MutRefinementType<'tcx>> {
+        if let Some((_base, binder1, raw_predicate1, binder2, raw_predicate2)) = raw_type.try_into_mut_refinement(tcx) {
+            let predicate1 = parse_predicate(raw_predicate1.as_str())?;
+            let predicate2 = parse_predicate(raw_predicate2.as_str())?;
+            Ok(MutRefinementType {
+                start: RefinementType {
+                    base: base_ty,
+                    binder: binder1.as_str().to_string(),
+                    predicate: predicate1
+                },
+                end: RefinementType {
+                    base: base_ty,
+                    binder: binder2.as_str().to_string(),
+                    predicate: predicate2
+                }
+            })
+        } else {
+            Err(anyhow!(
+                "type {:?} does not seem to be a mutable refinement type, when one was expected",
+                raw_type
+            ))
+        }
+    }
+}
+
 fn rename_ref_in_expr(
     expr: &syn::Expr,
     old_name: &str,

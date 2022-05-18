@@ -752,3 +752,47 @@ fn test_loop_complex() {
     )
     .unwrap();
 }
+
+/// Mutable Type Annotations
+///
+mod mut_ty_annotation {
+    use super::*;
+    #[test]
+    fn test_mut_ann_pos() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn bad_square(n: &mut ty!{ nv : i32 | true => na | na > 0 }) -> ty!{ v : i32 | true } {
+                    *n = 2;
+                    0
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | true }");
+            },
+        )
+        .unwrap();
+    }
+
+    #[should_panic]
+    #[test]
+    fn test_mut_ann_neg() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn bad_square(n: &mut ty!{ nv : i32 | true => na | na > 0 }) -> ty!{ v : i32 | true } {
+                    *n = 0;
+                    0
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | true }");
+            },
+        )
+        .unwrap();
+    }
+}

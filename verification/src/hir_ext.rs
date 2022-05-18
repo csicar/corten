@@ -14,6 +14,14 @@ pub trait TyExt<'a> {
         &'a self,
         tcx: &'a TyCtxt,
     ) -> Option<(&'a hir::Ty, span::Symbol, span::Symbol)>;
+
+    /// Try Convert a Type Alias `MutRefinement<i32, "b", "b > 0", "b2", "b2 < 0"> 
+    /// into its parts: (i32, "b", "b > 0", "b2", "b2 < 0")
+    /// Return None if `self` is not an alias
+    fn try_into_mut_refinement(
+        &'a self,
+        tcx: &'a TyCtxt
+    ) -> Option<(&'a hir::Ty, span::Symbol, span::Symbol, span::Symbol, span::Symbol)>;
 }
 
 impl<'a> TyExt<'a> for hir::Ty<'a> {
@@ -54,6 +62,67 @@ impl<'a> TyExt<'a> for hir::Ty<'a> {
                         .try_into_const_string(&tcx)
                         .expect("could not extract predicate");
                     Some((base_type, binder, predicate))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    fn try_into_mut_refinement(
+        &'a self,
+        tcx: &'a TyCtxt
+    ) -> Option<(&'a hir::Ty, span::Symbol, span::Symbol, span::Symbol, span::Symbol)> {
+        if let hir::Ty {
+            kind:
+                hir::TyKind::Rptr(hir::Lifetime { name: _, ..}, hir::MutTy {
+                    ty: hir::Ty {
+                        kind: hir::TyKind::Path(hir::QPath::Resolved(
+                            _,
+                            hir::Path {
+                                res: hir::def::Res::Def(hir::def::DefKind::TyAlias, def_id),
+                                segments,
+                                ..
+                            },
+                        )), ..
+                    },
+                    mutbl: hir::Mutability::Mut
+                })
+                ,
+            ..
+        } = self
+        {
+            // TODO: find Refinement alias properly
+            // tcx.get_diagnostic_name
+            if format!("{:?}", def_id).ends_with("]::MutRefinement)") {
+                if let Some(hir::PathSegment {
+                    args:
+                        Some(hir::GenericArgs {
+                            args:
+                                [hir::GenericArg::Type(base_type), binder_const_arg1, body_const_arg1, binder_const_arg2, body_const_arg2],
+                            ..
+                        }),
+                    ..
+                }) = segments.last()
+                {
+                    let binder1 = binder_const_arg1
+                        .try_into_const_string(&tcx)
+                        .expect("could not extract binder 1");
+                    let predicate1 = body_const_arg1
+                        .try_into_const_string(&tcx)
+                        .expect("could not extract predicate 1");
+
+                    let binder2 = binder_const_arg2
+                        .try_into_const_string(&tcx)
+                        .expect("could not extract binder 2");
+                    let predicate2 = body_const_arg2
+                        .try_into_const_string(&tcx)
+                        .expect("could not extract predicate 2");
+                    Some((base_type, binder1, predicate1, binder2, predicate2))
                 } else {
                     None
                 }

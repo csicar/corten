@@ -1,9 +1,11 @@
+use std::collections::HashMap;
 use std::io::Write;
 use std::time::SystemTime;
 
 use crate::refinement_context::is_sub_context;
 use crate::refinement_context::RContext;
 use crate::refinements;
+use crate::refinements::MutRefinementType;
 use crate::smtlib_ext::SmtResExt;
 use anyhow::anyhow;
 
@@ -86,13 +88,27 @@ where
 
             // get refinements for inputs
             let mut ctx = RContext::<hir::HirId>::new();
+            let mut expected_end_state = RContext::<hir::HirId>::new();
             for ((hir_ty, middle_ty), param) in inputs.iter().zip(fn_sig.inputs()).zip(body.params)
             {
-                let refinement = RefinementType::from_type_alias(hir_ty, &tcx, middle_ty.clone())?;
-
-                trace!(%refinement, %param.pat.hir_id, "input type");
-
-                ctx.add_ty(param.pat.hir_id, refinement)
+                let start_refinement =
+                    match RefinementType::from_type_alias(hir_ty, &tcx, middle_ty.clone()) {
+                        Ok(refinement) => {
+                            trace!(%refinement, %param.pat.hir_id, "immut input type");
+                            refinement
+                        }
+                        Err(_) => {
+                            let MutRefinementType { start, end } =
+                                MutRefinementType::from_type_alias(
+                                    hir_ty,
+                                    &tcx,
+                                    middle_ty.clone(),
+                                )?;
+                                expected_end_state.add_ty(param.pat.hir_id, end);
+                            start
+                        }
+                    };
+                ctx.add_ty(param.pat.hir_id, start_refinement)
             }
             // let ctx = Rc::new(ctx);
 
@@ -121,7 +137,10 @@ where
                 &mut solver,
                 &mut fresh,
             )?;
-            //TODO: check actual_ctx ≼ parameter_after_ctx
+
+            let actual_end_state = ctx_after.filter_hirs(|id| expected_end_state.types.contains_key(id));
+
+            is_sub_context(&expected_end_state, &actual_end_state, tcx, &mut solver)?;
 
             trace!(%actual_ty, "actual function type");
             require_is_subtype_of(&actual_ty, &expected_type, &ctx_after, tcx, &mut solver)?;
@@ -447,28 +466,24 @@ where
         ExprKind::Loop(_, _, _, _) => todo!(),
         ExprKind::Match(_, _, _) => todo!(),
         ExprKind::Closure(_, _, _, _, _) => todo!(),
-        ExprKind::Assign(lhs, rhs, _span) => match &lhs.kind {
-            ExprKind::Path(path) => {
-                let res = local_ctx.qpath_res(&path, lhs.hir_id);
-                match res {
-                    hir::def::Res::Local(dest_hir_id) => {
-                        let (rhs_ty, mut after_rhs) =
-                            type_of(rhs, tcx, ctx, local_ctx, solver, fresh)?;
-                        let ty_in_context = ctx.lookup_hir(&dest_hir_id).ok_or(anyhow!(
-                            "could not find refinement type definition of {} in refinement context",
-                            tcx.hir().node_to_string(dest_hir_id)
-                        ))?;
-                        after_rhs
-                            .update_ty(dest_hir_id, rhs_ty.rename_binder(&ty_in_context.binder)?);
-                        trace!(%rhs_ty, after_rhs=%after_rhs.with_tcx(tcx), "rhs_ty is");
-                        anyhow::Ok((rhs_ty, after_rhs))
-                    }
-                    hir::def::Res::Def(_, _) => todo!(),
-                    other => anyhow::bail!("reference to unexpected resolution {:?}", other),
+        ExprKind::Assign(lhs, rhs, _span) => {
+            let dest_hir_id = match &lhs.kind {
+                ExprKind::Path(_path) => lhs.try_into_path_hir_id(local_ctx)?,
+                ExprKind::Unary(hir::UnOp::Deref, inner) => {
+                    inner.try_into_path_hir_id(local_ctx)?
                 }
-            }
-            other => todo!(),
-        },
+                other => todo!("don't know how to assign to {:?}", other),
+            };
+
+            let (rhs_ty, mut after_rhs) = type_of(rhs, tcx, ctx, local_ctx, solver, fresh)?;
+            let ty_in_context = ctx.lookup_hir(&dest_hir_id).ok_or(anyhow!(
+                "could not find refinement type definition of {} in refinement context",
+                tcx.hir().node_to_string(dest_hir_id)
+            ))?;
+            after_rhs.update_ty(dest_hir_id, rhs_ty.rename_binder(&ty_in_context.binder)?);
+            trace!(%rhs_ty, after_rhs=%after_rhs.with_tcx(tcx), "rhs_ty is");
+            anyhow::Ok((rhs_ty, after_rhs))
+        }
         ExprKind::AssignOp(_, _, _) => todo!(),
         ExprKind::Field(_, _) => todo!(),
         ExprKind::Index(_, _) => todo!(),

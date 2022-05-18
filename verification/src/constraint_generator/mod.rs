@@ -18,7 +18,6 @@ use rustc_hir::{Expr, ExprKind};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::ty::TypeckResults;
 use rustc_span::source_map::Spanned;
-use syn::Token;
 use tracing::error;
 
 use syn::parse_quote;
@@ -326,11 +325,6 @@ where
             // Why ctx_after_expr vs. ctx: For `a += 2 as ty!{v | v > 2}`, Type of `a += 2` will need to be a subtype
             // in the context of its execution effect (\Gamma' i.e. ctx_after_expr)
             require_is_subtype_of(&expr_ty, &super_ty, &ctx, tcx, solver)?;
-
-            match expr.try_into_path_hir_id(local_ctx) {
-                Ok(dest_hir_id) => ctx_after.update_ty(dest_hir_id, super_ty.clone()),
-                Err(err) => warn!("no hir id found to set. Err: {}", err),
-            }
 
             anyhow::Ok((super_ty, ctx_after))
         }

@@ -33,7 +33,7 @@ impl<F: for<'a> FnMut(hir::Node<'a>, TyCtxt<'a>) -> () + Send> rustc_driver::Cal
 {
     fn config(&mut self, config: &mut Config) {
         config.input = config::Input::Str {
-            name: source_map::FileName::Custom("file_under_test_name.rs".to_string()),
+            name: source_map::FileName::Custom("fud.rs".to_string()),
             input: self.input.clone(),
         };
         config.output_dir = Some(path::PathBuf::from("/tmp/test-rustc"));

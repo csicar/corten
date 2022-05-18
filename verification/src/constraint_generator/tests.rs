@@ -64,7 +64,7 @@ fn test_subtype_lit_pos() {
 
             type Refinement<T, const B: &'static str, const R: &'static str> = T;
 
-            fn f() ->i32{ 1 as ty!{ x : i32 | x > 0 } }
+            fn f() ->i32{ 1 as Refinement<i32, "x", "x > 0">}
         }
         .to_string(),
         |expr, tcx, local_ctx| {
@@ -90,7 +90,7 @@ fn test_subtype_lit_neg() {
 
             type Refinement<T, const B: &'static str, const R: &'static str> = T;
 
-            fn f() -> i32 { 1 as ty!{ x : i32 | x < 0 } }
+            fn f() -> i32 { 1 as Refinement<i32, "x", "x < 0"> }
         }
         .to_string(),
         |expr, tcx, local_ctx| {
@@ -114,7 +114,7 @@ fn test_subtype_lit_pos_nested() {
 
             type Refinement<T, const B: &'static str, const R: &'static str> = T;
 
-            fn f() ->i32{ (3 as ty!{ x : i32 | x > 2 }) as ty!{ y : i32 | y > 1 } }
+            fn f() ->i32{ (3 as Refinement<i32, "x", "x > 2">) as Refinement<i32, "y", "y > 1"> }
         }
         .to_string(),
         |expr, tcx, local_ctx| {
@@ -154,8 +154,6 @@ fn test_type_function() {
 fn test_type_function_invalid() {
     with_item_and_rt_lib(
         &quote! {
-            type Refinement<T, const B: &'static str, const R: &'static str> = T;
-
             fn f(a : ty!{ x : i32 | x > 0 }) -> ty!{ v : i32 | v > 1 } {
                 a
             }
@@ -191,8 +189,6 @@ fn test_var_with_eq() {
 fn test_var_with_eq_neg() {
     with_item_and_rt_lib(
         &quote! {
-            type Refinement<T, const B: &'static str, const R: &'static str> = T;
-
             fn f(a : ty!{ av : i32 | true }) -> ty!{ v : i32 | v == av + 1 } {
                 a
             }
@@ -227,8 +223,6 @@ fn test_type_ite_neg_simple() {
 fn test_type_ite_partial() {
     with_item_and_rt_lib(
         &quote! {
-            type Refinement<T, const B: &'static str, const R: &'static str> = T;
-
             fn f(a : ty!{ x : i32 | x > 0 }) -> ty!{ v : i32 | v > 0 } {
                 if a > 1 { a } else { 1 as ty!{ y : i32 | y > 0 } }
                 //         ^--- x > 1 |- {==x} ≼ {x > 0}
@@ -264,8 +258,6 @@ fn test_type_ite() {
 fn test_type_ite_false() {
     with_item_and_rt_lib(
         &quote! {
-            type Refinement<T, const B: &'static str, const R: &'static str> = T;
-
             fn f(a : ty!{ x : i32 | x > 0 }) -> ty!{ v : i32 | v > 0 } {
                 if false { 0 } else { 1 as ty!{ y : i32 | y > 0 } }
             }
@@ -301,8 +293,6 @@ fn test_type_ite_true_cond_by_ctx() {
 fn test_type_max() {
     with_item_and_rt_lib(
         &quote! {
-            type Refinement<T, const B: &'static str, const R: &'static str> = T;
-
             fn max(a : ty!{ av: i32 | true}, b: ty!{ bv: i32 | true}) -> ty!{ v: i32 | v >= av && v >= bv} {
                 if a > b { a as ty!{ x : i32 | x >= av && x >= bv } } else { b }
             }
@@ -366,7 +356,7 @@ fn test_assign_single() {
                 RContext {
                     // formulas
                     // types
-                    local mut a (hir_id=HirId { owner: DefId(0:7 ~ rust_out[9149]::f), local_id: 4 }) : ty!{ _2 : i32 | _2 == 8 }
+                    <fud.rs>:4:135: 4:140 (#0) local mut a (hir_id=HirId { owner: DefId(0:7 ~ rust_out[9149]::f), local_id: 4 }) : ty!{ _0 : i32 | _0 == 8 }
                 }
                 "));
             pretty::assert_eq!(ty.to_string(), "ty!{ _3 : i32 | _3 == 0 }");
@@ -494,7 +484,7 @@ fn test_subtype_ctx_neg() {
                 let mut a = 2;
                 if b > 0 {
                     a = 0; 0
-                    //- `a` is set to 0: contraticts "v > 0"
+                    //- `a` is set to 0: contradicts "v > 0"
                 } else { 0
                 };
                 a // but `a` is returned here
@@ -510,8 +500,9 @@ fn test_subtype_ctx_neg() {
 }
 
 
-#[test_log::test]
-fn test_subtype_ctx() {
+#[test]
+fn test_subtype_ctx_pos() {
+    init_tracing();
     with_item_and_rt_lib(
         &quote! {
             fn max(b: ty!{ b : i32 | true }) -> ty!{ v : i32 | v > 0 } {
@@ -519,7 +510,8 @@ fn test_subtype_ctx() {
                 if !(b > 0) {
                     0
                 } else { 
-                    a = b as ty!{ b2 : i32 | b2 > 0 }; 0
+                    a = b as ty!{ b2 : i32 | b2 > 0 };
+                    0
                 };
                 a
             }
@@ -547,7 +539,7 @@ fn test_update_type() {
         .to_string(),
         |item, tcx| {
             let ty = type_check_function(item, &tcx).unwrap();
-            pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= a && v >= b }");
+            pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
         },
     )
     .unwrap();
@@ -738,32 +730,6 @@ fn test_loop_neg_param() {
     )
     .unwrap();
 }
-
-
-#[should_panic]
-#[test]
-fn test_loop_neg_unrelated_update() {
-    init_tracing();
-    with_item_and_rt_lib(
-        &quote! {
-            fn f(n: ty!{ n: i32 | n > 0 }) -> ty!{v : i32 | v >= n} {
-                let mut i = 0;
-                while 1 < 10 {
-                    i = i + 1;
-                    ()
-                }
-                1
-            }
-        }
-        .to_string(),
-        |item, tcx| {
-            let ty = type_check_function(item, &tcx).unwrap();
-        },
-    )
-    .unwrap();
-}
-
-
 
 #[test]
 fn test_loop_complex() {

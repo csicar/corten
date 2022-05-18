@@ -598,6 +598,7 @@ fn require_is_subtype_of<'tcx, P>(
         super_ty,
         ctx.with_tcx(tcx)
     );
+    solver.comment("checking is_subtype_of").into_anyhow()?;
     solver.push(1).into_anyhow()?;
     ctx.encode_smt(solver, tcx)?;
 
@@ -628,7 +629,7 @@ fn require_is_subtype_of<'tcx, P>(
     trace!("checking: {} ≼  {}", sub_ty, super_ty);
     let is_sat = solver.check_sat().into_anyhow()?;
     solver
-        .comment(&format!("done! is sat: {}", is_sat))
+        .comment(&format!("done checking is_subtype_of! is sat: {}", is_sat))
         .into_anyhow()?;
 
     solver.pop(2).into_anyhow()?;

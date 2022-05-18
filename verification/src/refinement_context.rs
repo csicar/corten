@@ -135,6 +135,7 @@ pub fn is_sub_context<'tcx, 'a, K : Debug + Eq + Hash + Display + SmtFmt + Clone
     solver: &mut Solver<P>,
 ) -> anyhow::Result<()> {
     trace!(super_ctx=%(super_ctx.with_tcx(tcx)), sub_ctx=%(sub_ctx.with_tcx(tcx)), "check");
+    solver.comment("checking is_sub_context ...");
     solver.push(1).into_anyhow()?;
 
     assert_eq!(
@@ -179,10 +180,9 @@ pub fn is_sub_context<'tcx, 'a, K : Debug + Eq + Hash + Display + SmtFmt + Clone
     solver.flush()?;
     let is_sat = solver.check_sat().into_anyhow()?;
     solver
-        .comment(&format!("done! is sat: {}", is_sat))
+        .comment(&format!("done checking is_sub_context! is sat: {}", is_sat))
         .into_anyhow()?;
     solver.pop(1).into_anyhow()?;
-
     if is_sat {
         Err(anyhow::anyhow!("{} is not a sub context of {}, which is required here", sub_ctx.with_tcx(tcx), super_ctx.with_tcx(tcx)))
     } else {

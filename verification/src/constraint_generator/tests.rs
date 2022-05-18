@@ -1,9 +1,9 @@
 use super::*;
 use crate::test_with_rustc::{with_expr, with_item_and_rt_lib};
 use pretty_assertions as pretty;
-use unindent::unindent;
 use quote::quote;
 use rsmt2::SmtConf;
+use unindent::unindent;
 
 fn init_tracing() {
     let subscriber = ::tracing_subscriber::FmtSubscriber::builder()
@@ -46,8 +46,9 @@ fn test_type_of_lit() {
             let mut solver = conf.spawn(()).unwrap();
 
             let ctx = RContext::<hir::HirId>::new();
-            
-            let (ty, ctx_after) = type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
+
+            let (ty, ctx_after) =
+                type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
             pretty::assert_eq!(ty.to_string(), "ty!{ _0 : i32 | _0 == 1 }");
             pretty::assert_eq!(ctx, ctx_after);
             info!("{}", ty);
@@ -72,7 +73,8 @@ fn test_subtype_lit_pos() {
             let mut solver = conf.spawn(()).unwrap();
             solver.path_tee("/tmp/z3").unwrap();
             let ctx = RContext::<hir::HirId>::new();
-            let (ty, ctx_after) = type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
+            let (ty, ctx_after) =
+                type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
             pretty::assert_eq!(ty.to_string(), "ty!{ x : i32 | x > 0 }");
             pretty::assert_eq!(ctx, ctx_after);
             info!("expr has type {}", ty);
@@ -122,8 +124,9 @@ fn test_subtype_lit_pos_nested() {
             let mut solver = conf.spawn(()).unwrap();
             solver.path_tee("/tmp/z3").unwrap();
             let ctx = RContext::<hir::HirId>::new();
-            
-            let (ty, ctx_after) = type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
+
+            let (ty, ctx_after) =
+                type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
             pretty::assert_eq!(ty.to_string(), "ty!{ y : i32 | y > 1 }");
             pretty::assert_eq!(ctx, ctx_after);
             info!("expr has type {}", ty);
@@ -312,11 +315,11 @@ fn test_type_max_neg() {
     with_item_and_rt_lib(
         &quote![
             fn f(
-                a: ty!{ av : i32 | true },
-                b: ty!{ bv : i32 | true },
-            ) -> ty!{ v : i32 | v >= av && v < bv } {
+                a: ty! { av : i32 | true },
+                b: ty! { bv : i32 | true },
+            ) -> ty! { v : i32 | v >= av && v < bv } {
                 if a > b {
-                    a as ty!{ x : i32 | x >= av && x < bv }
+                    a as ty! { x : i32 | x >= av && x < bv }
                 } else {
                     b
                 }
@@ -332,7 +335,7 @@ fn test_type_max_neg() {
 }
 
 /// Mutability
-/// 
+///
 
 #[test_log::test]
 fn test_assign_single() {
@@ -404,7 +407,6 @@ fn test_assign_pred() {
     .unwrap();
 }
 
-
 #[test_log::test]
 fn test_assign_non_lit() {
     with_item_and_rt_lib(
@@ -424,7 +426,6 @@ fn test_assign_non_lit() {
     )
     .unwrap();
 }
-
 
 #[test_log::test]
 fn test_assign_ite() {
@@ -449,7 +450,6 @@ fn test_assign_ite() {
     .unwrap();
 }
 
-
 #[should_panic]
 #[test_log::test]
 fn test_assign_ite_neg() {
@@ -473,11 +473,9 @@ fn test_assign_ite_neg() {
     .unwrap();
 }
 
-
 #[should_panic]
 #[test]
 fn test_subtype_ctx_neg() {
-    
     with_item_and_rt_lib(
         &quote! {
             fn max(b: ty!{ bv : i32 | true }) -> ty!{ v : i32 | v > 0 } {
@@ -499,7 +497,6 @@ fn test_subtype_ctx_neg() {
     .unwrap();
 }
 
-
 #[test]
 fn test_subtype_ctx_pos() {
     init_tracing();
@@ -509,7 +506,7 @@ fn test_subtype_ctx_pos() {
                 let mut a = 2;
                 if !(b > 0) {
                     0
-                } else { 
+                } else {
                     a = b as ty!{ b2 : i32 | b2 > 0 };
                     0
                 };
@@ -582,7 +579,6 @@ fn test_add_lit() {
     )
     .unwrap();
 }
-
 
 #[should_panic]
 #[test]

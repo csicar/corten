@@ -73,7 +73,10 @@ pub trait ExprExt<'a> {
     fn try_into_symbol(&'a self) -> Option<span::Symbol>;
 
     /// tries to turn Expr `my_identifier` into the HirId that `my_identifier` refers to
-    fn try_into_path_hir_id<'tcx>(&'a self, typeck_results: &TypeckResults<'tcx>) -> anyhow::Result<hir::HirId>;
+    fn try_into_path_hir_id<'tcx>(
+        &'a self,
+        typeck_results: &TypeckResults<'tcx>,
+    ) -> anyhow::Result<hir::HirId>;
 
     /// Pretty prints the Expression
     fn pretty_print(&'a self) -> String;
@@ -106,7 +109,10 @@ impl<'a> ExprExt<'a> for hir::Expr<'a> {
         }
     }
 
-    fn try_into_path_hir_id<'tcx>(&'a self, local_ctx: &TypeckResults<'tcx>, ) -> anyhow::Result<hir::HirId> {
+    fn try_into_path_hir_id<'tcx>(
+        &'a self,
+        local_ctx: &TypeckResults<'tcx>,
+    ) -> anyhow::Result<hir::HirId> {
         match &self.kind {
             ExprKind::Path(path) => {
                 let res = local_ctx.qpath_res(&path, self.hir_id);
@@ -116,7 +122,7 @@ impl<'a> ExprExt<'a> for hir::Expr<'a> {
                     other => anyhow::bail!("reference to unexpected resolution {:?}", other),
                 }
             }
-            other => anyhow::bail!("given expr in not a path ({:?})", other)
+            other => anyhow::bail!("given expr in not a path ({:?})", other),
         }
     }
 

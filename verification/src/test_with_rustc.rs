@@ -13,12 +13,12 @@ use rustc_middle::ty::TyCtxt;
 use rustc_middle::ty::TypeckResults;
 use rustc_session::config;
 use rustc_span::source_map;
-use tracing::warn;
 use std::path;
 use std::process;
 use std::str;
 use std::sync::RwLock;
 use tracing::error;
+use tracing::warn;
 
 use quote::quote;
 

@@ -92,13 +92,15 @@ fn rename_ref_in_expr(
         syn::Expr::Macro(_) => todo!(),
         syn::Expr::Match(_) => todo!(),
         syn::Expr::MethodCall(_) => todo!(),
-        syn::Expr::Paren(syn::ExprParen { attrs, paren_token, expr : inner_expr}) => {
-            Ok(syn::Expr::Paren(syn::ExprParen {
-                expr: Box::new(rename_ref_in_expr(inner_expr, old_name, new_name)?),
-                attrs: attrs.clone(),
-                paren_token: paren_token.clone()
-            }))
-        },
+        syn::Expr::Paren(syn::ExprParen {
+            attrs,
+            paren_token,
+            expr: inner_expr,
+        }) => Ok(syn::Expr::Paren(syn::ExprParen {
+            expr: Box::new(rename_ref_in_expr(inner_expr, old_name, new_name)?),
+            attrs: attrs.clone(),
+            paren_token: paren_token.clone(),
+        })),
         syn::Expr::Path(
             expr_path @ syn::ExprPath {
                 path: syn::Path { segments, .. },
@@ -265,14 +267,14 @@ fn parse_predicate(raw_predicate: &str) -> anyhow::Result<syn::Expr> {
 }
 #[cfg(test)]
 mod test {
-    use syn::parse_quote;
     use pretty_assertions as pretty;
+    use syn::parse_quote;
 
     use super::*;
 
     #[test_log::test]
     fn test_encode_let_binding() {
-        let input : Vec<_> = parse_quote! { let _t = a > 0; };
+        let input: Vec<_> = parse_quote! { let _t = a > 0; };
         let output = encode_let_binding_smt(&input[0]).unwrap();
         pretty::assert_eq!(output, "(|_t| (> |a| 0))");
     }

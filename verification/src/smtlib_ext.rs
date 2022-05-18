@@ -3,7 +3,7 @@ use rsmt2::SmtRes;
 use anyhow::anyhow;
 
 pub trait SmtResExt<T> {
-  fn into_anyhow(self: Self) -> anyhow::Result<T>;
+    fn into_anyhow(self: Self) -> anyhow::Result<T>;
 }
 
 impl<T> SmtResExt<T> for SmtRes<T> {

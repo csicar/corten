@@ -1,14 +1,10 @@
-
-
-
-use quote::{ToTokens};
+use quote::ToTokens;
 use syn::{
     self, parenthesized,
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
     Expr, Ident, Macro, Result, Token, Type,
 };
-
 
 #[derive(Debug)]
 pub struct Refinement {
@@ -20,7 +16,7 @@ pub struct Refinement {
 impl Parse for Refinement {
     /// Parses `{ a: Int | a > 20 }`
     fn parse(input: ParseStream) -> Result<Self> {
-        let binder : Ident = input.parse()?;
+        let binder: Ident = input.parse()?;
         input.parse::<Token![:]>()?;
         println!("input  {}", input);
         let ty: Type = input.parse()?;
@@ -28,7 +24,11 @@ impl Parse for Refinement {
 
         input.parse::<Token![|]>()?;
         let refinement = input.parse()?;
-        Ok(Refinement { ty, binder, refinement })
+        Ok(Refinement {
+            ty,
+            binder,
+            refinement,
+        })
     }
 }
 

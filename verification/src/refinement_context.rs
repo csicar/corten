@@ -5,25 +5,28 @@ use std::{
 };
 
 use crate::smtlib_ext::SmtResExt;
-use quote::{quote, format_ident};
+use quote::{format_ident, quote};
 use rsmt2::Solver;
 use rustc_hir as hir;
 use rustc_hir_pretty::id_to_string;
 use rustc_middle::ty::TyCtxt;
-use syn::parse_quote;
-use tracing::{trace, instrument};
 use std::fmt::Debug;
 use std::hash::Hash;
+use syn::parse_quote;
+use tracing::{instrument, trace};
 
 use crate::refinements::{self, RefinementType};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RContext<'tcx, K : Debug + Eq + Hash + Display + SmtFmt = hir::HirId > {
+pub struct RContext<'tcx, K: Debug + Eq + Hash + Display + SmtFmt = hir::HirId> {
     pub formulas: Vec<syn::Expr>, // stack of formulas
     pub types: HashMap<K, RefinementType<'tcx>>,
 }
 
-impl<'a, K> RContext<'a, K > where K: Debug + Eq + Hash + Display + SmtFmt + Clone {
+impl<'a, K> RContext<'a, K>
+where
+    K: Debug + Eq + Hash + Display + SmtFmt + Clone,
+{
     pub fn new() -> RContext<'a> {
         RContext {
             formulas: Vec::new(),
@@ -40,7 +43,7 @@ impl<'a, K> RContext<'a, K > where K: Debug + Eq + Hash + Display + SmtFmt + Clo
         formulas.pop();
         RContext {
             formulas,
-            types: self.types.clone()
+            types: self.types.clone(),
         }
     }
 
@@ -76,7 +79,7 @@ impl<'a, K> RContext<'a, K > where K: Debug + Eq + Hash + Display + SmtFmt + Clo
         solver: &mut Solver<P>,
         ident: &K,
         ty: &RefinementType<'a>,
-        tcx: &TyCtxt<'a>
+        tcx: &TyCtxt<'a>,
     ) -> anyhow::Result<()> {
         solver
             .comment(&format!("decl for {}", ident.fmt_str(tcx)))
@@ -87,16 +90,20 @@ impl<'a, K> RContext<'a, K > where K: Debug + Eq + Hash + Display + SmtFmt + Clo
             rustc_middle::ty::TyKind::Char => todo!(),
             rustc_middle::ty::TyKind::Int(_) => "Int", // todo: respect size
             rustc_middle::ty::TyKind::Uint(_) => "Int", // Todo respect unsigned
-            other => todo!("don't know how to encode ty {:?} in smt", other)
+            other => todo!("don't know how to encode ty {:?} in smt", other),
         };
         solver.declare_const(&ty.binder, smt_ty).into_anyhow()?;
         Ok(())
     }
 
-    pub fn encode_declarations<P>(&self, solver: &mut Solver<P>, tcx: &TyCtxt<'a>) -> anyhow::Result<()> {
-        self.types.iter().try_for_each(|(ident, ty)| {
-            self.encode_declaration(solver, ident, ty, tcx)
-        })?;
+    pub fn encode_declarations<P>(
+        &self,
+        solver: &mut Solver<P>,
+        tcx: &TyCtxt<'a>,
+    ) -> anyhow::Result<()> {
+        self.types
+            .iter()
+            .try_for_each(|(ident, ty)| self.encode_declaration(solver, ident, ty, tcx))?;
         Ok(())
     }
 
@@ -128,7 +135,7 @@ impl<'a, K> RContext<'a, K > where K: Debug + Eq + Hash + Display + SmtFmt + Clo
 }
 
 #[instrument(skip_all, ret)]
-pub fn is_sub_context<'tcx, 'a, K : Debug + Eq + Hash + Display + SmtFmt + Clone, P>(
+pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone, P>(
     super_ctx: &RContext<'tcx, K>,
     sub_ctx: &RContext<'tcx, K>,
     tcx: &TyCtxt<'tcx>,
@@ -151,7 +158,11 @@ pub fn is_sub_context<'tcx, 'a, K : Debug + Eq + Hash + Display + SmtFmt + Clone
 
             let super_binder = format_ident!("{}", &super_ty.binder);
             let sub_binder = format_ident!("{}", &sub_ty.binder);
-            solver.assert(refinements::encode_smt(&parse_quote!{ #sub_binder == #super_binder })).into_anyhow()?;
+            solver
+                .assert(refinements::encode_smt(
+                    &parse_quote! { #sub_binder == #super_binder },
+                ))
+                .into_anyhow()?;
         }
         anyhow::Ok(())
     })?;
@@ -160,13 +171,21 @@ pub fn is_sub_context<'tcx, 'a, K : Debug + Eq + Hash + Display + SmtFmt + Clone
 
     solver.comment("<SuperCtx>").into_anyhow()?;
 
-    
-    let super_term = super_ctx.types.iter().map(|(_, ty)| {
-        refinements::encode_smt(&ty.predicate)
-    }).chain(super_ctx.formulas.iter().map(|formula| {
-        refinements::encode_smt(formula)
-    })).collect::<Vec<_>>().join("\n    ");
-    solver.assert(&format!("(not (and {}))", super_term)).into_anyhow()?;
+    let super_term = super_ctx
+        .types
+        .iter()
+        .map(|(_, ty)| refinements::encode_smt(&ty.predicate))
+        .chain(
+            super_ctx
+                .formulas
+                .iter()
+                .map(|formula| refinements::encode_smt(formula)),
+        )
+        .collect::<Vec<_>>()
+        .join("\n    ");
+    solver
+        .assert(&format!("(not (and {}))", super_term))
+        .into_anyhow()?;
 
     solver.comment("</SuperCtx>").into_anyhow()?;
 
@@ -184,7 +203,11 @@ pub fn is_sub_context<'tcx, 'a, K : Debug + Eq + Hash + Display + SmtFmt + Clone
         .into_anyhow()?;
     solver.pop(1).into_anyhow()?;
     if is_sat {
-        Err(anyhow::anyhow!("{} is not a sub context of {}, which is required here", sub_ctx.with_tcx(tcx), super_ctx.with_tcx(tcx)))
+        Err(anyhow::anyhow!(
+            "{} is not a sub context of {}, which is required here",
+            sub_ctx.with_tcx(tcx),
+            super_ctx.with_tcx(tcx)
+        ))
     } else {
         anyhow::Ok(())
     }
@@ -207,7 +230,9 @@ impl SmtFmt for hir::HirId {
     }
 }
 
-impl<'a, 'b, 'c, K: SmtFmt + Debug + Eq + Hash + Display + SmtFmt> Display for FormatContext<'a, 'b, 'c, K> {
+impl<'a, 'b, 'c, K: SmtFmt + Debug + Eq + Hash + Display + SmtFmt> Display
+    for FormatContext<'a, 'b, 'c, K>
+{
     fn fmt<'tcx>(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "RContext {{")?;
         writeln!(f, "    // formulas")?;

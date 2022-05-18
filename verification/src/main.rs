@@ -24,29 +24,23 @@ use rustc_driver::Compilation;
 
 use rustc_hir as hir;
 
-
-
-
 use rustc_interface::interface;
 
 use rustc_interface::Queries;
 
 use std::str;
 
-
 use tracing::info_span;
 use tracing::trace;
-
-
 
 mod hir_ext;
 
 mod constraint_generator;
 mod refinement_context;
 mod refinements;
+mod smtlib_ext;
 #[cfg(test)]
 mod test_with_rustc;
-mod smtlib_ext;
 
 struct MyLint;
 
@@ -108,15 +102,17 @@ impl rustc_driver::Callbacks for OurCompilerCalls {
                     let hir_id = tcx.hir().local_def_id_to_hir_id(local_def_id);
                     let hir_node = tcx.hir().get(hir_id);
                     match hir_node {
-                        hir::Node::Item(fn_item@hir::Item {
-                            kind: hir::ItemKind::Fn(_, _, _),
-                            span,
-                            ..
-                        }) => {
+                        hir::Node::Item(
+                            fn_item @ hir::Item {
+                                kind: hir::ItemKind::Fn(_, _, _),
+                                span,
+                                ..
+                            },
+                        ) => {
                             let _res = type_check_function(fn_item, &tcx);
                             match _res {
                                 Ok(_) => (),
-                                Err(e) =>  {
+                                Err(e) => {
                                     // see: https://rustc-dev-guide.rust-lang.org/diagnostics.html?highlight=diagnost#error-messages
                                     let mut err = session.struct_span_err(*span, &e.to_string());
                                     err.emit();

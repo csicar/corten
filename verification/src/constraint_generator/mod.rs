@@ -317,7 +317,7 @@ where
         ExprKind::Unary(_, _) => todo!(),
         ExprKind::Cast(expr, cast_ty) => {
             // Generate sub-typing constraint
-            let (expr_ty, mut ctx_after) = type_of(expr, tcx, ctx, local_ctx, solver, fresh)?;
+            let (expr_ty, ctx_after) = type_of(expr, tcx, ctx, local_ctx, solver, fresh)?;
 
             let super_ty = RefinementType::from_type_alias(cast_ty, tcx, local_ctx.expr_ty(&expr))?;
 

@@ -353,7 +353,7 @@ fn test_assign_single() {
             let mut solver = conf.spawn(()).unwrap();
             solver.path_tee("/tmp/z3").unwrap();
             let ctx = RContext::<hir::HirId>::new();
-            
+
             let (ty, ctx_after) = type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
             pretty::assert_eq!(ctx_after.with_tcx(&tcx).to_string(), unindent("
                 RContext {

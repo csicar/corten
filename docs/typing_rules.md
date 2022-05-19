@@ -82,7 +82,10 @@ This also works with variables declarations: In that case $`\Gamma'`$ contains a
 ```math
 \text{WHILE}
 \frac
-  {\Gamma_!, c \vdash s \Rightarrow \Gamma_! \qquad \Gamma_b \preceq \Gamma_!}
+  {\Gamma_b \preceq \Gamma_I
+    \qquad \Gamma_I, c \vdash s \Rightarrow \Gamma_I' 
+    \qquad \Gamma_I' \preceq \Gamma_I
+  }
   {\Gamma_b \vdash \texttt{while}(c) s \Rightarrow \Gamma_!,\neg c}
 ```
 

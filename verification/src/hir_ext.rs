@@ -15,13 +15,19 @@ pub trait TyExt<'a> {
         tcx: &'a TyCtxt,
     ) -> Option<(&'a hir::Ty, span::Symbol, span::Symbol)>;
 
-    /// Try Convert a Type Alias `MutRefinement<i32, "b", "b > 0", "b2", "b2 < 0"> 
+    /// Try Convert a Type Alias `MutRefinement<i32, "b", "b > 0", "b2", "b2 < 0">
     /// into its parts: (i32, "b", "b > 0", "b2", "b2 < 0")
     /// Return None if `self` is not an alias
     fn try_into_mut_refinement(
         &'a self,
-        tcx: &'a TyCtxt
-    ) -> Option<(&'a hir::Ty, span::Symbol, span::Symbol, span::Symbol, span::Symbol)>;
+        tcx: &'a TyCtxt,
+    ) -> Option<(
+        &'a hir::Ty,
+        span::Symbol,
+        span::Symbol,
+        span::Symbol,
+        span::Symbol,
+    )>;
 }
 
 impl<'a> TyExt<'a> for hir::Ty<'a> {
@@ -75,24 +81,36 @@ impl<'a> TyExt<'a> for hir::Ty<'a> {
 
     fn try_into_mut_refinement(
         &'a self,
-        tcx: &'a TyCtxt
-    ) -> Option<(&'a hir::Ty, span::Symbol, span::Symbol, span::Symbol, span::Symbol)> {
+        tcx: &'a TyCtxt,
+    ) -> Option<(
+        &'a hir::Ty,
+        span::Symbol,
+        span::Symbol,
+        span::Symbol,
+        span::Symbol,
+    )> {
         if let hir::Ty {
             kind:
-                hir::TyKind::Rptr(hir::Lifetime { name: _, ..}, hir::MutTy {
-                    ty: hir::Ty {
-                        kind: hir::TyKind::Path(hir::QPath::Resolved(
-                            _,
-                            hir::Path {
-                                res: hir::def::Res::Def(hir::def::DefKind::TyAlias, def_id),
-                                segments,
+                hir::TyKind::Rptr(
+                    hir::Lifetime { name: _, .. },
+                    hir::MutTy {
+                        ty:
+                            hir::Ty {
+                                kind:
+                                    hir::TyKind::Path(hir::QPath::Resolved(
+                                        _,
+                                        hir::Path {
+                                            res:
+                                                hir::def::Res::Def(hir::def::DefKind::TyAlias, def_id),
+                                            segments,
+                                            ..
+                                        },
+                                    )),
                                 ..
                             },
-                        )), ..
+                        mutbl: hir::Mutability::Mut,
                     },
-                    mutbl: hir::Mutability::Mut
-                })
-                ,
+                ),
             ..
         } = self
         {
@@ -144,6 +162,7 @@ pub trait ExprExt<'a> {
     /// tries to turn Expr `my_identifier` into the HirId that `my_identifier` refers to
     fn try_into_path_hir_id<'tcx>(
         &'a self,
+        tcx: &TyCtxt<'tcx>,
         typeck_results: &TypeckResults<'tcx>,
     ) -> anyhow::Result<hir::HirId>;
 
@@ -180,6 +199,7 @@ impl<'a> ExprExt<'a> for hir::Expr<'a> {
 
     fn try_into_path_hir_id<'tcx>(
         &'a self,
+        tcx: &TyCtxt<'tcx>,
         local_ctx: &TypeckResults<'tcx>,
     ) -> anyhow::Result<hir::HirId> {
         match &self.kind {
@@ -187,7 +207,10 @@ impl<'a> ExprExt<'a> for hir::Expr<'a> {
                 let res = local_ctx.qpath_res(&path, self.hir_id);
                 match res {
                     hir::def::Res::Local(hir_id) => Ok(hir_id),
-                    hir::def::Res::Def(_, _) => todo!(),
+                    hir::def::Res::Def(_def_kind, def_id) => match def_id.as_local() {
+                        Some(local_id) => Ok(tcx.hir().local_def_id_to_hir_id(local_id)),
+                        None => todo!(),
+                    },
                     other => anyhow::bail!("reference to unexpected resolution {:?}", other),
                 }
             }

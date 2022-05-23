@@ -4,16 +4,21 @@ use std::{
     io::Write,
 };
 
-use crate::smtlib_ext::SmtResExt;
+use crate::{hir_ext::ExprExt, smtlib_ext::SmtResExt};
+use hir::ExprKind;
 use quote::{format_ident, quote};
 use rsmt2::Solver;
 use rustc_hir as hir;
 use rustc_hir_pretty::id_to_string;
-use rustc_middle::ty::TyCtxt;
+use rustc_middle::ty::{TyCtxt, TypeckResults};
 use std::fmt::Debug;
 use std::hash::Hash;
 use syn::parse_quote;
 use tracing::{instrument, trace};
+
+use itertools::Itertools;
+
+use anyhow::anyhow;
 
 use crate::refinements::{self, RefinementType};
 
@@ -61,12 +66,12 @@ where
         self.types.get(&hir).map(|entry| entry.clone())
     }
 
-    pub fn filter_hirs<F:  Fn(&K) -> bool>(&self, filter: F) -> RContext<'a, K> {
+    pub fn filter_hirs(&self, filter: impl Fn(&K) -> bool) -> RContext<'a, K> {
         let mut types = self.types.clone();
         types.retain(|key, _| filter(key));
         RContext {
             formulas: self.formulas.clone(),
-            types
+            types,
         }
     }
 
@@ -147,6 +152,97 @@ where
     pub fn with_tcx<'b, 'c>(&'a self, tcx: &'b TyCtxt<'c>) -> FormatContext<'b, 'a, 'c, K> {
         FormatContext { ctx: self, tcx }
     }
+
+    /// Tries to construct a RefoinementContext from a `assert_ctx` call.
+    /// The call should look like this:
+    /// ```
+    /// assert_ctx(&["b > 0"], &[&my_var, { "i" }, {"i > 0"}])
+    /// ```
+    /// Where [`func_decl`] is "assert_ctx" and [`func_args`] are its args
+    pub fn try_from_assert_expr(
+        func_decl: &hir::Node<'a>,
+        func_args: &[hir::Expr<'a>],
+        tcx: &TyCtxt<'a>,
+        local_ctx: &TypeckResults<'a>,
+    ) -> anyhow::Result<Option<RContext<'a, hir::HirId>>> {
+        if func_decl.ident().map(|v| v.name.to_string()) == Some("assert_ctx".to_string()) {
+            match func_args {
+                [hir::Expr {
+                    kind:
+                        ExprKind::AddrOf(
+                            hir::BorrowKind::Ref,
+                            hir::Mutability::Not,
+                            hir::Expr {
+                                kind: ExprKind::Array(forms_raw),
+                                ..
+                            },
+                        ),
+                    ..
+                }, hir::Expr {
+                    kind:
+                        ExprKind::AddrOf(
+                            hir::BorrowKind::Ref,
+                            hir::Mutability::Not,
+                            hir::Expr {
+                                kind: ExprKind::Array(refinements_raw),
+                                ..
+                            },
+                        ),
+                    ..
+                }] => {
+                    let form_symbols: Vec<_> = forms_raw
+                        .iter()
+                        .map(|arg| {
+                            arg.try_into_symbol()
+                                .map(|sym| sym.to_string())
+                                .ok_or(anyhow!("not a symbol"))
+                                .and_then(|s| refinements::parse_predicate(&s))
+                        })
+                        .try_collect()?;
+                    let refinement_symbols: HashMap<_, _> = refinements_raw
+                        .iter()
+                        .map(|arg| {
+                            if let ExprKind::Tup([var_raw, binder_raw, pred_raw]) = arg.kind {
+                                let binder = binder_raw
+                                    .try_into_symbol()
+                                    .map(|sym| sym.to_string())
+                                    .ok_or(anyhow!("unexpected thing in place of binder"))?;
+                                let predicate = pred_raw
+                                    .try_into_symbol()
+                                    .map(|sym| sym.to_string())
+                                    .ok_or(anyhow!("unexpected thing in place of pred"))?;
+                                let var = match &var_raw.kind {
+                                    ExprKind::AddrOf(_, _, inner) => {
+                                        inner.try_into_path_hir_id(tcx, local_ctx)
+                                    }
+                                    _other => todo!(),
+                                }?;
+                                trace!(var=?var, binder=?binder, pred=?predicate);
+                                let var_ty = local_ctx.node_type(var);
+                                anyhow::Ok((
+                                    var,
+                                    RefinementType {
+                                        base: var_ty,
+                                        binder,
+                                        predicate: refinements::parse_predicate(&predicate)?,
+                                    },
+                                ))
+                            } else {
+                                anyhow::bail!("not a tuple")
+                            }
+                        })
+                        .try_collect()?;
+                    anyhow::Ok(Some(RContext {
+                        formulas: form_symbols,
+                        types: refinement_symbols,
+                    }))
+                }
+                _other => todo!(),
+            }
+        } else {
+            anyhow::Ok(None)
+        }
+    }
 }
 
 #[instrument(skip_all, ret)]
@@ -157,28 +253,44 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
     solver: &mut Solver<P>,
 ) -> anyhow::Result<()> {
     trace!(super_ctx=%(super_ctx.with_tcx(tcx)), sub_ctx=%(sub_ctx.with_tcx(tcx)), "check");
-    solver.comment("checking is_sub_context ...").into_anyhow()?;
+    solver
+        .comment("checking is_sub_context ...")
+        .into_anyhow()?;
     solver.push(1).into_anyhow()?;
 
-    assert_eq!(
-        super_ctx.types.keys().collect::<HashSet<_>>(),
-        sub_ctx.types.keys().collect::<HashSet<_>>()
+    assert!(
+        super_ctx
+            .types
+            .keys()
+            .collect::<HashSet<_>>()
+            .is_subset(&sub_ctx.types.keys().collect::<HashSet<_>>()),
+        "super ctx may contain at most the same keys as the super ctx"
     );
 
-    super_ctx.types.iter().try_for_each(|(hir_id, super_ty)| {
-        let sub_ty = sub_ctx.lookup_hir(hir_id).expect("missing expected hir");
-        super_ctx.encode_declaration(solver, hir_id, super_ty, tcx)?;
-        if super_ty.binder != sub_ty.binder {
-            sub_ctx.encode_declaration(solver, hir_id, &sub_ty, tcx)?;
+    sub_ctx.types.iter().try_for_each(|(hir_id, sub_ty)| {
+        sub_ctx.encode_declaration(solver, hir_id, &sub_ty, tcx)?;
 
-            let super_binder = format_ident!("{}", &super_ty.binder);
-            let sub_binder = format_ident!("{}", &sub_ty.binder);
-            solver
-                .assert(refinements::encode_smt(
-                    &parse_quote! { #sub_binder == #super_binder },
-                ))
-                .into_anyhow()?;
+        // the super ctx may be missing some declarations, that are contained in the
+        // sub_ctx.
+        match super_ctx.lookup_hir(hir_id) {
+            // In case there is a matching super_ty => encode an equate them
+            Some(super_ty) => {
+                if sub_ty.binder != super_ty.binder {
+                    super_ctx.encode_declaration(solver, hir_id, &super_ty, tcx)?;
+
+                    let sub_binder = format_ident!("{}", &sub_ty.binder);
+                    let super_binder = format_ident!("{}", &super_ty.binder);
+                    solver
+                        .assert(refinements::encode_smt(
+                            &parse_quote! { #sub_binder == #super_binder },
+                        ))
+                        .into_anyhow()?;
+                }
+            }
+            // When there is no super_ty matching => just encode the sub_ty
+            None => {}
         }
+
         anyhow::Ok(())
     })?;
     sub_ctx.encode_predicates(solver)?;

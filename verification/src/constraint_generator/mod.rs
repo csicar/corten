@@ -28,6 +28,8 @@ use tracing::instrument;
 use tracing::trace;
 use tracing::warn;
 
+use itertools::Itertools;
+
 pub struct Fresh {
     current: u32,
 }
@@ -69,12 +71,14 @@ where
                     _,
                     body_id,
                 ),
-            ident: _,
+            ident,
             def_id,
             ..
         } => {
             trace!(node_to_string=?tcx.hir().node_to_string(function.hir_id()), "just for fun: print");
             let body = tcx.hir().body(body_id.clone());
+
+            info!(?ident.name);
             trace!(?body_id, ?body, "function body");
             trace!(?function, "full function");
             let local_ctx = tcx.typeck(*def_id);
@@ -85,6 +89,15 @@ where
                 .get(function.hir_id())
                 .ok_or(anyhow!("function not found in typeck result"))?;
             trace!(?fn_sig);
+
+            if (ident.name.to_string() == "assert_ctx") {
+                let out_ty = fn_sig.output();
+                return anyhow::Ok(RefinementType {
+                    base: out_ty,
+                    binder: "v".to_string(),
+                    predicate: parse_quote! { true },
+                });
+            }
 
             // get refinements for inputs
             let mut ctx = RContext::<hir::HirId>::new();
@@ -138,10 +151,10 @@ where
                 &mut fresh,
             )?;
 
-            let actual_end_state =
-                ctx_after.filter_hirs(|id| expected_end_state.types.contains_key(id));
+            // let actual_end_state =
+            //     ctx_after.filter_hirs(|id| expected_end_state.types.contains_key(id));
 
-            is_sub_context(&expected_end_state, &actual_end_state, tcx, &mut solver)?;
+            is_sub_context(&expected_end_state, &ctx_after, tcx, &mut solver)?;
 
             trace!(%actual_ty, "actual function type");
             require_is_subtype_of(&actual_ty, &expected_type, &ctx_after, tcx, &mut solver)?;
@@ -219,6 +232,15 @@ where
     anyhow::Ok(curr_ctx)
 }
 
+fn negate_predicate(pred: syn::Expr) -> anyhow::Result<syn::Expr> {
+    let not = syn::parse_str::<syn::UnOp>("!")?;
+    Ok(syn::Expr::Unary(syn::ExprUnary {
+        attrs: Vec::new(),
+        op: not,
+        expr: Box::new(pred),
+    }))
+}
+
 /// Computes the type of [`expr`], but mutates the `ctx` according to the execution
 #[instrument(skip_all, fields(expr=?expr.pretty_print()))]
 pub fn type_of<'a, 'b, 'c, 'tcx, P>(
@@ -275,7 +297,7 @@ where
             // ```
             // Generates constraint `_7: i32 | _7 > 0 && av == _7`
             //
-            let dest_hir_id = expr.try_into_path_hir_id(local_ctx)?;
+            let dest_hir_id = expr.try_into_path_hir_id(tcx, local_ctx)?;
             let ty_in_context = ctx.lookup_hir(&dest_hir_id).ok_or(anyhow!(
                 "could not find refinement type definition of {} in refinement context",
                 tcx.hir().node_to_string(dest_hir_id)
@@ -299,7 +321,33 @@ where
         ExprKind::Box(_) => todo!(),
         ExprKind::ConstBlock(_) => todo!(),
         ExprKind::Array(_) => todo!(),
-        ExprKind::Call(_, _) => todo!(),
+        ExprKind::Call(func, args) => {
+            let asd = func.try_into_path_hir_id(tcx, local_ctx)?;
+            let func_decl = tcx.hir().get(asd);
+            let maybe_ctx =
+                RContext::<hir::HirId>::try_from_assert_expr(&func_decl, args, tcx, local_ctx)?;
+            match maybe_ctx {
+                Some(assert_ctx) => {
+                    // do sub typing checkings
+                    trace!(ctx=%assert_ctx.with_tcx(tcx), "found ctx assertion");
+                    is_sub_context(ctx, &assert_ctx, tcx, solver)?;
+                    is_sub_context(&assert_ctx, ctx, tcx, solver)?;
+
+                    let unit_type = local_ctx.expr_ty(expr);
+                    anyhow::Ok((
+                        RefinementType {
+                            base: unit_type,
+                            binder: fresh.fresh_ident(),
+                            predicate: parse_quote! { true },
+                        },
+                        ctx.clone(),
+                    ))
+                }
+                None => {
+                    todo!("do normal function handling")
+                }
+            }
+        }
         ExprKind::MethodCall(_, _, _) => todo!(),
         ExprKind::Tup(contents) => {
             let tuple_type = local_ctx.expr_ty(expr);
@@ -371,12 +419,7 @@ where
                 // type check else_expr
                 let mut else_ctx_before = ctx.clone();
                 let syn_cond: syn::Expr = symbolic_execute(&cond, tcx, ctx, local_ctx)?;
-                let not = syn::parse_str::<syn::UnOp>("!")?;
-                let else_cond: syn::Expr = syn::Expr::Unary(syn::ExprUnary {
-                    attrs: Vec::new(),
-                    op: not,
-                    expr: Box::new(syn_cond),
-                });
+                let else_cond = negate_predicate(syn_cond)?;
                 info!(else_cond=%quote!{#else_cond}, "else_cond_formula: ");
 
                 else_ctx_before.push_formula(else_cond.clone());
@@ -442,14 +485,14 @@ where
             LoopSource::While,
             _,
         ) => {
-            let ctx_bang = match &expr.kind {
+            let (ctx_bang, while_cond) = match &expr.kind {
                 ExprKind::If(cond, then_expr, Some(else_expr)) => {
                     match &else_expr.kind {
                         ExprKind::Block(
                             hir::Block {
                                 stmts:
                                     [hir::Stmt {
-                                        kind: hir::StmtKind::Expr (Expr { kind: a, .. }),
+                                        kind: hir::StmtKind::Expr(Expr { kind: a, .. }),
                                         ..
                                     }],
                                 ..
@@ -458,6 +501,7 @@ where
                         ) => (),
                         _other => panic!("unexpected else branch in loop: was not {{break;}}"),
                     }
+
                     let mut then_ctx_before = ctx.clone();
                     let then_cond: syn::Expr = symbolic_execute(&cond, tcx, ctx, local_ctx)?;
                     then_ctx_before.push_formula(then_cond.clone());
@@ -465,12 +509,13 @@ where
                     let (_ty, ctx_after) =
                         type_of(then_expr, tcx, &then_ctx_before, local_ctx, solver, fresh)?;
                     // pop `then_cond` off the path stack
-                    let ctx_bang = ctx_after.pop_formula();
-                    is_sub_context(&ctx_bang, ctx, tcx, solver)?;
-                    ctx_bang
+                    let ctx_bang_tick = ctx_after.pop_formula();
+                    is_sub_context(ctx, &ctx_bang_tick, tcx, solver)?;
+                    (ctx_bang_tick, then_cond)
                 }
                 _other => todo!(),
             };
+
             let unit_type = local_ctx.expr_ty(expr);
             let refined_unit_type = RefinementType {
                 base: unit_type,
@@ -478,16 +523,20 @@ where
                 predicate: parse_quote! { true },
             };
 
-            Ok((refined_unit_type, ctx_bang))
+            let exit_path_formula = negate_predicate(while_cond)?;
+
+            let mut ctx_after = ctx_bang.clone();
+            ctx_after.push_formula(exit_path_formula);
+            Ok((refined_unit_type, ctx_after))
         }
         ExprKind::Loop(_, _, _, _) => todo!(),
         ExprKind::Match(_, _, _) => todo!(),
         ExprKind::Closure(_, _, _, _, _) => todo!(),
         ExprKind::Assign(lhs, rhs, _span) => {
             let dest_hir_id = match &lhs.kind {
-                ExprKind::Path(_path) => lhs.try_into_path_hir_id(local_ctx)?,
+                ExprKind::Path(_path) => lhs.try_into_path_hir_id(tcx, local_ctx)?,
                 ExprKind::Unary(hir::UnOp::Deref, inner) => {
-                    inner.try_into_path_hir_id(local_ctx)?
+                    inner.try_into_path_hir_id(tcx, local_ctx)?
                 }
                 other => todo!("don't know how to assign to {:?}", other),
             };
@@ -534,6 +583,9 @@ fn symbolic_execute<'a, 'b, 'c, 'tcx>(
     ctx: &'c RContext<'a>,
     local_ctx: &'a TypeckResults<'a>,
 ) -> anyhow::Result<syn::Expr> {
+    // if expr.can_have_side_effects() {
+    //     anyhow::bail!("Expr {} may have side-effects -> no symbolic exec possible", expr.pretty_print());
+    // }
     match &expr.kind {
         ExprKind::Box(_) => todo!(),
         ExprKind::ConstBlock(_) => todo!(),

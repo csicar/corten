@@ -687,51 +687,6 @@ mod loops {
         )
         .unwrap();
     }
-
-    #[should_panic]
-    #[test]
-    fn test_loop_neg_no_update() {
-        init_tracing();
-        with_item_and_rt_lib(
-            &quote! {
-                fn f() -> ty!{v : i32 | v < 0} {
-                    let mut res = 1;
-                    while res < 10 {
-                        ()
-                    }
-                    res
-                }
-            }
-            .to_string(),
-            |item, tcx| {
-                let ty = type_check_function(item, &tcx).unwrap();
-            },
-        )
-        .unwrap();
-    }
-
-    #[should_panic]
-    #[test]
-    fn test_loop_neg_param() {
-        init_tracing();
-        with_item_and_rt_lib(
-            &quote! {
-                fn f(n: ty!{ n: i32 | n > 0 }) -> ty!{v : i32 | v >= n} {
-                    let mut res = 1;
-                    while res < 10 {
-                        ()
-                    }
-                    res
-                }
-            }
-            .to_string(),
-            |item, tcx| {
-                let ty = type_check_function(item, &tcx).unwrap();
-            },
-        )
-        .unwrap();
-    }
-
     #[test]
     fn test_loop_complex() {
         init_tracing();
@@ -742,8 +697,75 @@ mod loops {
                     let mut sum = 0 as ty!{ sv : i32 | sv == iv * nv };
                     i = i as ty!{iv2: i32 | iv2 <= nv};
                     while i < n {
-                        i = (i + 1) as ty!{ i2 : i32 | i2 <= nv };
+                        // Gamma! = {
+                            // i : {i1 | true} => {i2 | i2 == i1 + 1}
+                            // sum : {s1 | i1 * nv} => {s2 | s2 == i2 * nv}
+                        //}
+                        i = (i + 1) as ty!{ asd: i32 | asd == iv + 1 };
                         sum = (sum + n) as ty!{ s2 : i32 | s2 == iv * nv };
+                        ()
+                    }
+                    sum
+                }
+
+                fn asd() -> ty!{v:i32 | v > 10} {
+                    let mut i = 0 as ty!{i1: i32 | i1 == 0};
+                    i = (i + 1) as ty!{i2: i32 | i2 == i1 + 1};
+                    i
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= n }");
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_loop_simple_invariant() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f(n: ty!{nv: i32 | nv > 0}) -> ty!{r: i32 | r == nv} {
+                    let mut i = 0 as ty!{iv : i32 | iv==0};
+                    i = i as ty!{iv2 : i32 | iv2 <= nv}; // Invariant
+                    while i < n {
+                        let j = i as ty!{jv : i32 | jv < nv};
+                        i = (j + 1) as ty!{iv3 : i32 | iv3 <= nv};
+                        ()
+                    }
+                    i
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= n }");
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_loop_2_complex() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn bad_square(n: ty!{ nv : i32 | nv > 0 }) -> ty!{ v : i32 | v == n * n } {
+                    let mut i = 0 as ty!{ iv : i32 | iv == 0};
+                    let mut sum = 0 as ty!{ sv : i32 | sv == 0 };
+                    i = i as ty!{iv2: i32 | iv2 <= nv};
+                    while i < n {
+                        i = i as ty!{iold: i32 | iold <= nv};
+                        sum = sum as ty!{sumold: i32 | sumold == iold*nv};
+
+                        i = i+1 as ty!{i2: i32 | i2 == iold+1};
+                        sum = sum+n as ty!{sum2: i32 | sum2 == sumold+nv};
+
+                        i = i as ty!{inew: i32 | inew <= nv};
+                        sum = sum as ty!{sumnew: i32 | sumnew == inew*nv};
                         ()
                     }
                     sum

@@ -52,7 +52,6 @@ impl<'a> RefinementType<'a> {
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MutRefinementType<'tcx> {
     pub start: RefinementType<'tcx>,
@@ -65,20 +64,22 @@ impl<'tcx> MutRefinementType<'tcx> {
         tcx: &TyCtxt<'tcx>,
         base_ty: Ty<'tcx>,
     ) -> anyhow::Result<MutRefinementType<'tcx>> {
-        if let Some((_base, binder1, raw_predicate1, binder2, raw_predicate2)) = raw_type.try_into_mut_refinement(tcx) {
+        if let Some((_base, binder1, raw_predicate1, binder2, raw_predicate2)) =
+            raw_type.try_into_mut_refinement(tcx)
+        {
             let predicate1 = parse_predicate(raw_predicate1.as_str())?;
             let predicate2 = parse_predicate(raw_predicate2.as_str())?;
             Ok(MutRefinementType {
                 start: RefinementType {
                     base: base_ty,
                     binder: binder1.as_str().to_string(),
-                    predicate: predicate1
+                    predicate: predicate1,
                 },
                 end: RefinementType {
                     base: base_ty,
                     binder: binder2.as_str().to_string(),
-                    predicate: predicate2
-                }
+                    predicate: predicate2,
+                },
             })
         } else {
             Err(anyhow!(
@@ -298,7 +299,7 @@ fn encode_ident(ident: &syn::Ident) -> String {
     format!("|{}|", ident)
 }
 
-fn parse_predicate(raw_predicate: &str) -> anyhow::Result<syn::Expr> {
+pub fn parse_predicate(raw_predicate: &str) -> anyhow::Result<syn::Expr> {
     let parsed = syn::parse_str::<syn::Expr>(raw_predicate)?;
     Ok(parsed)
 }

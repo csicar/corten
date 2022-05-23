@@ -258,14 +258,16 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
         .into_anyhow()?;
     solver.push(1).into_anyhow()?;
 
-    assert!(
-        super_ctx
-            .types
-            .keys()
-            .collect::<HashSet<_>>()
-            .is_subset(&sub_ctx.types.keys().collect::<HashSet<_>>()),
-        "super ctx may contain at most the same keys as the super ctx"
-    );
+    if super_ctx
+        .types
+        .keys()
+        .collect::<HashSet<_>>()
+        .is_subset(&sub_ctx.types.keys().collect::<HashSet<_>>())
+    {
+        //every thing is fine
+    } else {
+        anyhow::bail!("super ctx may contain at most the same keys as the super ctx")
+    }
 
     sub_ctx.types.iter().try_for_each(|(hir_id, sub_ty)| {
         sub_ctx.encode_declaration(solver, hir_id, &sub_ty, tcx)?;

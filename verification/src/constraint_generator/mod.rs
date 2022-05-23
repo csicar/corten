@@ -226,7 +226,10 @@ where
                 type_of(inner_expr, tcx, &curr_ctx, &local_ctx, solver, fresh)?.1
             } // _ => todo!()
         };
-        trace!(ctx=%curr_ctx.with_tcx(&tcx), "stmt transition: current ctx is");
+        let pretty_stmt = 
+        rustc_hir_pretty::to_string(&rustc_hir_pretty::NoAnn, |state| state.print_stmt(stmt));
+
+        trace!(ctx=%curr_ctx.with_tcx(&tcx), stmt=%pretty_stmt, "stmt transition: current ctx is");
     }
 
     anyhow::Ok(curr_ctx)

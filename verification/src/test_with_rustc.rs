@@ -113,7 +113,7 @@ where
 {
     with_hir(
         |hir, tcx| match hir {
-            hir::Node::Item(item) => callback(item, tcx),
+            hir::Node::Item(item) => if hir.ident().map(|sym| sym.name.to_ident_string()) == Some("assert_ctx".into()) {} else { callback(item, tcx) },
             o => warn!(node=?o, "parsing input resulted in different stuff"),
         },
         &(include_str!("../../runtime-library/src/lib.rs").to_string() + input),

@@ -733,7 +733,8 @@ mod loops {
                     i = i as ty!{iv2 : i32 | iv2 <= nv}; // Invariant
                     while i < n {
                         let j = i as ty!{jv : i32 | jv < nv};
-                        i = (j + 1) as ty!{iv3 : i32 | iv3 <= nv};
+                        i = (j + 1) as ty!{iv2 : i32 | iv2 <= nv};
+                        
                         ()
                     }
                     i
@@ -742,7 +743,7 @@ mod loops {
             .to_string(),
             |item, tcx| {
                 let ty = type_check_function(item, &tcx).unwrap();
-                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= n }");
+                pretty::assert_eq!(ty.to_string(), "ty!{ r : i32 | r == nv }");
             },
         )
         .unwrap();

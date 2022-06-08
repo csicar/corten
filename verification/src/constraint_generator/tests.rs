@@ -542,21 +542,44 @@ fn test_update_type() {
     .unwrap();
 }
 
-#[should_panic]
 #[test]
 fn test_update_incs() {
     init_tracing();
     with_item_and_rt_lib(
         &quote! {
-            fn f() -> ty!{ v : i32 | false } {
-                let mut tmp = 2;
-                tmp = tmp + 1 as ty!{a: i32 | a == 3};
+            fn f() -> ty!{ v : i32 | v > 0 } {
+                let mut tmp = 2 as ty!{tmp1 : i32 | tmp1 >= 0};
+                tmp = (tmp + 1) as ty!{a: i32 | a > 0};
                 tmp
             }
         }
         .to_string(),
         |item, tcx| {
             let ty = type_check_function(item, &tcx).unwrap();
+            pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
+
+        },
+    )
+    .unwrap();
+}
+
+#[test]
+fn test_update_dependent_incs() {
+    init_tracing();
+    with_item_and_rt_lib(
+        &quote! {
+            fn f(n : ty!{n : i32 | true }) -> ty!{ v : i32 | v > 0 } {
+                let mut i = 0 as ty!{i1 : i32 | i1 == 0};
+                let mut sum = 0 as ty!{ s : i32 | s == i1*n};
+                i = (i + 1) as ty!{a: i32 | a > 0};
+                i
+            }
+        }
+        .to_string(),
+        |item, tcx| {
+            let ty = type_check_function(item, &tcx).unwrap();
+            pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
+
         },
     )
     .unwrap();
@@ -723,34 +746,50 @@ mod loops {
         .unwrap();
     }
 
+
     #[test]
-    fn test_loop_simple_invariant() {
+    fn test_loop_ssa_complex() {
         init_tracing();
         with_item_and_rt_lib(
             &quote! {
-                fn f(n: ty!{nv: i32 | nv > 0}) -> ty!{r: i32 | r == nv} {
-                    let mut i = 0 as ty!{iv : i32 | iv==0};
-                    i = i as ty!{iv2 : i32 | iv2 <= nv}; // Invariant
-                    while i < n {
-                        let j = i as ty!{jv : i32 | jv < nv};
-                        i = (j + 1) as ty!{iv2 : i32 | iv2 <= nv};
-                        
-                        ()
-                    }
-                    i
+                fn step(
+                    n: ty!{ nv : i32 | nv > 0 },
+                    i: &mut ty!{i0 : i32 | i0 < nv  => i1 | i1 <= nv},
+                    sum: &mut ty!{s0: i32 | s0 == nv * i0 => s1 | s1 == nv * i1 && s1 == 1337}
+                ) -> ty!{ v: i32 } {
+                    let i0 = *i as ty!{i00 : i32 | i00 < nv };
+                    *i = (i0 + 1) as ty!{i2: i32 | i2 == i00 + 1};
+                    let s0 = *sum as ty!{s00 : i32 | s00 == nv * i00};
+                    // *sum = s0 + n;
+                    0
                 }
+                // fn bad_square(n: ty!{ nv : i32 | nv > 0 }) -> ty!{ v : i32 | v == nv * nv } {
+                //     let mut i = 0 as ty!{ iv : i32 | iv == 0};
+                //     let mut sum = 0 as ty!{ sv : i32 | sv == 0 };
+                //     sum = sum as ty!{ sv2 : i32 |  sv2 == nv * iv};
+                //     i = i as ty!{iv2: i32 | iv2 <= nv};
+                //     while i < n {
+                //         // Inv: i <= nv && sum == n * i
+                //         let j = i as ty!{i_old: i32 | i_old < nv && sv == i_old * nv};
+                        
+                //         // sum = (sum + n) as ty!{s: i32 | s == (i_old + 1) * nv };
+                //         i = (j + 1) as ty!{i_new : i32 | i_new == i_old + 1 };
+                //         ()
+                //     }
+                //     sum
+                // }
             }
             .to_string(),
             |item, tcx| {
                 let ty = type_check_function(item, &tcx).unwrap();
-                pretty::assert_eq!(ty.to_string(), "ty!{ r : i32 | r == nv }");
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= n }");
             },
         )
         .unwrap();
     }
 
     #[test]
-    fn test_loop_2_complex() {
+    fn test_loop_keep_predicates_complex() {
         init_tracing();
         with_item_and_rt_lib(
             &quote! {
@@ -780,6 +819,33 @@ mod loops {
         )
         .unwrap();
     }
+
+    #[test]
+    fn test_loop_simple_invariant() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f(n: ty!{nv: i32 | nv > 0}) -> ty!{r: i32 | r == nv} {
+                    let mut i = 0 as ty!{iv : i32 | iv==0};
+                    i = i as ty!{iv2 : i32 | iv2 <= nv}; // Invariant
+                    while i < n {
+                        let j = i as ty!{jv : i32 | jv < nv};
+                        i = (j + 1) as ty!{iv2 : i32 | iv2 <= nv};
+                        
+                        ()
+                    }
+                    i
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ r : i32 | r == nv }");
+            },
+        )
+        .unwrap();
+    }
+
 }
 
 /// Mutable Type Annotations

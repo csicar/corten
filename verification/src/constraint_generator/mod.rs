@@ -229,7 +229,7 @@ where
         let pretty_stmt = 
         rustc_hir_pretty::to_string(&rustc_hir_pretty::NoAnn, |state| state.print_stmt(stmt));
 
-        trace!(ctx=%curr_ctx.with_tcx(&tcx), stmt=%pretty_stmt, "stmt transition: current ctx is");
+        trace!(stmt=%pretty_stmt, ctx_after=%curr_ctx.with_tcx(&tcx), "stmt transition: current ctx is");
     }
 
     anyhow::Ok(curr_ctx)
@@ -385,6 +385,9 @@ where
             //TODO check no mut in expr
             anyhow::Ok((ty, ctx_after_right))
         }
+        ExprKind::Unary(hir::UnOp::Deref, expr) => {
+            type_of(expr, tcx, ctx, local_ctx, solver, fresh)
+        },
         ExprKind::Unary(_, _) => todo!(),
         ExprKind::Cast(expr, cast_ty) => {
             // Generate sub-typing constraint

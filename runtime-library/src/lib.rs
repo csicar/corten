@@ -23,6 +23,9 @@ macro_rules! ty {
   ($i:ident : $base_ty:ty | $pred:expr => $i2: ident | $pred2:expr) => {
       $crate::MutRefinement< $base_ty, {stringify! { $i }}, {stringify! { $pred }}, {stringify! { $i2 }}, {stringify! { $pred2 }}>
   };
+  ($i:ident : $base_ty:ty) => {
+    $crate::Refinement<$base_ty, {stringify! { $i }}, "true">
+  };
   ($base_ty:ty) => {
       $crate::Refinement<$base_ty, "_", "true">
   };

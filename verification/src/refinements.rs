@@ -169,7 +169,9 @@ fn rename_ref_in_expr(
         syn::Expr::TryBlock(_) => todo!(),
         syn::Expr::Tuple(_) => todo!(),
         syn::Expr::Type(_) => todo!(),
-        syn::Expr::Unary(_) => todo!(),
+        syn::Expr::Unary(syn::ExprUnary { attrs, op , expr:inner }) => {
+            anyhow::Ok(syn::Expr::Unary(syn::ExprUnary { attrs: attrs.clone(), op: op.clone(), expr: Box::new(rename_ref_in_expr(inner, old_name, new_name)?)}))
+        },
         syn::Expr::Unsafe(_) => todo!(),
         syn::Expr::Verbatim(_) => todo!(),
         syn::Expr::While(_) => todo!(),
@@ -213,12 +215,12 @@ pub fn encode_smt(expr: &syn::Expr) -> String {
             format!("({} {} {})", smt_op, encode_smt(left), encode_smt(right))
         }
         syn::Expr::Unary(syn::ExprUnary { op, expr, .. }) => {
-            let smt_op = match op {
-                syn::UnOp::Deref(_) => todo!(),
-                syn::UnOp::Not(_) => "not",
-                syn::UnOp::Neg(_) => "-",
-            };
-            format!("({} {})", smt_op, encode_smt(expr))
+            let inner_enc = encode_smt(expr);
+            match op {
+                syn::UnOp::Deref(_) => inner_enc,
+                syn::UnOp::Not(_) => format!("(not {})", inner_enc),
+                syn::UnOp::Neg(_) => format!("(- {})", inner_enc),
+            }
         }
         syn::Expr::Lit(syn::ExprLit { lit, .. }) => match lit {
             syn::Lit::Str(str) => todo!("{:?}", str),

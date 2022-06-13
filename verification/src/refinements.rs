@@ -8,7 +8,7 @@ use quote::quote;
 use quote::ToTokens;
 use rustc_middle::ty::{Ty, TyCtxt};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RefinementType<'tcx> {
     pub base: Ty<'tcx>,
     pub binder: String,
@@ -38,17 +38,23 @@ impl<'a> RefinementType<'a> {
     }
 
     pub fn rename_binder(&self, new_name: &str) -> anyhow::Result<RefinementType<'a>> {
-        Ok(RefinementType {
-            base: self.base,
-            binder: new_name.to_string(),
-            predicate: rename_ref_in_expr(&self.predicate, &self.binder, new_name)?,
+        self.rename_binders(&|name| {
+            if name == &self.binder {
+                new_name.to_string()
+            } else {
+                name.to_string()
+            }
         })
     }
 
-    pub fn encode_smt(&self, name: &str) -> String {
-        let body = encode_smt(&self.predicate);
-        let args = format!("({} Int)", self.binder);
-        format!("(define-fun {} ({}) Bool ({})", name, args, body)
+    pub fn rename_binders(&self, 
+        renamer: &impl Fn(&str) -> String,
+    ) -> anyhow::Result<RefinementType<'a>> {
+        Ok(RefinementType {
+            base: self.base,
+            binder: renamer(&self.binder),
+            predicate: rename_ref_in_expr(&self.predicate, renamer)?,
+        })
     }
 }
 
@@ -90,10 +96,9 @@ impl<'tcx> MutRefinementType<'tcx> {
     }
 }
 
-fn rename_ref_in_expr(
+pub fn rename_ref_in_expr(
     expr: &syn::Expr,
-    old_name: &str,
-    new_name: &str,
+    renamer: &impl Fn(&str) -> String,
 ) -> anyhow::Result<syn::Expr> {
     match expr {
         syn::Expr::Array(_) => todo!(),
@@ -108,9 +113,9 @@ fn rename_ref_in_expr(
             right,
         }) => Ok(syn::Expr::Binary(syn::ExprBinary {
             attrs: attrs.clone(),
-            left: Box::new(rename_ref_in_expr(left, old_name, new_name)?),
+            left: Box::new(rename_ref_in_expr(left, renamer)?),
             op: op.clone(),
-            right: Box::new(rename_ref_in_expr(right, old_name, new_name)?),
+            right: Box::new(rename_ref_in_expr(right, renamer)?),
         })),
         syn::Expr::Block(_) => todo!(),
         syn::Expr::Box(_) => todo!(),
@@ -135,7 +140,7 @@ fn rename_ref_in_expr(
             paren_token,
             expr: inner_expr,
         }) => Ok(syn::Expr::Paren(syn::ExprParen {
-            expr: Box::new(rename_ref_in_expr(inner_expr, old_name, new_name)?),
+            expr: Box::new(rename_ref_in_expr(inner_expr, renamer)?),
             attrs: attrs.clone(),
             paren_token: paren_token.clone(),
         })),
@@ -149,13 +154,10 @@ fn rename_ref_in_expr(
             let mut new_path = expr_path.clone();
             match &path[..] {
                 [local_var] => {
-                    if local_var.ident.to_string() == old_name {
-                        let new_ident = syn::Ident::new(new_name, local_var.ident.span());
-                        new_path.path.segments.first_mut().unwrap().ident = new_ident;
-                        Ok(syn::Expr::Path(new_path))
-                    } else {
-                        Ok(expr.clone())
-                    }
+                    let new_name = renamer(&local_var.ident.to_string());
+                    let new_ident = syn::Ident::new(&new_name, local_var.ident.span());
+                    new_path.path.segments.first_mut().unwrap().ident = new_ident;
+                    Ok(syn::Expr::Path(new_path))
                 }
                 _other => todo!(),
             }
@@ -169,9 +171,15 @@ fn rename_ref_in_expr(
         syn::Expr::TryBlock(_) => todo!(),
         syn::Expr::Tuple(_) => todo!(),
         syn::Expr::Type(_) => todo!(),
-        syn::Expr::Unary(syn::ExprUnary { attrs, op , expr:inner }) => {
-            anyhow::Ok(syn::Expr::Unary(syn::ExprUnary { attrs: attrs.clone(), op: op.clone(), expr: Box::new(rename_ref_in_expr(inner, old_name, new_name)?)}))
-        },
+        syn::Expr::Unary(syn::ExprUnary {
+            attrs,
+            op,
+            expr: inner,
+        }) => anyhow::Ok(syn::Expr::Unary(syn::ExprUnary {
+            attrs: attrs.clone(),
+            op: op.clone(),
+            expr: Box::new(rename_ref_in_expr(inner, renamer)?),
+        })),
         syn::Expr::Unsafe(_) => todo!(),
         syn::Expr::Verbatim(_) => todo!(),
         syn::Expr::While(_) => todo!(),

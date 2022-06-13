@@ -664,15 +664,15 @@ fn test_add_var_neg() {
 mod loops {
     use super::*;
     #[test]
-    fn test_loop_simple() {
+    fn test_loop_simple_no_inv() {
         init_tracing();
         with_item_and_rt_lib(
             &quote! {
-                fn f() -> ty!{ v : i32 | v > 0 } {
+                fn f() -> ty!{ v : i32 | v == 10} {
                     let mut res = 1;
-                    res as ty!{ s : i32 | s > 0 };
+                    res = res as ty!{ s : i32 | s > 0 && s <= 10 };
                     while res < 10 {
-                        res = (res + 1) as ty!{ a : i32 | a > 0 };
+                        res = (res + 1) as ty!{ a : i32 | a > 0 && a <= 10 && a == s + 1};
                         ()
                     }
                     res
@@ -681,7 +681,7 @@ mod loops {
             .to_string(),
             |item, tcx| {
                 let ty = type_check_function(item, &tcx).unwrap();
-                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == 10 }");
             },
         )
         .unwrap();
@@ -710,102 +710,73 @@ mod loops {
         )
         .unwrap();
     }
+    
     #[test]
-    fn test_loop_complex() {
-        init_tracing();
-        with_item_and_rt_lib(
-            &quote! {
-                fn bad_square(n: ty!{ nv : i32 | nv > 0 }) -> ty!{ v : i32 | v == n * n } {
-                    let mut i = 0 as ty!{ iv : i32 | iv == 0};
-                    let mut sum = 0 as ty!{ sv : i32 | sv == iv * nv };
-                    i = i as ty!{iv2: i32 | iv2 <= nv};
-                    while i < n {
-                        // Gamma! = {
-                            // i : {i1 | true} => {i2 | i2 == i1 + 1}
-                            // sum : {s1 | i1 * nv} => {s2 | s2 == i2 * nv}
-                        //}
-                        i = (i + 1) as ty!{ asd: i32 | asd == iv + 1 };
-                        sum = (sum + n) as ty!{ s2 : i32 | s2 == iv * nv };
-                        ()
-                    }
-                    sum
-                }
-
-                fn asd() -> ty!{v:i32 | v > 10} {
-                    let mut i = 0 as ty!{i1: i32 | i1 == 0};
-                    i = (i + 1) as ty!{i2: i32 | i2 == i1 + 1};
-                    i
-                }
-            }
-            .to_string(),
-            |item, tcx| {
-                let ty = type_check_function(item, &tcx).unwrap();
-                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= n }");
-            },
-        )
-        .unwrap();
-    }
-
-
-    #[test]
-    fn test_loop_ssa_complex() {
+    fn test_loop_single_step() {
         init_tracing();
         with_item_and_rt_lib(
             &quote! {
                 fn step(
                     n: ty!{ nv : i32 | nv > 0 },
-                    i: &mut ty!{i0 : i32 | i0 < nv  => i1 | i1 <= nv},
-                    sum: &mut ty!{s0: i32 | s0 == nv * i0 => s1 | s1 == nv * i1 && s1 == 1337}
+                    i: &mut ty!{i0 : i32 | i0 < nv  => i1 | i1 <= nv },
+                    sum: &mut ty!{s0: i32 | s0 == nv * i0 => s1 | s1 == nv * i1 }
                 ) -> ty!{ v: i32 } {
-                    let i0 = *i as ty!{i00 : i32 | i00 < nv };
-                    *i = (i0 + 1) as ty!{i2: i32 | i2 == i00 + 1};
-                    let s0 = *sum as ty!{s00 : i32 | s00 == nv * i00};
-                    // *sum = s0 + n;
+                    *i = (*i + 1);
+                    *sum = *sum + n;
                     0
                 }
-                // fn bad_square(n: ty!{ nv : i32 | nv > 0 }) -> ty!{ v : i32 | v == nv * nv } {
-                //     let mut i = 0 as ty!{ iv : i32 | iv == 0};
-                //     let mut sum = 0 as ty!{ sv : i32 | sv == 0 };
-                //     sum = sum as ty!{ sv2 : i32 |  sv2 == nv * iv};
-                //     i = i as ty!{iv2: i32 | iv2 <= nv};
-                //     while i < n {
-                //         // Inv: i <= nv && sum == n * i
-                //         let j = i as ty!{i_old: i32 | i_old < nv && sv == i_old * nv};
-                        
-                //         // sum = (sum + n) as ty!{s: i32 | s == (i_old + 1) * nv };
-                //         i = (j + 1) as ty!{i_new : i32 | i_new == i_old + 1 };
-                //         ()
-                //     }
-                //     sum
-                // }
             }
             .to_string(),
             |item, tcx| {
                 let ty = type_check_function(item, &tcx).unwrap();
-                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= n }");
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | true }");
+            },
+        )
+        .unwrap();
+    }
+    #[test]
+    fn test_loop_single_init() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn init(
+                    n: ty!{ nv : i32 | nv > 0 },
+                    i: &mut ty!{i0 : i32 | i0 == 0  => i1 | i1 <= nv},
+                    sum: &mut ty!{s0: i32 | s0 == 0 => s1 | s1 == nv * i1 }
+                ) -> ty!{ v: i32 } {
+                    // *i = (*i + 1);
+                    // *sum = *sum + n;
+                    0
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | true }");
             },
         )
         .unwrap();
     }
 
     #[test]
-    fn test_loop_keep_predicates_complex() {
+    fn test_loop_complex() {
         init_tracing();
         with_item_and_rt_lib(
             &quote! {
-                fn bad_square(n: ty!{ nv : i32 | nv > 0 }) -> ty!{ v : i32 | v == n * n } {
-                    let mut i = 0 as ty!{ iv : i32 | iv == 0};
-                    let mut sum = 0 as ty!{ sv : i32 | sv == 0 };
-                    i = i as ty!{iv2: i32 | iv2 <= nv};
+                fn bad_square(n: ty!{ nv : i32 | nv > 0 }) -> ty!{ v : i32 | v == nv * nv*2 } {
+                    let mut i = 0 as ty!{ iv : i32 | iv == 0 };
+                    
+                    let mut sum = 0 as ty!{ sv : i32 | sv == iv * nv };
+                    
+                    i = i as ty!{i2 : i32 | i2 <= nv };
+                    // sum : ty!{ sv : i32 | sv == i2 * nv } => ty!{ iv : i32 | iv == 0 }
                     while i < n {
-                        i = i as ty!{iold: i32 | iold <= nv};
-                        sum = sum as ty!{sumold: i32 | sumold == iold*nv};
-
-                        i = i+1 as ty!{i2: i32 | i2 == iold+1};
-                        sum = sum+n as ty!{sum2: i32 | sum2 == sumold+nv};
-
-                        i = i as ty!{inew: i32 | inew <= nv};
-                        sum = sum as ty!{sumnew: i32 | sumnew == inew*nv};
+                        // Gamma! = {
+                            // i : {i1 | true} => {i2 | i2 == i1 + 1}
+                            // sum : {s1 | i1 * nv} => {s2 | s2 == i2 * nv}
+                        //}
+                        i = (i + 1);
+                        sum = (sum + n);
                         ()
                     }
                     sum
@@ -814,11 +785,12 @@ mod loops {
             .to_string(),
             |item, tcx| {
                 let ty = type_check_function(item, &tcx).unwrap();
-                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= n }");
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == nv * nv }");
             },
         )
         .unwrap();
     }
+
 
     #[test]
     fn test_loop_simple_invariant() {

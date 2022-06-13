@@ -552,7 +552,7 @@ where
                 "could not find refinement type definition of {} in refinement context",
                 tcx.hir().node_to_string(dest_hir_id)
             ))?;
-            after_rhs.update_ty(dest_hir_id, rhs_ty.rename_binder(&ty_in_context.binder)?);
+            after_rhs.update_ty(dest_hir_id, rhs_ty.clone());
             trace!(%rhs_ty, after_rhs=%after_rhs.with_tcx(tcx), "rhs_ty is");
             anyhow::Ok((rhs_ty, after_rhs))
         }
@@ -683,7 +683,7 @@ fn require_is_subtype_of<'tcx, P>(
     solver: &mut Solver<P>,
 ) -> anyhow::Result<()> {
     info!(
-        "need to do subtyping judgement: {} ≼ {} in ctx {}",
+        "need to do subtyping judgement: {} ≼  {} in ctx {}",
         sub_ty,
         super_ty,
         ctx.with_tcx(tcx)

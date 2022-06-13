@@ -4,7 +4,7 @@ use std::{
     io::Write,
 };
 
-use crate::{hir_ext::ExprExt, smtlib_ext::SmtResExt};
+use crate::{hir_ext::ExprExt, refinements::rename_ref_in_expr, smtlib_ext::SmtResExt};
 use hir::ExprKind;
 use quote::{format_ident, quote};
 use rsmt2::Solver;
@@ -24,8 +24,12 @@ use crate::refinements::{self, RefinementType};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RContext<'tcx, K: Debug + Eq + Hash + Display + SmtFmt = hir::HirId> {
-    pub formulas: Vec<syn::Expr>, // stack of formulas
-    pub types: HashMap<K, RefinementType<'tcx>>,
+    /// stack of formulas
+    formulas: Vec<syn::Expr>,
+    /// Association of variable declarations (K) with their current refinement type binder (String)
+    binders: HashMap<K, String>,
+    /// Association of the refinement type binder with the associated type
+    types: HashMap<String, RefinementType<'tcx>>,
 }
 
 impl<'a, K> RContext<'a, K>
@@ -36,6 +40,7 @@ where
         RContext {
             formulas: Vec::new(),
             types: HashMap::new(),
+            binders: HashMap::new(),
         }
     }
 
@@ -48,38 +53,73 @@ where
         formulas.pop().unwrap();
         RContext {
             formulas,
+            binders: self.binders.clone(),
             types: self.types.clone(),
         }
     }
 
     pub fn update_ty(&mut self, hir: K, ty: RefinementType<'a>) {
-        self.types.remove(&hir);
+        self.binders.remove(&hir);
         self.add_ty(hir, ty);
     }
 
     pub fn add_ty(&mut self, hir: K, ty: RefinementType<'a>) {
-        assert!(!self.types.contains_key(&hir));
-        self.types.insert(hir, ty);
+        assert!(!self.binders.contains_key(&hir));
+        self.binders.insert(hir, ty.binder.clone());
+        self.types.insert(ty.binder.clone(), ty);
+    }
+
+    pub fn rename_binders(&self, renamer: &impl Fn(&str) -> String) -> anyhow::Result<Self> {
+        let binder_names: HashMap<&String, String> = self
+            .binders
+            .iter()
+            .map(|(_, name)| (name, renamer(name)))
+            .collect();
+        let formulas = self
+            .formulas
+            .iter()
+            .map(|formula| {
+                rename_ref_in_expr(formula, renamer)
+            })
+            .try_collect()?;
+        let binders = self
+            .binders
+            .iter()
+            .map(|(hir_id, old_name)| 
+                anyhow::Ok((
+                    hir_id.clone(),
+                    binder_names
+                        .get(old_name)
+                        .ok_or(anyhow!("name not found in binders list"))?
+                        .clone(),
+                ))
+            )
+            .try_collect()?;
+        let types = self.types.iter().map(|(k, v)| {
+            let new_name = renamer(k);
+            assert_eq!(k, &v.binder);
+            anyhow::Ok((new_name, v.rename_binders(renamer)?))
+        }).try_collect()?;
+        anyhow::Ok(RContext {
+            formulas,
+            binders,
+            types,
+        })
     }
 
     pub fn lookup_hir(&self, hir: &K) -> Option<RefinementType<'a>> {
-        self.types.get(&hir).map(|entry| entry.clone())
-    }
-
-    pub fn filter_hirs(&self, filter: impl Fn(&K) -> bool) -> RContext<'a, K> {
-        let mut types = self.types.clone();
-        types.retain(|key, _| filter(key));
-        RContext {
-            formulas: self.formulas.clone(),
-            types,
-        }
+        self.binders
+            .get(&hir)
+            .and_then(|binder| self.types.get(binder))
+            .map(|entry| entry.clone())
+        // self.types.get(&hir).map(|entry| entry.clone())
     }
 
     pub fn encode_smt<P>(&self, solver: &mut Solver<P>, tcx: &TyCtxt<'a>) -> anyhow::Result<()> {
         solver.comment("<Context>").into_anyhow()?;
         solver.push(1).into_anyhow()?;
 
-        self.encode_declarations(solver, tcx)?;
+        self.encode_binder_decls(solver, tcx)?;
         self.encode_predicates(solver)?;
         self.encode_formulas(solver)?;
 
@@ -88,15 +128,24 @@ where
         Ok(())
     }
 
-    pub fn encode_declaration<P>(
+    pub fn loopup_decl_for_binder(&self, needle: &str) -> Option<&K> {
+        self.binders
+            .iter()
+            .find_map(|(key, binder)| if binder == needle { Some(key) } else { None })
+    }
+
+    pub fn encode_binder_decl<P>(
         &self,
         solver: &mut Solver<P>,
-        ident: &K,
         ty: &RefinementType<'a>,
         tcx: &TyCtxt<'a>,
     ) -> anyhow::Result<()> {
+        let ident = self
+            .loopup_decl_for_binder(&ty.binder)
+            .map(|decl| decl.fmt_str(tcx))
+            .unwrap_or("<dangling type>".to_string());
         solver
-            .comment(&format!("decl for {}", ident.fmt_str(tcx)))
+            .comment(&format!("decl for {}", ident))
             .into_anyhow()?;
 
         fn encode_type<'tcx>(ty: &rustc_middle::ty::Ty<'tcx>) -> &'static str {
@@ -116,27 +165,32 @@ where
         Ok(())
     }
 
-    pub fn encode_declarations<P>(
+    pub fn encode_binder_decls<P>(
         &self,
         solver: &mut Solver<P>,
         tcx: &TyCtxt<'a>,
     ) -> anyhow::Result<()> {
         self.types
             .iter()
-            .try_for_each(|(ident, ty)| self.encode_declaration(solver, ident, ty, tcx))?;
+            .try_for_each(|(ident, ty)| self.encode_binder_decl(solver, ty, tcx))?;
         Ok(())
     }
 
     pub fn encode_predicates<P>(&self, solver: &mut Solver<P>) -> anyhow::Result<()> {
-        self.types.iter().try_for_each(|(ident, ty)| {
+        self.types.iter().try_for_each(|(binder, ty)| {
+            let decl_name = match self.loopup_decl_for_binder(binder) {
+                Some(hir_id) => hir_id.to_string(),
+                None => "<dangling type>".to_string(),
+            };
             solver
-                .comment(&format!("predicate for {} {}", ty.binder, ident))
+                .comment(&format!("predicate for {}: {}", binder, decl_name))
                 .into_anyhow()?;
             solver
                 .assert(refinements::encode_smt(&ty.predicate))
                 .into_anyhow()?;
             anyhow::Ok(())
         })?;
+
         Ok(())
     }
 
@@ -156,9 +210,11 @@ where
     /// Tries to construct a RefoinementContext from a `assert_ctx` call.
     /// The call should look like this:
     /// ```
-    /// assert_ctx(&["b > 0"], &[&my_var, { "i" }, {"i > 0"}])
+    /// assert_ctx(&["b > 0"], &[(&my_var, { "i" }, {"i > 0"}), ((), {"a"}, {"a == 2"})])
     /// ```
     /// Where [`func_decl`] is "assert_ctx" and [`func_args`] are its args
+    /// A unit type as the first entry in the refinement association list denotes a dangling
+    /// refinemen type
     pub fn try_from_assert_expr(
         func_decl: &hir::Node<'a>,
         func_args: &[hir::Expr<'a>],
@@ -190,7 +246,7 @@ where
                         ),
                     ..
                 }] => {
-                    let form_symbols: Vec<_> = forms_raw
+                    let form_symbols: Vec<syn::Expr> = forms_raw
                         .iter()
                         .map(|arg| {
                             arg.try_into_symbol()
@@ -199,7 +255,7 @@ where
                                 .and_then(|s| refinements::parse_predicate(&s))
                         })
                         .try_collect()?;
-                    let refinement_symbols: HashMap<_, _> = refinements_raw
+                    let refinement_symbols: Vec<(_, _)> = refinements_raw
                         .iter()
                         .map(|arg| {
                             if let ExprKind::Tup([var_raw, binder_raw, pred_raw]) = arg.kind {
@@ -213,12 +269,16 @@ where
                                     .ok_or(anyhow!("unexpected thing in place of pred"))?;
                                 let var = match &var_raw.kind {
                                     ExprKind::AddrOf(_, _, inner) => {
-                                        inner.try_into_path_hir_id(tcx, local_ctx)
+                                        let decl = inner.try_into_path_hir_id(tcx, local_ctx)?;
+                                        anyhow::Ok(Some(decl))
                                     }
+                                    ExprKind::Tup([]) => anyhow::Ok(None),
                                     _other => todo!(),
                                 }?;
                                 trace!(var=?var, binder=?binder, pred=?predicate);
-                                let var_ty = local_ctx.node_type(var);
+                                let var_ty = local_ctx.node_type(
+                                    var.expect("TODO: deal with type of dangling refinements"),
+                                );
                                 anyhow::Ok((
                                     var,
                                     RefinementType {
@@ -232,9 +292,25 @@ where
                             }
                         })
                         .try_collect()?;
+                    let binders: HashMap<hir::HirId, String> = refinement_symbols
+                        .iter()
+                        .filter_map(|(maybe_hir, rt)| {
+                            if let Some(hir) = maybe_hir {
+                                Some((hir.clone(), rt.binder.clone()))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<HashMap<_, _>>();
+                    let types: HashMap<String, RefinementType> = refinement_symbols
+                        .into_iter()
+                        .map(|(_, rt)| (rt.binder.clone(), rt))
+                        .collect();
+
                     anyhow::Ok(Some(RContext {
                         formulas: form_symbols,
-                        types: refinement_symbols,
+                        binders,
+                        types,
                     }))
                 }
                 _other => todo!(),
@@ -252,6 +328,9 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
     tcx: &TyCtxt<'tcx>,
     solver: &mut Solver<P>,
 ) -> anyhow::Result<()> {
+    let super_ctx = super_ctx.rename_binders(&|name| format!("super_{}", name))?;
+    let sub_ctx = sub_ctx.rename_binders(&|name| format!("sub_{}", name))?;
+
     trace!(super_ctx=%(super_ctx.with_tcx(tcx)), sub_ctx=%(sub_ctx.with_tcx(tcx)), "check");
     solver
         .comment("checking is_sub_context ...")
@@ -259,37 +338,42 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
     solver.push(1).into_anyhow()?;
 
     if super_ctx
-        .types
+        .binders
         .keys()
         .collect::<HashSet<_>>()
-        .is_subset(&sub_ctx.types.keys().collect::<HashSet<_>>())
+        .is_subset(&sub_ctx.binders.keys().collect::<HashSet<_>>())
     {
         //every thing is fine
     } else {
-        anyhow::bail!("super ctx may contain at most the same keys as the super ctx")
+        anyhow::bail!("super ctx may contain at most the same declarations as the super ctx")
     }
 
-    sub_ctx.types.iter().try_for_each(|(hir_id, sub_ty)| {
-        sub_ctx.encode_declaration(solver, hir_id, &sub_ty, tcx)?;
+    sub_ctx.encode_binder_decls(solver, tcx)?;
+    super_ctx.encode_binder_decls(solver, tcx)?;
+
+    sub_ctx.types.iter().try_for_each(|(binder, sub_ty)| {
+        // sub_ctx.encode_binder_decl(solver, &sub_ty, tcx)?;
 
         // the super ctx may be missing some declarations, that are contained in the
         // sub_ctx.
-        match super_ctx.lookup_hir(hir_id) {
-            // In case there is a matching super_ty => encode an equate them
+        match sub_ctx
+            .loopup_decl_for_binder(binder)
+            .and_then(|hir_id| super_ctx.lookup_hir(hir_id))
+        {
+            // In case there is a matching super_ty => encode and equate them
             Some(super_ty) => {
-                if sub_ty.binder != super_ty.binder {
-                    super_ctx.encode_declaration(solver, hir_id, &super_ty, tcx)?;
-
-                    let sub_binder = format_ident!("{}", &sub_ty.binder);
-                    let super_binder = format_ident!("{}", &super_ty.binder);
-                    solver
-                        .assert(refinements::encode_smt(
-                            &parse_quote! { #sub_binder == #super_binder },
-                        ))
-                        .into_anyhow()?;
-                }
+                let sub_binder = format_ident!("{}", &sub_ty.binder);
+                let super_binder = format_ident!("{}", &super_ty.binder);
+                solver
+                    .comment(&format!("same hir id => equate"))
+                    .into_anyhow()?;
+                solver
+                    .assert(refinements::encode_smt(
+                        &parse_quote! { #sub_binder == #super_binder },
+                    ))
+                    .into_anyhow()?;
             }
-            // When there is no super_ty matching => just encode the sub_ty
+            // When there is no super_ty matching, nothing else to do
             None => {}
         }
 
@@ -359,7 +443,7 @@ impl SmtFmt for hir::HirId {
     }
 }
 
-impl<'a, 'b, 'c, K: SmtFmt + Debug + Eq + Hash + Display + SmtFmt> Display
+impl<'a, 'b, 'c, K: SmtFmt + Debug + Eq + Hash + Display + SmtFmt + Clone> Display
     for FormatContext<'a, 'b, 'c, K>
 {
     fn fmt<'tcx>(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -369,8 +453,13 @@ impl<'a, 'b, 'c, K: SmtFmt + Debug + Eq + Hash + Display + SmtFmt> Display
             writeln!(f, "    {}", quote! { #formula })?;
         }
         writeln!(f, "    // types")?;
-        for (id, ty) in &self.ctx.types {
-            writeln!(f, "    {} : {}", id.fmt_str(self.tcx), ty)?;
+        for (binder, ty) in &self.ctx.types {
+            let decl = self.ctx.loopup_decl_for_binder(binder);
+            let name = match decl {
+                Some(id) => id.fmt_str(self.tcx),
+                None => "<dangling>".to_string(),
+            };
+            writeln!(f, "    {} : {}", name, ty)?;
         }
         writeln!(f, "}}")
     }

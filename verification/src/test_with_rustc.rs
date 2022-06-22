@@ -22,6 +22,8 @@ use tracing::warn;
 
 use quote::quote;
 
+use crate::buildin_functions::CtxSpecFunctions;
+
 struct HirCallback<F: Send> {
     with_hir: RwLock<F>,
     input: String,
@@ -113,7 +115,16 @@ where
 {
     with_hir(
         |hir, tcx| match hir {
-            hir::Node::Item(item) => if hir.ident().map(|sym| sym.name.to_ident_string()) == Some("assert_ctx".into()) {} else { callback(item, tcx) },
+            hir::Node::Item(item) => {
+                if hir
+                    .ident()
+                    .map(|sym| CtxSpecFunctions::is_buildin(&sym.name.to_ident_string()))
+                    == Some(true)
+                {
+                } else {
+                    callback(item, tcx)
+                }
+            }
             o => warn!(node=?o, "parsing input resulted in different stuff"),
         },
         &(include_str!("../../runtime-library/src/lib.rs").to_string() + input),

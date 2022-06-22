@@ -38,6 +38,7 @@ mod hir_ext;
 mod constraint_generator;
 mod refinement_context;
 mod refinements;
+mod buildin_functions;
 mod smtlib_ext;
 #[cfg(test)]
 mod test_with_rustc;

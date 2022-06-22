@@ -242,21 +242,19 @@ where
         trace!(types=%self.types.values().map(|k| k.to_string()).collect::<String>(), "new types:")
     }
 
-    /// Tries to construct a RefoinementContext from a `assert_ctx` call.
+    /// Tries to construct a RefoinementContext from a `assert_ctx` or `update_ctx` call.
     /// The call should look like this:
     /// ```
     /// assert_ctx(&["b > 0"], &[(&my_var, { "i" }, {"i > 0"}), ((), {"a"}, {"a == 2"})])
     /// ```
-    /// Where [`func_decl`] is "assert_ctx" and [`func_args`] are its args
+    /// Where [`func_args`] are `assert_ctx`'s args
     /// A unit type as the first entry in the refinement association list denotes a dangling
-    /// refinemen type
+    /// refinement type
     pub fn try_from_assert_expr(
-        func_decl: &hir::Node<'a>,
         func_args: &[hir::Expr<'a>],
         tcx: &TyCtxt<'a>,
         local_ctx: &TypeckResults<'a>,
-    ) -> anyhow::Result<Option<RContext<'a, hir::HirId>>> {
-        if func_decl.ident().map(|v| v.name.to_string()) == Some("assert_ctx".to_string()) {
+    ) -> anyhow::Result<RContext<'a, hir::HirId>> {
             match func_args {
                 [hir::Expr {
                     kind:
@@ -342,17 +340,14 @@ where
                         .map(|(_, rt)| (rt.binder.clone(), rt))
                         .collect();
 
-                    anyhow::Ok(Some(RContext {
+                    anyhow::Ok(RContext {
                         formulas: form_symbols,
                         binders,
                         types,
-                    }))
+                    })
                 }
                 _other => todo!(),
             }
-        } else {
-            anyhow::Ok(None)
-        }
     }
 }
 

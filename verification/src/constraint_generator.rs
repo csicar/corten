@@ -93,8 +93,6 @@ where
                 .ok_or(anyhow!("function not found in typeck result"))?;
             trace!(?fn_sig);
 
-            let build_in_functions = vec!["assert_ctx", "update_ctx"];
-
             if CtxSpecFunctions::is_buildin(&ident.name.to_string()) {
                 let out_ty = fn_sig.output();
                 return anyhow::Ok(RefinementType {
@@ -356,10 +354,10 @@ where
                 .as_ref()
             {
                 "assert_ctx" => FnCallType::AssertCtx(
-                    RContext::<hir::HirId>::try_from_assert_expr(&func_decl, args, tcx, local_ctx)?,
+                    RContext::<hir::HirId>::try_from_assert_expr(args, tcx, local_ctx)?,
                 ),
                 "update_ctx" => FnCallType::UpdateCtx(
-                    RContext::<hir::HirId>::try_from_assert_expr(&func_decl, args, tcx, local_ctx)?,
+                    RContext::<hir::HirId>::try_from_assert_expr(args, tcx, local_ctx)?,
                 ),
                 _ => FnCallType::NormalCall,
             };

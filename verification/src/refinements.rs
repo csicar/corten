@@ -1,6 +1,9 @@
+use crate::constraint_generator::Fresh;
 use crate::hir_ext::TyExt;
 use anyhow::anyhow;
 use rustc_hir as hir;
+use rustc_middle::ty::TypeckResults;
+use syn::parse_quote;
 use syn::visit::Visit;
 use tracing::trace;
 
@@ -37,6 +40,19 @@ impl<'a> RefinementType<'a> {
                 raw_type
             ))
         }
+    }
+
+    pub fn new_empty_refinement_for(
+        expr: &hir::Expr,
+        local_ctx: &TypeckResults<'a>,
+        fresh_binder: String,
+    ) -> RefinementType<'a> {
+        let unit_type = local_ctx.expr_ty(expr);
+            RefinementType {
+                base: unit_type,
+                binder: fresh_binder,
+                predicate: parse_quote! { true },
+            }
     }
 
     pub fn rename_binder(&self, new_name: &str) -> anyhow::Result<RefinementType<'a>> {

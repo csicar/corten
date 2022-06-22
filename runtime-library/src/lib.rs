@@ -46,3 +46,7 @@ macro_rules! ctx {
 
 #[inline(always)]
 fn assert_ctx(formulas: &[&'static str], entries: &[(&dyn Any, &'static str, &'static str)]) {}
+
+
+#[inline(always)]
+fn update_ctx(formulas: &[&'static str], entries: &[(&dyn Any, &'static str, &'static str)]) {}

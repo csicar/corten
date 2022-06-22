@@ -664,14 +664,16 @@ fn test_update_ctx_pos() {
     init_tracing();
     with_item_and_rt_lib(
         &quote! {
-            fn f() -> ty!{ v : () | true } {
-                let a = 1 as ty!{a1: i32 | a1 == 1};
-                let b = 1 as ty!{b1: i32 | b1 == a1};
-                set_ctx! {
+            fn f(n: ty!{ nv : i32 | nv > 0 }) -> ty!{ v : () | true } {
+                let mut i = 0 as ty!{ iv : i32 | iv == 0 };
+                    
+                let mut sum = 0 as ty!{ sv : i32 | sv == iv * nv };
+                set_ctx!{
                     ;
-                    a |-> a2 | a2 > 0,
-                    b |-> b2 | b2 == a2 && b2 >= 0
-                };
+                    n |-> nv | nv > 0,
+                    i |-> iv | iv <= nv,
+                    sum |-> sv | sv == iv * nv
+                }
                 ()
             }
         }
@@ -890,13 +892,16 @@ mod loops {
         init_tracing();
         with_item_and_rt_lib(
             &quote! {
-                fn bad_square(n: ty!{ nv : i32 | nv > 0 }) -> ty!{ v : i32 | v == nv * nv*2 } {
+                fn bad_square(n: ty!{ nv : i32 | nv > 0 }) -> ty!{ v : i32 | v == nv * nv } {
                     let mut i = 0 as ty!{ iv : i32 | iv == 0 };
                     
                     let mut sum = 0 as ty!{ sv : i32 | sv == iv * nv };
-                    
-                    i = i as ty!{i2 : i32 | i2 <= nv };
-                    // sum : ty!{ sv : i32 | sv == i2 * nv } => ty!{ iv : i32 | iv == 0 }
+                    set_ctx!{
+                        ;
+                        n |-> nv | nv > 0,
+                        i |-> iv | iv <= nv,
+                        sum |-> sv | sv == iv * nv
+                    }
                     while i < n {
                         // Gamma! = {
                             // i : {i1 | true} => {i2 | i2 == i1 + 1}
@@ -904,6 +909,12 @@ mod loops {
                         //}
                         i = (i + 1);
                         sum = (sum + n);
+                        set_ctx!{
+                            iv <= nv;
+                            n |-> nv | nv > 0,
+                            i |-> iv | iv <= nv,
+                            sum |-> sv | sv == iv * nv
+                        }
                         ()
                     }
                     sum

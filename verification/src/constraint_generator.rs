@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::time::SystemTime;
 
+use crate::buildin_functions::CtxSpecFunctions;
 use crate::refinement_context::is_sub_context;
 use crate::refinement_context::RContext;
 use crate::refinements;
@@ -20,8 +21,8 @@ use rustc_hir::{Expr, ExprKind};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::ty::TypeckResults;
 use rustc_span::source_map::Spanned;
-use tracing::Level;
 use tracing::error;
+use tracing::Level;
 
 use syn::parse_quote;
 use tracing::info;
@@ -92,7 +93,9 @@ where
                 .ok_or(anyhow!("function not found in typeck result"))?;
             trace!(?fn_sig);
 
-            if ident.name.to_string() == "assert_ctx" {
+            let build_in_functions = vec!["assert_ctx", "update_ctx"];
+
+            if CtxSpecFunctions::is_buildin(&ident.name.to_string()) {
                 let out_ty = fn_sig.output();
                 return anyhow::Ok(RefinementType {
                     base: out_ty,
@@ -113,7 +116,7 @@ where
                             // Because mutable end-states may refer to immutable refinement binders
                             // we need to add them to the end ctx.
                             // Because immut types cannot chnge their predicates, the end state will need
-                            // to have the same predicate as before. 
+                            // to have the same predicate as before.
                             // We could also use `ty!{ _ | true }}` here
                             expected_end_state.add_ty(param.pat.hir_id, refinement.clone());
                             refinement
@@ -238,8 +241,8 @@ where
                 type_of(inner_expr, tcx, &curr_ctx, &local_ctx, solver, fresh)?.1
             } // _ => todo!()
         };
-        let pretty_stmt = 
-        rustc_hir_pretty::to_string(&rustc_hir_pretty::NoAnn, |state| state.print_stmt(stmt));
+        let pretty_stmt =
+            rustc_hir_pretty::to_string(&rustc_hir_pretty::NoAnn, |state| state.print_stmt(stmt));
 
         trace!(stmt=%pretty_stmt, ctx_after=%curr_ctx.with_tcx(&tcx), "stmt transition: current ctx is");
     }
@@ -337,42 +340,69 @@ where
         ExprKind::ConstBlock(_) => todo!(),
         ExprKind::Array(_) => todo!(),
         ExprKind::Call(func, args) => {
-            let asd = func.try_into_path_hir_id(tcx, local_ctx)?;
-            let func_decl = tcx.hir().get(asd);
-            let maybe_ctx =
-                RContext::<hir::HirId>::try_from_assert_expr(&func_decl, args, tcx, local_ctx)?;
-            match maybe_ctx {
-                Some(assert_ctx) => {
+            let path_hir_id = func.try_into_path_hir_id(tcx, local_ctx)?;
+            let func_decl = tcx.hir().get(path_hir_id);
+
+            enum FnCallType<'tcx> {
+                AssertCtx(RContext<'tcx, hir::HirId>),
+                UpdateCtx(RContext<'tcx, hir::HirId>),
+                NormalCall,
+            }
+            let fn_type = match func_decl
+                .ident()
+                .expect("func decl must have an ident()")
+                .name
+                .to_string()
+                .as_ref()
+            {
+                "assert_ctx" => FnCallType::AssertCtx(
+                    RContext::<hir::HirId>::try_from_assert_expr(&func_decl, args, tcx, local_ctx)?,
+                ),
+                "update_ctx" => FnCallType::UpdateCtx(
+                    RContext::<hir::HirId>::try_from_assert_expr(&func_decl, args, tcx, local_ctx)?,
+                ),
+                _ => FnCallType::NormalCall,
+            };
+
+            match fn_type {
+                FnCallType::AssertCtx(assert_ctx) => {
                     // do sub typing checkings
                     trace!(ctx=%assert_ctx.with_tcx(tcx), "found ctx assertion");
                     is_sub_context(ctx, &assert_ctx, tcx, solver)?;
                     is_sub_context(&assert_ctx, ctx, tcx, solver)?;
 
-                    let unit_type = local_ctx.expr_ty(expr);
                     anyhow::Ok((
-                        RefinementType {
-                            base: unit_type,
-                            binder: fresh.fresh_ident(),
-                            predicate: parse_quote! { true },
-                        },
+                        RefinementType::new_empty_refinement_for(
+                            expr,
+                            local_ctx,
+                            fresh.fresh_ident(),
+                        ),
                         ctx.clone(),
                     ))
                 }
-                None => {
+                FnCallType::UpdateCtx(spec_ctx) => {
+                    // do sub typing checkings
+                    trace!(ctx=%spec_ctx.with_tcx(tcx), "found ctx update");
+                    is_sub_context(ctx, &spec_ctx, tcx, solver)?;
+
+                    anyhow::Ok((
+                        RefinementType::new_empty_refinement_for(
+                            expr,
+                            local_ctx,
+                            fresh.fresh_ident(),
+                        ),
+                        spec_ctx,
+                    ))
+                }
+                FnCallType::NormalCall => {
                     todo!("do normal function handling")
                 }
             }
         }
         ExprKind::MethodCall(_, _, _) => todo!(),
         ExprKind::Tup(contents) => {
-            let tuple_type = local_ctx.expr_ty(expr);
-            info!(?tuple_type);
             let ty = match contents {
-                [] => RefinementType {
-                    base: tuple_type,
-                    binder: fresh.fresh_ident(),
-                    predicate: parse_quote! { true },
-                },
+                [] => RefinementType::new_empty_refinement_for(expr, local_ctx, fresh.fresh_ident()),
                 _o => todo!(),
             };
             anyhow::Ok((ty, ctx.clone()))
@@ -399,7 +429,7 @@ where
         }
         ExprKind::Unary(hir::UnOp::Deref, expr) => {
             type_of(expr, tcx, ctx, local_ctx, solver, fresh)
-        },
+        }
         ExprKind::Unary(_, _) => todo!(),
         ExprKind::Cast(expr, cast_ty) => {
             // Generate sub-typing constraint
@@ -534,12 +564,8 @@ where
                 _other => todo!(),
             };
 
-            let unit_type = local_ctx.expr_ty(expr);
-            let refined_unit_type = RefinementType {
-                base: unit_type,
-                binder: fresh.fresh_ident(),
-                predicate: parse_quote! { true },
-            };
+            
+            let refined_unit_type = RefinementType::new_empty_refinement_for(expr, local_ctx, fresh.fresh_ident());
 
             let exit_path_formula = negate_predicate(while_cond)?;
 

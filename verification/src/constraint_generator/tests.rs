@@ -359,7 +359,7 @@ fn test_assign_single() {
                 RContext {
                     // formulas
                     // types
-                    <fud.rs>:4:135: 4:140 (#0) local mut a (hir_id=HirId { owner: DefId(0:7 ~ rust_out[9149]::f), local_id: 4 }) : ty!{ _0 : i32 | _0 == 8 }
+                    <fud.rs>:4:135: 4:140 (#0) local mut a (hir_id=HirId { owner: DefId(0:7 ~ rust_out[9149]::f), local_id: 4 }) : ty!{ _2 : i32 | _2 == 8 }
                 }
                 "));
             pretty::assert_eq!(ty.to_string(), "ty!{ _3 : i32 | _3 == 0 }");

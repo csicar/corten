@@ -381,7 +381,7 @@ where
                 FnCallType::UpdateCtx(spec_ctx) => {
                     // do sub typing checkings
                     trace!(ctx=%spec_ctx.with_tcx(tcx), "found ctx update");
-                    is_sub_context(ctx, &spec_ctx, tcx, solver)?;
+                    is_sub_context(&spec_ctx, ctx, tcx, solver)?;
 
                     anyhow::Ok((
                         RefinementType::new_empty_refinement_for(

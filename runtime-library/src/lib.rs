@@ -47,6 +47,15 @@ macro_rules! ctx {
 #[inline(always)]
 fn assert_ctx(formulas: &[&'static str], entries: &[(&dyn Any, &'static str, &'static str)]) {}
 
+#[macro_export]
+macro_rules! set_ctx {
+  ( $($var:ident |-> $binder:ident | $pred:expr),*) => {
+    update_ctx(&[], &[$( (&$var, {stringify!{$binder}}, {stringify!{$pred}}) ),*]);
+  };
+  ( $($form:expr),* ; $($var:ident |-> $binder:ident | $pred:expr),*) => {
+    update_ctx(&[$( {stringify!{$form}} ),*], &[$( (&$var, {stringify!{$binder}}, {stringify!{$pred}}) ),*]);
+  };
+}
 
 #[inline(always)]
 fn update_ctx(formulas: &[&'static str], entries: &[(&dyn Any, &'static str, &'static str)]) {}

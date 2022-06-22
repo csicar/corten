@@ -659,6 +659,57 @@ fn test_add_var_neg() {
     .unwrap();
 }
 
+#[test]
+fn test_update_ctx_pos() {
+    init_tracing();
+    with_item_and_rt_lib(
+        &quote! {
+            fn f() -> ty!{ v : () | true } {
+                let a = 1 as ty!{a1: i32 | a1 == 1};
+                let b = 1 as ty!{b1: i32 | b1 == a1};
+                set_ctx! {
+                    ;
+                    a |-> a2 | a2 > 0,
+                    b |-> b2 | b2 == a2 && b2 >= 0
+                };
+                ()
+            }
+        }
+        .to_string(),
+        |item, tcx| {
+            let ty = type_check_function(item, &tcx).unwrap();
+            pretty::assert_eq!(ty.to_string(), "ty!{ v : () | true }");
+        },
+    )
+    .unwrap();
+}
+
+#[should_panic]
+#[test]
+fn test_update_ctx_neg() {
+    init_tracing();
+    with_item_and_rt_lib(
+        &quote! {
+            fn f() -> ty!{ v : () | true } {
+                let a = 1 as ty!{a1: i32 | a1 == 1};
+                let b = 1 as ty!{b1: i32 | b1 == a1};
+                set_ctx! {
+                    ;
+                    a |-> a2 | a2 > 0,
+                    b |-> b2 | b2 == a2 && b2 < 0
+                };
+                ()
+            }
+        }
+        .to_string(),
+        |item, tcx| {
+            let ty = type_check_function(item, &tcx).unwrap();
+            pretty::assert_eq!(ty.to_string(), "ty!{ v : () | true }");
+        },
+    )
+    .unwrap();
+}
+
 /// Loops
 ///
 mod loops {

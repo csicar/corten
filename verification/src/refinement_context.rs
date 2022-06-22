@@ -375,7 +375,7 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
     {
         //every thing is fine
     } else {
-        anyhow::bail!("super ctx may contain at most the same declarations as the super ctx")
+        anyhow::bail!("super ctx may contain at most the same declarations as the sub ctx")
     }
 
     sub_ctx.encode_binder_decls(solver, tcx)?;

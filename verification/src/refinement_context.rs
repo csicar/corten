@@ -1,10 +1,11 @@
 use std::{
+    any::Any,
     collections::{HashMap, HashSet},
     fmt::Display,
     io::Write,
 };
 
-use crate::{hir_ext::ExprExt, refinements::rename_ref_in_expr, smtlib_ext::SmtResExt};
+use crate::{hir_ext::ExprExt, refinements::{rename_ref_in_expr, vars_in_expr}, smtlib_ext::SmtResExt};
 use hir::ExprKind;
 use quote::{format_ident, quote};
 use rsmt2::Solver;
@@ -61,6 +62,7 @@ where
     pub fn update_ty(&mut self, hir: K, ty: RefinementType<'a>) {
         self.binders.remove(&hir);
         self.add_ty(hir, ty);
+        self.garbage_collect();
     }
 
     pub fn add_ty(&mut self, hir: K, ty: RefinementType<'a>) {
@@ -78,14 +80,12 @@ where
         let formulas = self
             .formulas
             .iter()
-            .map(|formula| {
-                rename_ref_in_expr(formula, renamer)
-            })
+            .map(|formula| rename_ref_in_expr(formula, renamer))
             .try_collect()?;
         let binders = self
             .binders
             .iter()
-            .map(|(hir_id, old_name)| 
+            .map(|(hir_id, old_name)| {
                 anyhow::Ok((
                     hir_id.clone(),
                     binder_names
@@ -93,13 +93,17 @@ where
                         .ok_or(anyhow!("name not found in binders list"))?
                         .clone(),
                 ))
-            )
+            })
             .try_collect()?;
-        let types = self.types.iter().map(|(k, v)| {
-            let new_name = renamer(k);
-            assert_eq!(k, &v.binder);
-            anyhow::Ok((new_name, v.rename_binders(renamer)?))
-        }).try_collect()?;
+        let types = self
+            .types
+            .iter()
+            .map(|(k, v)| {
+                let new_name = renamer(k);
+                assert_eq!(k, &v.binder);
+                anyhow::Ok((new_name, v.rename_binders(renamer)?))
+            })
+            .try_collect()?;
         anyhow::Ok(RContext {
             formulas,
             binders,
@@ -205,6 +209,37 @@ where
 
     pub fn with_tcx<'b, 'c>(&'a self, tcx: &'b TyCtxt<'c>) -> FormatContext<'b, 'a, 'c, K> {
         FormatContext { ctx: self, tcx }
+    }
+
+    #[instrument]
+    pub fn garbage_collect(&mut self) {
+        let mut live_variables: HashSet<String> =
+            self.binders.values().map(|n| n.clone()).chain(self.formulas.iter().flat_map(|formula| vars_in_expr(formula))).collect();
+
+        loop {
+            let new_vars : HashSet<String> = live_variables
+                .iter()
+                .flat_map(|var| self.types.get(var).unwrap().free_vars())
+                .collect();
+
+            trace!("live_variables {live_variables:#?}, referenced variables {new_vars:#?}");
+
+            if new_vars.is_subset(&live_variables) {
+                break;
+            }
+
+            live_variables = live_variables
+                .union(&new_vars)
+                .map(|el| el.clone())
+                .collect();
+
+            
+        }
+
+        self.types.retain(|k, _| {
+            live_variables.contains(k)
+        });
+        trace!(types=%self.types.values().map(|k| k.to_string()).collect::<String>(), "new types:")
     }
 
     /// Tries to construct a RefoinementContext from a `assert_ctx` call.
@@ -395,9 +430,9 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
                 .map(|formula| refinements::encode_smt(formula)),
         )
         .collect::<Vec<_>>()
-        .join("\n    ");
+        .join("\n       ");
     solver
-        .assert(&format!("(not (and true {}))", super_term))
+        .assert(&format!("(not (and true \n       {}\n    ))", super_term))
         .into_anyhow()?;
 
     solver.comment("</SuperCtx>").into_anyhow()?;

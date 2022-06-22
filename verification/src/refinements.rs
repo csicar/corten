@@ -1,9 +1,11 @@
 use crate::hir_ext::TyExt;
 use anyhow::anyhow;
 use rustc_hir as hir;
+use syn::visit::Visit;
 use tracing::trace;
 
 use core::fmt::Display;
+use std::collections::HashSet;
 use quote::quote;
 use quote::ToTokens;
 use rustc_middle::ty::{Ty, TyCtxt};
@@ -56,6 +58,34 @@ impl<'a> RefinementType<'a> {
             predicate: rename_ref_in_expr(&self.predicate, renamer)?,
         })
     }
+
+    pub fn free_vars(&self) -> HashSet<String> {
+        let mut free_vars = vars_in_expr(&self.predicate);
+        free_vars.remove(&self.binder);
+        free_vars
+    }
+}
+
+struct FreeVarsVisitor {
+    free_vars: HashSet<String>
+}
+
+impl<'ast> syn::visit::Visit<'ast> for FreeVarsVisitor {
+    fn visit_path(&mut self, node: &'ast syn::Path) {
+        let path: Vec<&syn::PathSegment> = node.segments.iter().collect();
+        match &path[..] {
+            [local_var] => {
+                self.free_vars.insert(local_var.ident.to_string());
+            }
+            _other => todo!(),
+        }
+    }
+}
+
+pub fn vars_in_expr(expr: &syn::Expr) -> HashSet<String> {
+    let mut visitor = FreeVarsVisitor { free_vars: HashSet::new() };
+    visitor.visit_expr(expr);
+    visitor.free_vars
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -218,7 +248,8 @@ pub fn encode_smt(expr: &syn::Expr) -> String {
                 syn::BinOp::Le(_) => "<=",
                 syn::BinOp::Ge(_) => ">=",
                 syn::BinOp::Gt(_) => ">",
-                _ => todo!(),
+                syn::BinOp::Rem(_) => "mod",
+                _ => todo!("not implemented {op:?}"),
             };
             format!("({} {} {})", smt_op, encode_smt(left), encode_smt(right))
         }

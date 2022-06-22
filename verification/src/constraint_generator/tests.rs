@@ -663,8 +663,58 @@ fn test_add_var_neg() {
 ///
 mod loops {
     use super::*;
+
     #[test]
-    fn test_loop_simple_no_inv() {
+    fn test_loop_even_pos() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f() -> ty!{ v : i32 | v % 2 == 0} {
+                    let mut res = 0  as ty!{ s : i32 | s % 2 == 0 };
+                    while res < 10 {
+                        res = (res + 2) as ty!{ a : i32 | a % 2 == 0 };
+                        ()
+                    }
+                    res
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v % 2 == 0 }");
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_loop_even_seperate_pos() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f() -> ty!{ v : i32 | v % 2 == 0} {
+                    let mut res = 0;
+                    //^ super__0
+                    res = res as ty!{ s : i32 | s % 2 == 0 };
+                    //^ this is the problem (likely unconstrained super__0)
+                    while res < 10 {
+                        res = (res + 2) as ty!{ a : i32 | a % 2 == 0 };
+                        ()
+                    }
+                    res
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v % 2 == 0 }");
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_loop_inc_pos() {
         init_tracing();
         with_item_and_rt_lib(
             &quote! {
@@ -712,7 +762,7 @@ mod loops {
     }
     
     #[test]
-    fn test_loop_single_step() {
+    fn test_loop_single_step_pos() {
         init_tracing();
         with_item_and_rt_lib(
             &quote! {
@@ -734,6 +784,32 @@ mod loops {
         )
         .unwrap();
     }
+
+    #[should_panic]
+    #[test]
+    fn test_loop_single_step_neg() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn step(
+                    n: ty!{ nv : i32 | nv > 0 },
+                    i: &mut ty!{i0 : i32 | i0 < nv  => i1 | i1 <= nv },
+                    sum: &mut ty!{s0: i32 | s0 == nv * i0 => s1 | s1 == nv * i1 }
+                ) -> ty!{ v: i32 } {
+                    *i = (*i - 1);
+                    *sum = *sum + n;
+                    0
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | true }");
+            },
+        )
+        .unwrap();
+    }
+
     #[test]
     fn test_loop_single_init() {
         init_tracing();
@@ -790,34 +866,6 @@ mod loops {
         )
         .unwrap();
     }
-
-
-    #[test]
-    fn test_loop_simple_invariant() {
-        init_tracing();
-        with_item_and_rt_lib(
-            &quote! {
-                fn f(n: ty!{nv: i32 | nv > 0}) -> ty!{r: i32 | r == nv} {
-                    let mut i = 0 as ty!{iv : i32 | iv==0};
-                    i = i as ty!{iv2 : i32 | iv2 <= nv}; // Invariant
-                    while i < n {
-                        let j = i as ty!{jv : i32 | jv < nv};
-                        i = (j + 1) as ty!{iv2 : i32 | iv2 <= nv};
-                        
-                        ()
-                    }
-                    i
-                }
-            }
-            .to_string(),
-            |item, tcx| {
-                let ty = type_check_function(item, &tcx).unwrap();
-                pretty::assert_eq!(ty.to_string(), "ty!{ r : i32 | r == nv }");
-            },
-        )
-        .unwrap();
-    }
-
 }
 
 /// Mutable Type Annotations

@@ -20,11 +20,13 @@ use rustc_hir::{Expr, ExprKind};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::ty::TypeckResults;
 use rustc_span::source_map::Spanned;
+use tracing::Level;
 use tracing::error;
 
 use syn::parse_quote;
 use tracing::info;
 use tracing::instrument;
+use tracing::span;
 use tracing::trace;
 use tracing::warn;
 
@@ -90,7 +92,7 @@ where
                 .ok_or(anyhow!("function not found in typeck result"))?;
             trace!(?fn_sig);
 
-            if (ident.name.to_string() == "assert_ctx") {
+            if ident.name.to_string() == "assert_ctx" {
                 let out_ty = fn_sig.output();
                 return anyhow::Ok(RefinementType {
                     base: out_ty,
@@ -108,6 +110,12 @@ where
                     match RefinementType::from_type_alias(hir_ty, &tcx, middle_ty.clone()) {
                         Ok(refinement) => {
                             trace!(%refinement, %param.pat.hir_id, "immut input type");
+                            // Because mutable end-states may refer to immutable refinement binders
+                            // we need to add them to the end ctx.
+                            // Because immut types cannot chnge their predicates, the end state will need
+                            // to have the same predicate as before. 
+                            // We could also use `ty!{ _ | true }}` here
+                            expected_end_state.add_ty(param.pat.hir_id, refinement.clone());
                             refinement
                         }
                         Err(_) => {
@@ -123,7 +131,6 @@ where
                     };
                 ctx.add_ty(param.pat.hir_id, start_refinement)
             }
-            // let ctx = Rc::new(ctx);
 
             // get refinement for output
             let expected_type = match output {
@@ -154,10 +161,15 @@ where
             // let actual_end_state =
             //     ctx_after.filter_hirs(|id| expected_end_state.types.contains_key(id));
 
+            let span = span!(Level::INFO, "check_function_end").entered();
+
             is_sub_context(&expected_end_state, &ctx_after, tcx, &mut solver)?;
 
             trace!(%actual_ty, "actual function type");
             require_is_subtype_of(&actual_ty, &expected_type, &ctx_after, tcx, &mut solver)?;
+
+            span.exit();
+
             anyhow::Ok(expected_type)
         }
         other => Err(anyhow!(

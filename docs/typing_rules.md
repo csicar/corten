@@ -121,6 +121,17 @@ Refinement Context Subtyping as Implemented
 ```math
 \text{$\preceq$-BASE}
 \frac
-  {\neg\text{SMT-SAT}([\Gamma] \wedge \neg [\Gamma'] )}
+  {\neg\text{SMT-SAT}(
+      [\Gamma] 
+      \wedge \text{equate}(\Gamma, \Gamma') \wedge \neg [\Gamma']
+    )
+    \qquad 
+    \text{progVar}(\Gamma') \subseteq \text{progVar}(\Gamma)
+  }
   {\Gamma  \preceq \Gamma'}
+```
+where
+
+```math
+\text{equate}(\Gamma, \Gamma') = \bigwedge_{i \in \text{progVar}(\Gamma)} \text{binder}_{\Gamma}(i) \doteq \text{binder}_{\Gamma'}(i)
 ```

@@ -874,11 +874,15 @@ mod loops {
         init_tracing();
         with_item_and_rt_lib(
             &quote! {
-                fn f() -> ty!{v : i32 | v > 0} {
+                fn f() -> ty!{v : i32 | v < 0} {
                     let mut res = 1;
-                    res as ty!{ s: i32 | s > 0};
+                    // res as ty!{ s: i32 | s > 1};
                     while res < 10 {
-                        res = 0-1;
+                        res = 11;
+                        // set_ctx! {
+                        //     s < 10;
+                        //     res |-> s | s > 0
+                        // }
                         ()
                     }
                     res

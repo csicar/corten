@@ -710,6 +710,86 @@ fn test_update_ctx_neg() {
     .unwrap();
 }
 
+/// Tests for `is_sub_context`
+/// 
+mod sub_context {
+    use super::*;
+
+        
+    #[should_panic]
+    #[test]
+    fn test_weaken_neg() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f() -> ty!{ v : i32 } {
+                    let a = 2 as ty!{ v : i32 | v == 2 };
+                    set_ctx!{
+                        ;
+                        a |-> w | w == 0,
+                        (dangling!(a)) |-> v | v == 2
+                    };
+                    0
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let _ty = type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
+
+    #[should_panic]
+    #[test]
+    fn test_minimal_dangling_reverse() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f() -> ty!{ v : i32 } {
+                    let a = 2 as ty!{ v : i32 | v == 2 };
+                    let b = 0 as ty!{ bv : i32 | true };
+                    set_ctx!{
+                        ;
+                        a |-> w | w == 0,
+                        b |-> bv | true,
+                        (dangling!(a)) |-> v | v == 2
+                    };
+                    0
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let _ty = type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_weaken_range_pos() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn max() -> ty!{ v : i32 } {
+                    let a = 2 as ty!{ v : i32 | v == 2 };
+                    set_ctx!{
+                        ;
+                        a |-> w | w > 0
+                    };
+                    0
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | true }");
+            },
+        )
+        .unwrap();
+    }
+}
+
 /// Loops
 ///
 mod loops {

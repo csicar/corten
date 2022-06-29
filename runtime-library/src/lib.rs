@@ -62,7 +62,7 @@ fn update_ctx(formulas: &[&'static str], entries: &[(&dyn Any, &'static str, &'s
 
 #[macro_export]
 macro_rules! dangling {
-  ( $var:ident ) => {
-    ($var,)
-  }
+    ( $var:ident ) => {
+        ($var,)
+    };
 }

@@ -711,11 +711,10 @@ fn test_update_ctx_neg() {
 }
 
 /// Tests for `is_sub_context`
-/// 
+///
 mod sub_context {
     use super::*;
 
-        
     #[should_panic]
     #[test]
     fn test_weaken_neg() {

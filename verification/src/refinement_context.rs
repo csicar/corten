@@ -311,11 +311,18 @@ where
                             trace!(?var_raw);
                             let (var, var_ty) = match &var_raw.kind {
                                 // dangling reference?
-                                ExprKind::AddrOf(_, _, hir::Expr { kind: ExprKind::Tup([inner]), .. }) => {
+                                ExprKind::AddrOf(
+                                    _,
+                                    _,
+                                    hir::Expr {
+                                        kind: ExprKind::Tup([inner]),
+                                        ..
+                                    },
+                                ) => {
                                     let decl = inner.try_into_path_hir_id(tcx, local_ctx)?;
                                     let ty = local_ctx.node_type(decl);
                                     anyhow::Ok((None, ty))
-                                },
+                                }
                                 // normal reference?
                                 ExprKind::AddrOf(_, _, inner) => {
                                     let decl = inner.try_into_path_hir_id(tcx, local_ctx)?;

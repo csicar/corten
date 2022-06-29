@@ -400,7 +400,9 @@ where
         ExprKind::MethodCall(_, _, _) => todo!(),
         ExprKind::Tup(contents) => {
             let ty = match contents {
-                [] => RefinementType::new_empty_refinement_for(expr, local_ctx, fresh.fresh_ident()),
+                [] => {
+                    RefinementType::new_empty_refinement_for(expr, local_ctx, fresh.fresh_ident())
+                }
                 _o => todo!(),
             };
             anyhow::Ok((ty, ctx.clone()))
@@ -562,8 +564,8 @@ where
                 _other => todo!(),
             };
 
-            
-            let refined_unit_type = RefinementType::new_empty_refinement_for(expr, local_ctx, fresh.fresh_ident());
+            let refined_unit_type =
+                RefinementType::new_empty_refinement_for(expr, local_ctx, fresh.fresh_ident());
 
             let exit_path_formula = negate_predicate(while_cond)?;
 

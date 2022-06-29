@@ -8,10 +8,10 @@ use syn::visit::Visit;
 use tracing::trace;
 
 use core::fmt::Display;
-use std::collections::HashSet;
 use quote::quote;
 use quote::ToTokens;
 use rustc_middle::ty::{Ty, TyCtxt};
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RefinementType<'tcx> {
@@ -48,11 +48,11 @@ impl<'a> RefinementType<'a> {
         fresh_binder: String,
     ) -> RefinementType<'a> {
         let unit_type = local_ctx.expr_ty(expr);
-            RefinementType {
-                base: unit_type,
-                binder: fresh_binder,
-                predicate: parse_quote! { true },
-            }
+        RefinementType {
+            base: unit_type,
+            binder: fresh_binder,
+            predicate: parse_quote! { true },
+        }
     }
 
     pub fn rename_binder(&self, new_name: &str) -> anyhow::Result<RefinementType<'a>> {
@@ -65,7 +65,8 @@ impl<'a> RefinementType<'a> {
         })
     }
 
-    pub fn rename_binders(&self, 
+    pub fn rename_binders(
+        &self,
         renamer: &impl Fn(&str) -> String,
     ) -> anyhow::Result<RefinementType<'a>> {
         Ok(RefinementType {
@@ -83,7 +84,7 @@ impl<'a> RefinementType<'a> {
 }
 
 struct FreeVarsVisitor {
-    free_vars: HashSet<String>
+    free_vars: HashSet<String>,
 }
 
 impl<'ast> syn::visit::Visit<'ast> for FreeVarsVisitor {
@@ -99,7 +100,9 @@ impl<'ast> syn::visit::Visit<'ast> for FreeVarsVisitor {
 }
 
 pub fn vars_in_expr(expr: &syn::Expr) -> HashSet<String> {
-    let mut visitor = FreeVarsVisitor { free_vars: HashSet::new() };
+    let mut visitor = FreeVarsVisitor {
+        free_vars: HashSet::new(),
+    };
     visitor.visit_expr(expr);
     visitor.free_vars
 }

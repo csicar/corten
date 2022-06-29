@@ -557,7 +557,6 @@ fn test_update_incs() {
         |item, tcx| {
             let ty = type_check_function(item, &tcx).unwrap();
             pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
-
         },
     )
     .unwrap();
@@ -579,7 +578,6 @@ fn test_update_dependent_incs() {
         |item, tcx| {
             let ty = type_check_function(item, &tcx).unwrap();
             pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
-
         },
     )
     .unwrap();
@@ -666,7 +664,7 @@ fn test_update_ctx_pos() {
         &quote! {
             fn f(n: ty!{ nv : i32 | nv > 0 }) -> ty!{ v : () | true } {
                 let mut i = 0 as ty!{ iv : i32 | iv == 0 };
-                    
+
                 let mut sum = 0 as ty!{ sv : i32 | sv == iv * nv };
                 set_ctx!{
                     ;
@@ -813,7 +811,7 @@ mod loops {
         )
         .unwrap();
     }
-    
+
     #[test]
     fn test_loop_single_step_pos() {
         init_tracing();
@@ -894,7 +892,7 @@ mod loops {
             &quote! {
                 fn bad_square(n: ty!{ nv : i32 | nv > 0 }) -> ty!{ v : i32 | v == nv * nv } {
                     let mut i = 0 as ty!{ iv : i32 | iv == 0 };
-                    
+
                     let mut sum = 0 as ty!{ sv : i32 | sv == iv * nv };
                     set_ctx!{
                         ;

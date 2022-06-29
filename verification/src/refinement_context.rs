@@ -5,7 +5,11 @@ use std::{
     io::Write,
 };
 
-use crate::{hir_ext::ExprExt, refinements::{rename_ref_in_expr, vars_in_expr}, smtlib_ext::SmtResExt};
+use crate::{
+    hir_ext::ExprExt,
+    refinements::{rename_ref_in_expr, vars_in_expr},
+    smtlib_ext::SmtResExt,
+};
 use hir::ExprKind;
 use quote::{format_ident, quote};
 use rsmt2::Solver;
@@ -213,11 +217,19 @@ where
 
     #[instrument]
     pub fn garbage_collect(&mut self) {
-        let mut live_variables: HashSet<String> =
-            self.binders.values().map(|n| n.clone()).chain(self.formulas.iter().flat_map(|formula| vars_in_expr(formula))).collect();
+        let mut live_variables: HashSet<String> = self
+            .binders
+            .values()
+            .map(|n| n.clone())
+            .chain(
+                self.formulas
+                    .iter()
+                    .flat_map(|formula| vars_in_expr(formula)),
+            )
+            .collect();
 
         loop {
-            let new_vars : HashSet<String> = live_variables
+            let new_vars: HashSet<String> = live_variables
                 .iter()
                 .flat_map(|var| self.types.get(var).unwrap().free_vars())
                 .collect();
@@ -232,13 +244,9 @@ where
                 .union(&new_vars)
                 .map(|el| el.clone())
                 .collect();
-
-            
         }
 
-        self.types.retain(|k, _| {
-            live_variables.contains(k)
-        });
+        self.types.retain(|k, _| live_variables.contains(k));
         trace!(types=%self.types.values().map(|k| k.to_string()).collect::<String>(), "new types:")
     }
 
@@ -255,99 +263,99 @@ where
         tcx: &TyCtxt<'a>,
         local_ctx: &TypeckResults<'a>,
     ) -> anyhow::Result<RContext<'a, hir::HirId>> {
-            match func_args {
-                [hir::Expr {
-                    kind:
-                        ExprKind::AddrOf(
-                            hir::BorrowKind::Ref,
-                            hir::Mutability::Not,
-                            hir::Expr {
-                                kind: ExprKind::Array(forms_raw),
-                                ..
-                            },
-                        ),
-                    ..
-                }, hir::Expr {
-                    kind:
-                        ExprKind::AddrOf(
-                            hir::BorrowKind::Ref,
-                            hir::Mutability::Not,
-                            hir::Expr {
-                                kind: ExprKind::Array(refinements_raw),
-                                ..
-                            },
-                        ),
-                    ..
-                }] => {
-                    let form_symbols: Vec<syn::Expr> = forms_raw
-                        .iter()
-                        .map(|arg| {
-                            arg.try_into_symbol()
-                                .map(|sym| sym.to_string())
-                                .ok_or(anyhow!("not a symbol"))
-                                .and_then(|s| refinements::parse_predicate(&s))
-                        })
-                        .try_collect()?;
-                    let refinement_symbols: Vec<(_, _)> = refinements_raw
-                        .iter()
-                        .map(|arg| {
-                            if let ExprKind::Tup([var_raw, binder_raw, pred_raw]) = arg.kind {
-                                let binder = binder_raw
-                                    .try_into_symbol()
-                                    .map(|sym| sym.to_string())
-                                    .ok_or(anyhow!("unexpected thing in place of binder"))?;
-                                let predicate = pred_raw
-                                    .try_into_symbol()
-                                    .map(|sym| sym.to_string())
-                                    .ok_or(anyhow!("unexpected thing in place of pred"))?;
-                                let var = match &var_raw.kind {
-                                    ExprKind::AddrOf(_, _, inner) => {
-                                        let decl = inner.try_into_path_hir_id(tcx, local_ctx)?;
-                                        anyhow::Ok(Some(decl))
-                                    }
-                                    ExprKind::Tup([]) => anyhow::Ok(None),
-                                    _other => todo!(),
-                                }?;
-                                trace!(var=?var, binder=?binder, pred=?predicate);
-                                let var_ty = local_ctx.node_type(
-                                    var.expect("TODO: deal with type of dangling refinements"),
-                                );
-                                anyhow::Ok((
-                                    var,
-                                    RefinementType {
-                                        base: var_ty,
-                                        binder,
-                                        predicate: refinements::parse_predicate(&predicate)?,
-                                    },
-                                ))
-                            } else {
-                                anyhow::bail!("not a tuple")
-                            }
-                        })
-                        .try_collect()?;
-                    let binders: HashMap<hir::HirId, String> = refinement_symbols
-                        .iter()
-                        .filter_map(|(maybe_hir, rt)| {
-                            if let Some(hir) = maybe_hir {
-                                Some((hir.clone(), rt.binder.clone()))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<HashMap<_, _>>();
-                    let types: HashMap<String, RefinementType> = refinement_symbols
-                        .into_iter()
-                        .map(|(_, rt)| (rt.binder.clone(), rt))
-                        .collect();
-
-                    anyhow::Ok(RContext {
-                        formulas: form_symbols,
-                        binders,
-                        types,
+        match func_args {
+            [hir::Expr {
+                kind:
+                    ExprKind::AddrOf(
+                        hir::BorrowKind::Ref,
+                        hir::Mutability::Not,
+                        hir::Expr {
+                            kind: ExprKind::Array(forms_raw),
+                            ..
+                        },
+                    ),
+                ..
+            }, hir::Expr {
+                kind:
+                    ExprKind::AddrOf(
+                        hir::BorrowKind::Ref,
+                        hir::Mutability::Not,
+                        hir::Expr {
+                            kind: ExprKind::Array(refinements_raw),
+                            ..
+                        },
+                    ),
+                ..
+            }] => {
+                let form_symbols: Vec<syn::Expr> = forms_raw
+                    .iter()
+                    .map(|arg| {
+                        arg.try_into_symbol()
+                            .map(|sym| sym.to_string())
+                            .ok_or(anyhow!("not a symbol"))
+                            .and_then(|s| refinements::parse_predicate(&s))
                     })
-                }
-                _other => todo!(),
+                    .try_collect()?;
+                let refinement_symbols: Vec<(_, _)> = refinements_raw
+                    .iter()
+                    .map(|arg| {
+                        if let ExprKind::Tup([var_raw, binder_raw, pred_raw]) = arg.kind {
+                            let binder = binder_raw
+                                .try_into_symbol()
+                                .map(|sym| sym.to_string())
+                                .ok_or(anyhow!("unexpected thing in place of binder"))?;
+                            let predicate = pred_raw
+                                .try_into_symbol()
+                                .map(|sym| sym.to_string())
+                                .ok_or(anyhow!("unexpected thing in place of pred"))?;
+                            let var = match &var_raw.kind {
+                                ExprKind::AddrOf(_, _, inner) => {
+                                    let decl = inner.try_into_path_hir_id(tcx, local_ctx)?;
+                                    anyhow::Ok(Some(decl))
+                                }
+                                ExprKind::Tup([]) => anyhow::Ok(None),
+                                _other => todo!(),
+                            }?;
+                            trace!(var=?var, binder=?binder, pred=?predicate);
+                            let var_ty = local_ctx.node_type(
+                                var.expect("TODO: deal with type of dangling refinements"),
+                            );
+                            anyhow::Ok((
+                                var,
+                                RefinementType {
+                                    base: var_ty,
+                                    binder,
+                                    predicate: refinements::parse_predicate(&predicate)?,
+                                },
+                            ))
+                        } else {
+                            anyhow::bail!("not a tuple")
+                        }
+                    })
+                    .try_collect()?;
+                let binders: HashMap<hir::HirId, String> = refinement_symbols
+                    .iter()
+                    .filter_map(|(maybe_hir, rt)| {
+                        if let Some(hir) = maybe_hir {
+                            Some((hir.clone(), rt.binder.clone()))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<HashMap<_, _>>();
+                let types: HashMap<String, RefinementType> = refinement_symbols
+                    .into_iter()
+                    .map(|(_, rt)| (rt.binder.clone(), rt))
+                    .collect();
+
+                anyhow::Ok(RContext {
+                    formulas: form_symbols,
+                    binders,
+                    types,
+                })
             }
+            _other => todo!(),
+        }
     }
 }
 

@@ -1,14 +1,19 @@
+use crate::constraint_generator::Fresh;
 use crate::hir_ext::TyExt;
 use anyhow::anyhow;
 use rustc_hir as hir;
+use rustc_middle::ty::TypeckResults;
+use syn::parse_quote;
+use syn::visit::Visit;
 use tracing::trace;
 
 use core::fmt::Display;
+use std::collections::HashSet;
 use quote::quote;
 use quote::ToTokens;
 use rustc_middle::ty::{Ty, TyCtxt};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RefinementType<'tcx> {
     pub base: Ty<'tcx>,
     pub binder: String,
@@ -16,6 +21,7 @@ pub struct RefinementType<'tcx> {
 }
 
 impl<'a> RefinementType<'a> {
+    /// Extracts the Refinement Type from a `Refinement<T, B, P>` type alias
     pub fn from_type_alias<'b, 'tcx>(
         raw_type: &'a hir::Ty<'a>,
         tcx: &'b TyCtxt<'tcx>,
@@ -36,25 +42,109 @@ impl<'a> RefinementType<'a> {
         }
     }
 
+    pub fn new_empty_refinement_for(
+        expr: &hir::Expr,
+        local_ctx: &TypeckResults<'a>,
+        fresh_binder: String,
+    ) -> RefinementType<'a> {
+        let unit_type = local_ctx.expr_ty(expr);
+            RefinementType {
+                base: unit_type,
+                binder: fresh_binder,
+                predicate: parse_quote! { true },
+            }
+    }
+
     pub fn rename_binder(&self, new_name: &str) -> anyhow::Result<RefinementType<'a>> {
-        Ok(RefinementType {
-            base: self.base,
-            binder: new_name.to_string(),
-            predicate: rename_ref_in_expr(&self.predicate, &self.binder, new_name)?,
+        self.rename_binders(&|name| {
+            if name == &self.binder {
+                new_name.to_string()
+            } else {
+                name.to_string()
+            }
         })
     }
 
-    pub fn encode_smt(&self, name: &str) -> String {
-        let body = encode_smt(&self.predicate);
-        let args = format!("({} Int)", self.binder);
-        format!("(define-fun {} ({}) Bool ({})", name, args, body)
+    pub fn rename_binders(&self, 
+        renamer: &impl Fn(&str) -> String,
+    ) -> anyhow::Result<RefinementType<'a>> {
+        Ok(RefinementType {
+            base: self.base,
+            binder: renamer(&self.binder),
+            predicate: rename_ref_in_expr(&self.predicate, renamer)?,
+        })
+    }
+
+    pub fn free_vars(&self) -> HashSet<String> {
+        let mut free_vars = vars_in_expr(&self.predicate);
+        free_vars.remove(&self.binder);
+        free_vars
     }
 }
 
-fn rename_ref_in_expr(
+struct FreeVarsVisitor {
+    free_vars: HashSet<String>
+}
+
+impl<'ast> syn::visit::Visit<'ast> for FreeVarsVisitor {
+    fn visit_path(&mut self, node: &'ast syn::Path) {
+        let path: Vec<&syn::PathSegment> = node.segments.iter().collect();
+        match &path[..] {
+            [local_var] => {
+                self.free_vars.insert(local_var.ident.to_string());
+            }
+            _other => todo!(),
+        }
+    }
+}
+
+pub fn vars_in_expr(expr: &syn::Expr) -> HashSet<String> {
+    let mut visitor = FreeVarsVisitor { free_vars: HashSet::new() };
+    visitor.visit_expr(expr);
+    visitor.free_vars
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MutRefinementType<'tcx> {
+    pub start: RefinementType<'tcx>,
+    pub end: RefinementType<'tcx>,
+}
+
+impl<'tcx> MutRefinementType<'tcx> {
+    pub fn from_type_alias(
+        raw_type: &hir::Ty<'tcx>,
+        tcx: &TyCtxt<'tcx>,
+        base_ty: Ty<'tcx>,
+    ) -> anyhow::Result<MutRefinementType<'tcx>> {
+        if let Some((_base, binder1, raw_predicate1, binder2, raw_predicate2)) =
+            raw_type.try_into_mut_refinement(tcx)
+        {
+            let predicate1 = parse_predicate(raw_predicate1.as_str())?;
+            let predicate2 = parse_predicate(raw_predicate2.as_str())?;
+            Ok(MutRefinementType {
+                start: RefinementType {
+                    base: base_ty,
+                    binder: binder1.as_str().to_string(),
+                    predicate: predicate1,
+                },
+                end: RefinementType {
+                    base: base_ty,
+                    binder: binder2.as_str().to_string(),
+                    predicate: predicate2,
+                },
+            })
+        } else {
+            Err(anyhow!(
+                "type {:?} does not seem to be a mutable refinement type, when one was expected",
+                raw_type
+            ))
+        }
+    }
+}
+
+pub fn rename_ref_in_expr(
     expr: &syn::Expr,
-    old_name: &str,
-    new_name: &str,
+    renamer: &impl Fn(&str) -> String,
 ) -> anyhow::Result<syn::Expr> {
     match expr {
         syn::Expr::Array(_) => todo!(),
@@ -69,9 +159,9 @@ fn rename_ref_in_expr(
             right,
         }) => Ok(syn::Expr::Binary(syn::ExprBinary {
             attrs: attrs.clone(),
-            left: Box::new(rename_ref_in_expr(left, old_name, new_name)?),
+            left: Box::new(rename_ref_in_expr(left, renamer)?),
             op: op.clone(),
-            right: Box::new(rename_ref_in_expr(right, old_name, new_name)?),
+            right: Box::new(rename_ref_in_expr(right, renamer)?),
         })),
         syn::Expr::Block(_) => todo!(),
         syn::Expr::Box(_) => todo!(),
@@ -91,7 +181,15 @@ fn rename_ref_in_expr(
         syn::Expr::Macro(_) => todo!(),
         syn::Expr::Match(_) => todo!(),
         syn::Expr::MethodCall(_) => todo!(),
-        syn::Expr::Paren(_) => todo!(),
+        syn::Expr::Paren(syn::ExprParen {
+            attrs,
+            paren_token,
+            expr: inner_expr,
+        }) => Ok(syn::Expr::Paren(syn::ExprParen {
+            expr: Box::new(rename_ref_in_expr(inner_expr, renamer)?),
+            attrs: attrs.clone(),
+            paren_token: paren_token.clone(),
+        })),
         syn::Expr::Path(
             expr_path @ syn::ExprPath {
                 path: syn::Path { segments, .. },
@@ -102,13 +200,10 @@ fn rename_ref_in_expr(
             let mut new_path = expr_path.clone();
             match &path[..] {
                 [local_var] => {
-                    if local_var.ident.to_string() == old_name {
-                        let new_ident = syn::Ident::new(new_name, local_var.ident.span());
-                        new_path.path.segments.first_mut().unwrap().ident = new_ident;
-                        Ok(syn::Expr::Path(new_path))
-                    } else {
-                        Ok(expr.clone())
-                    }
+                    let new_name = renamer(&local_var.ident.to_string());
+                    let new_ident = syn::Ident::new(&new_name, local_var.ident.span());
+                    new_path.path.segments.first_mut().unwrap().ident = new_ident;
+                    Ok(syn::Expr::Path(new_path))
                 }
                 _other => todo!(),
             }
@@ -122,7 +217,15 @@ fn rename_ref_in_expr(
         syn::Expr::TryBlock(_) => todo!(),
         syn::Expr::Tuple(_) => todo!(),
         syn::Expr::Type(_) => todo!(),
-        syn::Expr::Unary(_) => todo!(),
+        syn::Expr::Unary(syn::ExprUnary {
+            attrs,
+            op,
+            expr: inner,
+        }) => anyhow::Ok(syn::Expr::Unary(syn::ExprUnary {
+            attrs: attrs.clone(),
+            op: op.clone(),
+            expr: Box::new(rename_ref_in_expr(inner, renamer)?),
+        })),
         syn::Expr::Unsafe(_) => todo!(),
         syn::Expr::Verbatim(_) => todo!(),
         syn::Expr::While(_) => todo!(),
@@ -161,17 +264,18 @@ pub fn encode_smt(expr: &syn::Expr) -> String {
                 syn::BinOp::Le(_) => "<=",
                 syn::BinOp::Ge(_) => ">=",
                 syn::BinOp::Gt(_) => ">",
-                _ => todo!(),
+                syn::BinOp::Rem(_) => "mod",
+                _ => todo!("not implemented {op:?}"),
             };
             format!("({} {} {})", smt_op, encode_smt(left), encode_smt(right))
         }
         syn::Expr::Unary(syn::ExprUnary { op, expr, .. }) => {
-            let smt_op = match op {
-                syn::UnOp::Deref(_) => todo!(),
-                syn::UnOp::Not(_) => "not",
-                syn::UnOp::Neg(_) => "-",
-            };
-            format!("({} {})", smt_op, encode_smt(expr))
+            let inner_enc = encode_smt(expr);
+            match op {
+                syn::UnOp::Deref(_) => inner_enc,
+                syn::UnOp::Not(_) => format!("(not {})", inner_enc),
+                syn::UnOp::Neg(_) => format!("(- {})", inner_enc),
+            }
         }
         syn::Expr::Lit(syn::ExprLit { lit, .. }) => match lit {
             syn::Lit::Str(str) => todo!("{:?}", str),
@@ -252,20 +356,20 @@ fn encode_ident(ident: &syn::Ident) -> String {
     format!("|{}|", ident)
 }
 
-fn parse_predicate(raw_predicate: &str) -> anyhow::Result<syn::Expr> {
+pub fn parse_predicate(raw_predicate: &str) -> anyhow::Result<syn::Expr> {
     let parsed = syn::parse_str::<syn::Expr>(raw_predicate)?;
     Ok(parsed)
 }
 #[cfg(test)]
 mod test {
-    use syn::parse_quote;
     use pretty_assertions as pretty;
+    use syn::parse_quote;
 
     use super::*;
 
     #[test_log::test]
     fn test_encode_let_binding() {
-        let input : Vec<_> = parse_quote! { let _t = a > 0; };
+        let input: Vec<_> = parse_quote! { let _t = a > 0; };
         let output = encode_let_binding_smt(&input[0]).unwrap();
         pretty::assert_eq!(output, "(|_t| (> |a| 0))");
     }

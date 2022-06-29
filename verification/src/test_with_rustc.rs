@@ -13,14 +13,16 @@ use rustc_middle::ty::TyCtxt;
 use rustc_middle::ty::TypeckResults;
 use rustc_session::config;
 use rustc_span::source_map;
-use tracing::warn;
 use std::path;
 use std::process;
 use std::str;
 use std::sync::RwLock;
 use tracing::error;
+use tracing::warn;
 
 use quote::quote;
+
+use crate::buildin_functions::CtxSpecFunctions;
 
 struct HirCallback<F: Send> {
     with_hir: RwLock<F>,
@@ -33,7 +35,7 @@ impl<F: for<'a> FnMut(hir::Node<'a>, TyCtxt<'a>) -> () + Send> rustc_driver::Cal
 {
     fn config(&mut self, config: &mut Config) {
         config.input = config::Input::Str {
-            name: source_map::FileName::Custom("file_under_test_name.rs".to_string()),
+            name: source_map::FileName::Custom("fud.rs".to_string()),
             input: self.input.clone(),
         };
         config.output_dir = Some(path::PathBuf::from("/tmp/test-rustc"));
@@ -75,7 +77,6 @@ where
     let sysroot = str::from_utf8(&out.stdout).unwrap().trim();
     let cb = RwLock::new(callback);
     let header = quote! {
-        #![feature(adt_const_params)]
         #![allow(dead_code)]
         #![allow(incomplete_features)]
 
@@ -105,6 +106,28 @@ where
             o => warn!(node=?o, "parsing input resulted in different stuff"),
         },
         input,
+    )
+}
+
+pub fn with_item_and_rt_lib<F>(input: &str, mut callback: F) -> Result<(), ErrorReported>
+where
+    F: for<'a> FnMut(&hir::Item<'a>, TyCtxt<'a>) -> () + Send,
+{
+    with_hir(
+        |hir, tcx| match hir {
+            hir::Node::Item(item) => {
+                if hir
+                    .ident()
+                    .map(|sym| CtxSpecFunctions::is_buildin(&sym.name.to_ident_string()))
+                    == Some(true)
+                {
+                } else {
+                    callback(item, tcx)
+                }
+            }
+            o => warn!(node=?o, "parsing input resulted in different stuff"),
+        },
+        &(include_str!("../../runtime-library/src/lib.rs").to_string() + input),
     )
 }
 

@@ -52,10 +52,17 @@ macro_rules! set_ctx {
   ( $($var:ident |-> $binder:ident | $pred:expr),*) => {
     update_ctx(&[], &[$( (&$var, {stringify!{$binder}}, {stringify!{$pred}}) ),*]);
   };
-  ( $($form:expr),* ; $($var:ident |-> $binder:ident | $pred:expr),*) => {
+  ( $($form:expr),* ; $($var:tt |-> $binder:ident | $pred:expr),*) => {
     update_ctx(&[$( {stringify!{$form}} ),*], &[$( (&$var, {stringify!{$binder}}, {stringify!{$pred}}) ),*]);
   };
 }
 
 #[inline(always)]
 fn update_ctx(formulas: &[&'static str], entries: &[(&dyn Any, &'static str, &'static str)]) {}
+
+#[macro_export]
+macro_rules! dangling {
+  ( $var:ident ) => {
+    ($var,)
+  }
+}

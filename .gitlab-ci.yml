@@ -6,3 +6,4 @@ cargo-test:
     # - rustup component add rustc-dev llvm-tools-preview
     # - cat rust-toolchain.toml
     - cargo test --verbose --jobs 1
+    - cargo fmt --check

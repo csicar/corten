@@ -253,7 +253,7 @@ where
     /// Tries to construct a RefoinementContext from a `assert_ctx` or `update_ctx` call.
     /// The call should look like this:
     /// ```
-    /// assert_ctx(&["b > 0"], &[(&my_var, { "i" }, {"i > 0"}), ((), {"a"}, {"a == 2"})])
+    /// assert_ctx(&["b > 0"], &[(&my_var, { "i" }, {"i > 0"}), ((&other_var,), {"a"}, {"a == 2"})])
     /// ```
     /// Where [`func_args`] are `assert_ctx`'s args
     /// A unit type as the first entry in the refinement association list denotes a dangling
@@ -308,18 +308,23 @@ where
                                 .try_into_symbol()
                                 .map(|sym| sym.to_string())
                                 .ok_or(anyhow!("unexpected thing in place of pred"))?;
-                            let var = match &var_raw.kind {
+                            trace!(?var_raw);
+                            let (var, var_ty) = match &var_raw.kind {
+                                // dangling reference?
+                                ExprKind::AddrOf(_, _, hir::Expr { kind: ExprKind::Tup([inner]), .. }) => {
+                                    let decl = inner.try_into_path_hir_id(tcx, local_ctx)?;
+                                    let ty = local_ctx.node_type(decl);
+                                    anyhow::Ok((None, ty))
+                                },
+                                // normal reference?
                                 ExprKind::AddrOf(_, _, inner) => {
                                     let decl = inner.try_into_path_hir_id(tcx, local_ctx)?;
-                                    anyhow::Ok(Some(decl))
+                                    let ty = local_ctx.node_type(decl);
+                                    anyhow::Ok((Some(decl), ty))
                                 }
-                                ExprKind::Tup([]) => anyhow::Ok(None),
                                 _other => todo!(),
                             }?;
                             trace!(var=?var, binder=?binder, pred=?predicate);
-                            let var_ty = local_ctx.node_type(
-                                var.expect("TODO: deal with type of dangling refinements"),
-                            );
                             anyhow::Ok((
                                 var,
                                 RefinementType {
@@ -491,7 +496,12 @@ impl<'a, 'b, 'c, K: SmtFmt + Debug + Eq + Hash + Display + SmtFmt + Clone> Displ
             writeln!(f, "    {}", quote! { #formula })?;
         }
         writeln!(f, "    // types")?;
-        for (binder, ty) in &self.ctx.types {
+        for (binder, ty) in self
+            .ctx
+            .types
+            .iter()
+            .sorted_by(|(key_a, _), (key_b, _)| key_a.cmp(key_b))
+        {
             let decl = self.ctx.loopup_decl_for_binder(binder);
             let name = match decl {
                 Some(id) => id.fmt_str(self.tcx),

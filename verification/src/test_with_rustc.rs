@@ -38,7 +38,7 @@ impl<F: for<'a> FnMut(hir::Node<'a>, TyCtxt<'a>) -> () + Send> rustc_driver::Cal
             name: source_map::FileName::Custom("fud.rs".to_string()),
             input: self.input.clone(),
         };
-        config.output_dir = Some(path::PathBuf::from("/tmp/test-rustc"));
+        config.output_dir = Some(path::PathBuf::from(format!("/tmp/test-rustc-{}", uuid::Uuid::new_v4())));
         config.opts.maybe_sysroot = self.sys_root.clone();
         config.make_codegen_backend = None;
     }

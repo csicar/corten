@@ -26,8 +26,8 @@ syn-serde = { version = "0.2", features = ["json"] }
 rsmt2 = { version = "0.14.1" }
 anyhow = "*"
 quote = "1.0.17"
-tempfile="3.3.0"
-itertools="0.10.3"
+tempfile = "3.3.0"
+itertools = "0.10.3"
 
 [dev-dependencies]
 "runtime-library" = { path = "../runtime-library" }
@@ -35,4 +35,5 @@ test-log = { version = "0.2.10", features = [
   "trace",
 ], default-features = false }
 pretty_assertions = "1.2.1"
-unindent="0.1.8"
+unindent = "0.1.8"
+uuid = { version = "1.1.2", features = ["v4", "fast-rng"] }

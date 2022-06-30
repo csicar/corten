@@ -31,8 +31,6 @@ use tracing::span;
 use tracing::trace;
 use tracing::warn;
 
-use itertools::Itertools;
-
 pub struct Fresh {
     current: u32,
 }
@@ -145,7 +143,7 @@ where
             let conf = SmtConf::default_z3();
             let mut solver = conf.spawn(()).unwrap();
             solver
-                .path_tee(format!("/tmp/z3-fn-{:?}.lisp", SystemTime::now()))
+                .path_tee(format!("/tmp/z3-fn-{:?}.lisp", uuid::Uuid::new_v4()))
                 .unwrap();
 
             let mut fresh = Fresh::new();

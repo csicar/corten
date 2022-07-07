@@ -1,6 +1,4 @@
-use std::collections::HashMap;
 use std::io::Write;
-use std::time::SystemTime;
 
 use crate::buildin_functions::CtxSpecFunctions;
 use crate::refinement_context::is_sub_context;
@@ -148,14 +146,8 @@ where
 
             let mut fresh = Fresh::new();
 
-            let (actual_ty, ctx_after) = type_of(
-                &body.value,
-                &tcx,
-                &mut ctx,
-                local_ctx,
-                &mut solver,
-                &mut fresh,
-            )?;
+            let (actual_ty, ctx_after) =
+                type_of(&body.value, tcx, &ctx, local_ctx, &mut solver, &mut fresh)?;
 
             // let actual_end_state =
             //     ctx_after.filter_hirs(|id| expected_end_state.types.contains_key(id));
@@ -301,7 +293,7 @@ where
         ExprKind::Block(_, Some(_)) => {
             todo!("labels are not yet supported")
         }
-        ExprKind::Path(path) => {
+        ExprKind::Path(_path) => {
             // this is a variable reference
             // for
             // ```rust
@@ -460,7 +452,7 @@ where
                 then_ctx_before.push_formula(then_cond.clone());
                 let (then_ty, then_ctx) =
                     type_of(then_expr, tcx, &then_ctx_before, local_ctx, solver, fresh)?;
-                trace!(?then_ctx, "then_ctx");
+                trace!(then_ctx=%then_ctx.with_tcx(tcx), "then_ctx");
 
                 // type check else_expr
                 let mut else_ctx_before = ctx.clone();
@@ -471,7 +463,7 @@ where
                 else_ctx_before.push_formula(else_cond.clone());
                 let (else_ty, else_ctx) =
                     type_of(else_expr, tcx, &else_ctx_before, local_ctx, solver, fresh)?;
-                trace!(?else_ctx, "else_ctx");
+                trace!(else_ctx=%else_ctx.with_tcx(tcx), "else_ctx");
 
                 // We try to be a little clever here:
                 // instead of requiring the user to specify the type of the if-then-else expression all the time
@@ -538,7 +530,7 @@ where
                             hir::Block {
                                 stmts:
                                     [hir::Stmt {
-                                        kind: hir::StmtKind::Expr(Expr { kind: a, .. }),
+                                        kind: hir::StmtKind::Expr(Expr { kind: _a, .. }),
                                         ..
                                     }],
                                 ..
@@ -584,10 +576,6 @@ where
             };
 
             let (rhs_ty, mut after_rhs) = type_of(rhs, tcx, ctx, local_ctx, solver, fresh)?;
-            let ty_in_context = ctx.lookup_hir(&dest_hir_id).ok_or(anyhow!(
-                "could not find refinement type definition of {} in refinement context",
-                tcx.hir().node_to_string(dest_hir_id)
-            ))?;
             after_rhs.update_ty(dest_hir_id, rhs_ty.clone());
             trace!(%rhs_ty, after_rhs=%after_rhs.with_tcx(tcx), "rhs_ty is");
             anyhow::Ok((rhs_ty, after_rhs))

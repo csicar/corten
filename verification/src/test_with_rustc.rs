@@ -17,7 +17,7 @@ use std::path;
 use std::process;
 use std::str;
 use std::sync::RwLock;
-use tracing::error;
+
 use tracing::warn;
 
 use quote::quote;
@@ -30,7 +30,7 @@ struct HirCallback<F: Send> {
     sys_root: Option<path::PathBuf>,
 }
 
-impl<F: for<'a> FnMut(hir::Node<'a>, TyCtxt<'a>) -> () + Send> rustc_driver::Callbacks
+impl<F: for<'a> FnMut(hir::Node<'a>, TyCtxt<'a>) + Send> rustc_driver::Callbacks
     for HirCallback<F>
 {
     fn config(&mut self, config: &mut Config) {
@@ -38,7 +38,10 @@ impl<F: for<'a> FnMut(hir::Node<'a>, TyCtxt<'a>) -> () + Send> rustc_driver::Cal
             name: source_map::FileName::Custom("fud.rs".to_string()),
             input: self.input.clone(),
         };
-        config.output_dir = Some(path::PathBuf::from(format!("/tmp/test-rustc-{}", uuid::Uuid::new_v4())));
+        config.output_dir = Some(path::PathBuf::from(format!(
+            "/tmp/test-rustc-{}",
+            uuid::Uuid::new_v4()
+        )));
         config.opts.maybe_sysroot = self.sys_root.clone();
         config.make_codegen_backend = None;
     }

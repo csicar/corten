@@ -1,4 +1,3 @@
-use crate::constraint_generator::Fresh;
 use crate::hir_ext::TyExt;
 use anyhow::anyhow;
 use rustc_hir as hir;

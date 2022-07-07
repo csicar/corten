@@ -45,7 +45,8 @@ macro_rules! ctx {
 }
 
 #[inline(always)]
-pub fn assert_ctx(_formulas: &[&'static str], _entries: &[(&dyn Any, &'static str, &'static str)]) {}
+pub fn assert_ctx(_formulas: &[&'static str], _entries: &[(&dyn Any, &'static str, &'static str)]) {
+}
 
 #[macro_export]
 macro_rules! set_ctx {
@@ -58,7 +59,8 @@ macro_rules! set_ctx {
 }
 
 #[inline(always)]
-pub fn update_ctx(_formulas: &[&'static str], _entries: &[(&dyn Any, &'static str, &'static str)]) {}
+pub fn update_ctx(_formulas: &[&'static str], _entries: &[(&dyn Any, &'static str, &'static str)]) {
+}
 
 #[macro_export]
 macro_rules! dangling {

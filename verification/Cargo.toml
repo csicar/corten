@@ -28,6 +28,7 @@ anyhow = "*"
 quote = "1.0.17"
 tempfile = "3.3.0"
 itertools = "0.10.3"
+uuid = { version = "1.1.2", features = ["v4"] }
 
 [dev-dependencies]
 "runtime-library" = { path = "../runtime-library" }

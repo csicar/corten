@@ -1,5 +1,4 @@
 use std::{
-    any::Any,
     collections::{HashMap, HashSet},
     fmt::Display,
     io::Write,
@@ -11,15 +10,15 @@ use crate::{
     smtlib_ext::SmtResExt,
 };
 use hir::ExprKind;
-use quote::{format_ident, quote};
+use quote::quote;
 use rsmt2::Solver;
 use rustc_hir as hir;
-use rustc_hir_pretty::id_to_string;
+
 use rustc_middle::ty::{TyCtxt, TypeckResults};
 use std::fmt::Debug;
 use std::hash::Hash;
-use syn::parse_quote;
-use tracing::{instrument, trace};
+
+use tracing::{info, instrument, trace};
 
 use itertools::Itertools;
 
@@ -41,7 +40,7 @@ impl<'a, K> RContext<'a, K>
 where
     K: Debug + Eq + Hash + Display + SmtFmt + Clone,
 {
-    pub fn new() -> RContext<'a> {
+    pub fn new() -> RContext<'a, K> {
         RContext {
             formulas: Vec::new(),
             types: HashMap::new(),
@@ -66,7 +65,7 @@ where
     pub fn update_ty(&mut self, hir: K, ty: RefinementType<'a>) {
         self.binders.remove(&hir);
         self.add_ty(hir, ty);
-        self.garbage_collect();
+        // self.garbage_collect();
     }
 
     pub fn add_ty(&mut self, hir: K, ty: RefinementType<'a>) {
@@ -94,7 +93,7 @@ where
                     hir_id.clone(),
                     binder_names
                         .get(old_name)
-                        .ok_or(anyhow!("name not found in binders list"))?
+                        .ok_or_else(|| anyhow!("name not found in binders list"))?
                         .clone(),
                 ))
             })
@@ -180,7 +179,7 @@ where
     ) -> anyhow::Result<()> {
         self.types
             .iter()
-            .try_for_each(|(ident, ty)| self.encode_binder_decl(solver, ty, tcx))?;
+            .try_for_each(|(_ident, ty)| self.encode_binder_decl(solver, ty, tcx))?;
         Ok(())
     }
 
@@ -240,17 +239,14 @@ where
                 break;
             }
 
-            live_variables = live_variables
-                .union(&new_vars)
-                .map(|el| el.clone())
-                .collect();
+            live_variables = live_variables.union(&new_vars).cloned().collect();
         }
 
         self.types.retain(|k, _| live_variables.contains(k));
         trace!(types=%self.types.values().map(|k| k.to_string()).collect::<String>(), "new types:")
     }
 
-    /// Tries to construct a RefoinementContext from a `assert_ctx` or `update_ctx` call.
+    /// Tries to construct a RefinementContext from a `assert_ctx` or `update_ctx` call.
     /// The call should look like this:
     /// ```
     /// assert_ctx(&["b > 0"], &[(&my_var, { "i" }, {"i > 0"}), ((&other_var,), {"a"}, {"a == 2"})])
@@ -378,9 +374,6 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
     tcx: &TyCtxt<'tcx>,
     solver: &mut Solver<P>,
 ) -> anyhow::Result<()> {
-    let super_ctx = super_ctx.rename_binders(&|name| format!("super_{}", name))?;
-    let sub_ctx = sub_ctx.rename_binders(&|name| format!("sub_{}", name))?;
-
     trace!(super_ctx=%(super_ctx.with_tcx(tcx)), sub_ctx=%(sub_ctx.with_tcx(tcx)), "check");
     solver
         .comment("checking is_sub_context ...")
@@ -398,51 +391,131 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
         anyhow::bail!("super ctx may contain at most the same declarations as the sub ctx")
     }
 
-    sub_ctx.encode_binder_decls(solver, tcx)?;
-    super_ctx.encode_binder_decls(solver, tcx)?;
+    // sub_ctx.encode_binder_decls(solver, tcx)?;
+    // super_ctx.encode_binder_decls(solver, tcx)?;
 
-    sub_ctx.types.iter().try_for_each(|(binder, sub_ty)| {
-        // sub_ctx.encode_binder_decl(solver, &sub_ty, tcx)?;
-
-        // the super ctx may be missing some declarations, that are contained in the
-        // sub_ctx.
-        match sub_ctx
-            .loopup_decl_for_binder(binder)
-            .and_then(|hir_id| super_ctx.lookup_hir(hir_id))
-        {
-            // In case there is a matching super_ty => encode and equate them
-            Some(super_ty) => {
-                let sub_binder = format_ident!("{}", &sub_ty.binder);
-                let super_binder = format_ident!("{}", &super_ty.binder);
-                solver
-                    .comment(&format!("same hir id => equate"))
-                    .into_anyhow()?;
-                solver
-                    .assert(refinements::encode_smt(
-                        &parse_quote! { #sub_binder == #super_binder },
-                    ))
-                    .into_anyhow()?;
-            }
-            // When there is no super_ty matching, nothing else to do
-            None => {}
+    let super_binder = super_ctx.types.keys().collect::<HashSet<_>>();
+    let sub_binder = sub_ctx.types.keys().collect::<HashSet<_>>();
+    super_binder.union(&sub_binder).try_for_each(|&binder| {
+        if let Some(ty) = sub_ctx.types.get(binder) {
+            sub_ctx.encode_binder_decl(solver, ty, tcx)?;
+        } else if let Some(ty) = super_ctx.types.get(binder) {
+            super_ctx.encode_binder_decl(solver, ty, tcx)?;
+        } else {
+            panic!("union is not a union?")
         }
-
         anyhow::Ok(())
     })?;
-    sub_ctx.encode_predicates(solver)?;
+    // info!(?sub_binder, ?super_binder);
+    // super_binder
+    //     .intersection(&sub_binder)
+    //     .try_for_each(|binder| {
+    //         let sub_binder = format_ident!("sub_{}", binder);
+    //         let super_binder = format_ident!("super_{}", binder);
+    //         solver
+    //             .assert(refinements::encode_smt(&parse_quote! {
+    //                 #sub_binder == #super_binder
+    //             }))
+    //             .into_anyhow()
+    //     })?;
+
+    let sub_decls = sub_ctx
+        .binders
+        .iter()
+        .map(|(hir_id, _)| hir_id)
+        .collect::<HashSet<_>>();
+
+    let super_decls = super_ctx
+        .binders
+        .iter()
+        .map(|(key, _)| key)
+        .collect::<HashSet<_>>();
+
+    // Maps sub binder to their hir_id-corresponding super binder
+    let intersection_binder = sub_decls
+        .intersection(&super_decls)
+        .map(|hir_id| {
+            let sub_ty = sub_ctx
+                .lookup_hir(hir_id)
+                .expect("sub_ctx must contain hir_id, b/c of intersection");
+            let super_ty = super_ctx
+                .lookup_hir(hir_id)
+                .expect("super_ctx must contain hir_id, b/c of intersection");
+
+            (super_ty.binder, sub_ty.binder)
+        })
+        .collect::<HashMap<_, _>>();
+    trace!(?intersection_binder);
+    let intersection_renamed_super_ctx = super_ctx.rename_binders(&|old_name| {
+        intersection_binder
+            .get(old_name)
+            .cloned()
+            .unwrap_or_else(|| old_name.to_string())
+    })?;
+
+    info!(intersection_ctx=%intersection_renamed_super_ctx.with_tcx(tcx));
+
+    // solver
+    //     .comment("formulas from intersection {")
+    //     .into_anyhow()?;
+    // intersection_renamed_sub_ctx.encode_formulas(solver)?;
+    // solver.comment("}").into_anyhow()?;
+
+    // solver
+    //     .comment("predicate from intersection {")
+    //     .into_anyhow()?;
+    // intersection_renamed_sub_ctx.encode_predicates(solver)?;
+    // solver.comment("}").into_anyhow()?;
+
+    solver
+        .comment("left-over binders from sub_ctx {")
+        .into_anyhow()?;
     sub_ctx.encode_formulas(solver)?;
+    sub_ctx.encode_predicates(solver)?;
+    solver.comment("}").into_anyhow()?;
+
+    // sub_ctx.types.iter().try_for_each(|(binder, sub_ty)| {
+    //     // sub_ctx.encode_binder_decl(solver, &sub_ty, tcx)?;
+
+    //     // the super ctx may be missing some declarations, that are contained in the
+    //     // sub_ctx.
+    //     match sub_ctx
+    //         .loopup_decl_for_binder(binder)
+    //         .and_then(|hir_id| super_ctx.lookup_hir(hir_id))
+    //     {
+    //         // In case there is a matching super_ty => encode and equate them
+    //         Some(super_ty) => {
+    //             let sub_binder = format_ident!("{}", &sub_ty.binder);
+    //             let super_binder = format_ident!("{}", &super_ty.binder);
+    //             solver
+    //                 .comment(&format!("same hir id => equate"))
+    //                 .into_anyhow()?;
+    //             solver
+    //                 .assert(refinements::encode_smt(
+    //                     &parse_quote! { #sub_binder == #super_binder },
+    //                 ))
+    //                 .into_anyhow()?;
+    //         }
+    //         // When there is no super_ty matching, nothing else to do
+    //         None => {}
+    //     }
+
+    //     anyhow::Ok(())
+    // })?;
+    // sub_ctx.encode_predicates(solver)?;
+    // sub_ctx.encode_formulas(solver)?;
 
     solver.comment("<SuperCtx>").into_anyhow()?;
 
-    let super_term = super_ctx
+    let super_term = intersection_renamed_super_ctx
         .types
         .iter()
         .map(|(_, ty)| refinements::encode_smt(&ty.predicate))
         .chain(
-            super_ctx
+            intersection_renamed_super_ctx
                 .formulas
                 .iter()
-                .map(|formula| refinements::encode_smt(formula)),
+                .map(refinements::encode_smt),
         )
         .collect::<Vec<_>>()
         .join("\n       ");
@@ -490,6 +563,12 @@ impl SmtFmt for hir::HirId {
         let node_str = tcx.hir().node_to_string(*self);
         let span = tcx.hir().span(self.clone()).data();
         format!("{:?} {}", span, node_str)
+    }
+}
+
+impl SmtFmt for &str {
+    fn fmt_str<'tcx>(&self, _tcx: &TyCtxt<'tcx>) -> String {
+        format!("{:?}", self)
     }
 }
 

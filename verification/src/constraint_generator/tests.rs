@@ -10,7 +10,7 @@ fn init_tracing() {
         .with_env_filter(::tracing_subscriber::EnvFilter::from_default_env())
         .pretty()
         .finish();
-    ::tracing::subscriber::set_global_default(subscriber);
+    ::tracing::subscriber::set_global_default::<_>(subscriber);
 }
 
 #[test_log::test]
@@ -100,7 +100,6 @@ fn test_subtype_lit_neg() {
             let mut solver = conf.spawn(()).unwrap();
             solver.path_tee("/tmp/z3").unwrap();
             let ctx = RContext::<hir::HirId>::new();
-            let mut ctx_after = ctx.clone();
             let _ty = type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
             // ^- panic happens here
         },
@@ -359,6 +358,8 @@ fn test_assign_single() {
                 RContext {
                     // formulas
                     // types
+                    <dangling> : ty!{ _0 : i32 | _0 == 3 }
+                    <dangling> : ty!{ _1 : i32 | _1 == 4 }
                     <fud.rs>:4:135: 4:140 (#0) local mut a (hir_id=HirId { owner: DefId(0:7 ~ rust_out[9149]::f), local_id: 4 }) : ty!{ _2 : i32 | _2 == 8 }
                 }
                 "));
@@ -476,11 +477,12 @@ fn test_assign_ite_neg() {
 #[should_panic]
 #[test]
 fn test_subtype_ctx_neg() {
+    init_tracing();
     with_item_and_rt_lib(
         &quote! {
-            fn max(b: ty!{ bv : i32 | true }) -> ty!{ v : i32 | v > 0 } {
-                let mut a = 2;
-                if b > 0 {
+            fn f() -> ty!{ v : i32 | v > 0 } {
+                let mut a = 2 as ty!{ w : i32 | w > 0 };
+                if true {
                     a = 0; 0
                     //- `a` is set to 0: contradicts "v > 0"
                 } else { 0
@@ -713,7 +715,46 @@ fn test_update_ctx_neg() {
 /// Tests for `is_sub_context`
 ///
 mod sub_context {
+    use crate::test_with_rustc::with_item;
+
     use super::*;
+
+    fn mk_z3() -> Solver<()> {
+        let conf = SmtConf::default_z3();
+        let mut solver = conf.spawn(()).unwrap();
+        solver
+            .path_tee(format!("/tmp/z3-fn-{:?}.lisp", uuid::Uuid::new_v4()))
+            .unwrap();
+        solver
+    }
+
+    #[should_panic]
+    #[test]
+    fn test_weaken_direct_neg() {
+        init_tracing();
+        with_item("fn main() {}", |_, tcx| {
+            let mut super_ctx: RContext<&str> = RContext::new();
+            super_ctx.add_ty(
+                "a",
+                RefinementType {
+                    base: tcx.types.i32,
+                    binder: "v".to_string(),
+                    predicate: parse_quote! { v == 2},
+                },
+            );
+            let mut sub_ctx = super_ctx.clone();
+            sub_ctx.update_ty(
+                "a",
+                RefinementType {
+                    base: tcx.types.i32,
+                    binder: "v".to_string(),
+                    predicate: parse_quote! { v == 0 },
+                },
+            );
+            is_sub_context(&super_ctx, &sub_ctx, &tcx, &mut mk_z3()).unwrap();
+        })
+        .unwrap();
+    }
 
     #[should_panic]
     #[test]
@@ -889,7 +930,7 @@ mod loops {
             }
             .to_string(),
             |item, tcx| {
-                let ty = type_check_function(item, &tcx).unwrap();
+                let _ty = type_check_function(item, &tcx).unwrap();
             },
         )
         .unwrap();

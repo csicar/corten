@@ -668,7 +668,7 @@ fn test_update_ctx_pos() {
                 let mut i = 0 as ty!{ iv : i32 | iv == 0 };
 
                 let mut sum = 0 as ty!{ sv : i32 | sv == iv * nv };
-                set_ctx!{
+                relax_ctx!{
                     ;
                     n |-> nv | nv > 0,
                     i |-> iv | iv <= nv,
@@ -695,7 +695,7 @@ fn test_update_ctx_neg() {
             fn f() -> ty!{ v : () | true } {
                 let a = 1 as ty!{a1: i32 | a1 == 1};
                 let b = 1 as ty!{b1: i32 | b1 == a1};
-                set_ctx! {
+                relax_ctx! {
                     ;
                     a |-> a2 | a2 > 0,
                     b |-> b2 | b2 == a2 && b2 < 0
@@ -710,6 +710,223 @@ fn test_update_ctx_neg() {
         },
     )
     .unwrap();
+}
+
+/// Test for fn calls
+///
+mod fn_call {
+    use super::*;
+
+    #[test]
+    fn call_immut_pos() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn g(p : ty!{ a : i32 | a > 0}) -> ty!{ v : () } {
+                   ()
+                }
+
+                fn f() -> ty!{ v : () } {
+                    let a = 1;
+                    g(a);
+                    ()
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                match item.ident.name.as_str() {
+                    "g" => pretty::assert_eq!(ty.to_string(), "ty!{ v : () | true }"),
+                    "f" => pretty::assert_eq!(ty.to_string(), "ty!{ v : () | true }"),
+                    _ => panic!(),
+                }
+            },
+        )
+        .unwrap();
+    }
+
+    #[should_panic]
+    #[test]
+    fn call_immut_neg() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn g(p : ty!{ a : i32 | a > 0}) -> ty!{ v : () } {
+                    ()
+                }
+
+                fn f() -> ty!{ v : () } {
+                    let a = 0;
+                    g(a);
+                    ()
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn call_immut_ret_pos() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn g(p : ty!{ a : i32 | a > 0}) -> ty!{ w : i32 | w >= 0 } {
+                   p
+                }
+
+                fn f() -> ty!{ v : i32 | v >= 0 } {
+                    let a = 1;
+                    g(a)
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                match item.ident.name.as_str() {
+                    "g" => pretty::assert_eq!(ty.to_string(), "ty!{ w : i32 | w >= 0 }"),
+                    "f" => pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= 0 }"),
+                    _ => panic!(),
+                }
+            },
+        )
+        .unwrap();
+    }
+
+    #[should_panic]
+    #[test]
+    fn call_immut_ret_neg() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn g(p : ty!{ a : i32 | a > 0}) -> ty!{ w : i32 | w >= 0 } {
+                   p
+                }
+
+                fn f() -> ty!{ v : i32 | v > 0 } {
+                    let a = 1;
+                    g(a)
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn call_mut_pos() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn g(p : &mut ty!{ a : i32 | a > 0 => b | b > 10}) -> ty!{ v : () } {
+                    *p = 11; ()
+                }
+
+                fn f() -> ty!{ v : i32 | v > 10 } {
+                    let mut a = 1;
+                    g(&mut a);
+                    a
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                match item.ident.name.as_str() {
+                    "g" => pretty::assert_eq!(ty.to_string(), "ty!{ v : () | true }"),
+                    "f" => pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 10 }"),
+                    _ => panic!(),
+                }
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn call_mut_inc_pos() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn inc(p : &mut ty!{ a : i32 | true => b | b == a + 1 }) -> ty!{ v : () } {
+                    *p = *p + 1; ()
+                }
+
+                fn f() -> ty!{ v : i32 | v == 2 } {
+                    let mut a = 1;
+                    inc(&mut a);
+                    a
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                match item.ident.name.as_str() {
+                    "inc" => pretty::assert_eq!(ty.to_string(), "ty!{ v : () | true }"),
+                    "f" => pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == 2 }"),
+                    _ => panic!(),
+                }
+            },
+        )
+        .unwrap();
+    }
+
+    #[should_panic]
+    #[test]
+    fn call_mut_inc_neg() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn inc(p : &mut ty!{ a : i32 | true => b | b == a + 1 }) -> ty!{ v : () } {
+                    *p = *p + 1; ()
+                }
+
+                fn f() -> ty!{ v : i32 | v == 3 } {
+                    let mut a = 1;
+                    inc(&mut a);
+                    a
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                match item.ident.name.as_str() {
+                    "inc" => pretty::assert_eq!(ty.to_string(), "ty!{ v : () | true }"),
+                    "f" => panic!(),
+                    _ => panic!(),
+                }
+            },
+        )
+        .unwrap();
+    }
+
+    #[should_panic]
+    #[test]
+    fn call_mut_neg() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn g(p : &mut ty!{ a : i32 | a > 0 => b | b > 10}) -> ty!{ v : () } {
+                    *p = 11; ()
+                }
+
+                fn f() -> ty!{ v : i32 | v > 10 } {
+                    let mut a = 0;
+                    g(&mut a);
+                    a
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
 }
 
 /// Tests for `is_sub_context`
@@ -764,7 +981,7 @@ mod sub_context {
             &quote! {
                 fn f() -> ty!{ v : i32 } {
                     let a = 2 as ty!{ v : i32 | v == 2 };
-                    set_ctx!{
+                    relax_ctx!{
                         ;
                         a |-> w | w == 0,
                         (dangling!(a)) |-> v | v == 2
@@ -789,7 +1006,7 @@ mod sub_context {
                 fn f() -> ty!{ v : i32 } {
                     let a = 2 as ty!{ v : i32 | v == 2 };
                     let b = 0 as ty!{ bv : i32 | true };
-                    set_ctx!{
+                    relax_ctx!{
                         ;
                         a |-> w | w == 0,
                         b |-> bv | true,
@@ -813,7 +1030,7 @@ mod sub_context {
             &quote! {
                 fn max() -> ty!{ v : i32 } {
                     let a = 2 as ty!{ v : i32 | v == 2 };
-                    set_ctx!{
+                    relax_ctx!{
                         ;
                         a |-> w | w > 0
                     };
@@ -919,7 +1136,7 @@ mod loops {
                     // res as ty!{ s: i32 | s > 1};
                     while res < 10 {
                         res = 11;
-                        // set_ctx! {
+                        // relax_ctx! {
                         //     s < 10;
                         //     res |-> s | s > 0
                         // }
@@ -1018,7 +1235,7 @@ mod loops {
                     let mut i = 0 as ty!{ iv : i32 | iv == 0 };
 
                     let mut sum = 0 as ty!{ sv : i32 | sv == iv * nv };
-                    set_ctx!{
+                    relax_ctx!{
                         ;
                         n |-> nv | nv > 0,
                         i |-> iv | iv <= nv,
@@ -1031,7 +1248,7 @@ mod loops {
                         //}
                         i = (i + 1);
                         sum = (sum + n);
-                        set_ctx!{
+                        relax_ctx!{
                             iv <= nv;
                             n |-> nv | nv > 0,
                             i |-> iv | iv <= nv,

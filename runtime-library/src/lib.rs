@@ -49,7 +49,7 @@ pub fn assert_ctx(_formulas: &[&'static str], _entries: &[(&dyn Any, &'static st
 }
 
 #[macro_export]
-macro_rules! set_ctx {
+macro_rules! relax_ctx {
   ( $($var:ident |-> $binder:ident | $pred:expr),*) => {
     update_ctx(&[], &[$( (&$var, {stringify!{$binder}}, {stringify!{$pred}}) ),*]);
   };

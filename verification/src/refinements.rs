@@ -3,6 +3,7 @@ use anyhow::anyhow;
 use rustc_hir as hir;
 use rustc_middle::ty::TypeckResults;
 use syn::parse_quote;
+use syn::spanned::Spanned;
 use syn::visit::Visit;
 use tracing::trace;
 
@@ -56,12 +57,26 @@ impl<'a> RefinementType<'a> {
 
     pub fn rename_binder(&self, new_name: &str) -> anyhow::Result<RefinementType<'a>> {
         self.rename_binders(&|name| {
-            if name == &self.binder {
+            if name == self.binder {
                 new_name.to_string()
             } else {
                 name.to_string()
             }
         })
+    }
+
+    /// Create a new RefinementType where predicate is the conjunction of self's predicate and
+    /// [additional_predicate]
+    pub fn with_additional_predicate(&self, additional_predicate: syn::Expr) -> RefinementType<'a> {
+        RefinementType {
+            predicate: syn::Expr::Binary(syn::ExprBinary {
+                attrs: Vec::new(),
+                left: Box::new(self.predicate.clone()),
+                op: syn::BinOp::And(syn::Token![&&](additional_predicate.span())),
+                right: Box::new(additional_predicate),
+            }),
+            ..self.clone()
+        }
     }
 
     pub fn rename_binders(
@@ -150,7 +165,9 @@ pub fn rename_ref_in_expr(
 ) -> anyhow::Result<syn::Expr> {
     match expr {
         syn::Expr::Array(_) => todo!(),
-        syn::Expr::Assign(_) => todo!(),
+        syn::Expr::Assign(_) => {
+            anyhow::bail!("`=` is not allowed in refinement type. Did you mean `==`?")
+        }
         syn::Expr::AssignOp(_) => todo!(),
         syn::Expr::Async(_) => todo!(),
         syn::Expr::Await(_) => todo!(),

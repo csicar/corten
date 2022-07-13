@@ -197,6 +197,9 @@ impl<'a> ExprExt<'a> for hir::Expr<'a> {
         }
     }
 
+    /// Returns the hir, that the expression is referring to
+    /// Example: Expr `a` returns Ok(`local mut a { hir_id: ... }`)
+    /// Example: Expr `1` returns Err(...)
     fn try_into_path_hir_id<'tcx>(
         &'a self,
         tcx: &TyCtxt<'tcx>,

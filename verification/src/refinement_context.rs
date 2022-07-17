@@ -155,13 +155,14 @@ where
             .comment(&format!("decl for {}", ident))
             .into_anyhow()?;
 
-        fn encode_type<'tcx>(ty: &rustc_middle::ty::Ty<'tcx>) -> &'static str {
+        fn encode_type<'tcx>(ty: &rustc_middle::ty::Ty<'tcx>) -> String {
             match ty.kind() {
-                rustc_middle::ty::TyKind::Bool => "Bool",
+                rustc_middle::ty::TyKind::Bool => "Bool".to_string(),
                 rustc_middle::ty::TyKind::Char => todo!(),
-                rustc_middle::ty::TyKind::Int(_) => "Int", // todo: respect size
-                rustc_middle::ty::TyKind::Uint(_) => "Int", // Todo respect unsigned
+                rustc_middle::ty::TyKind::Int(_) => "Int".to_string(), // todo: respect size
+                rustc_middle::ty::TyKind::Uint(_) => "Int".to_string(), // Todo respect unsigned
                 rustc_middle::ty::TyKind::Ref(_region, ref_type, _mut) => encode_type(ref_type),
+                rustc_middle::ty::TyKind::Slice(inner_ty) => format!("(Array Int {})", encode_type(inner_ty)),
                 other => todo!("don't know how to encode ty {:?} in smt", other),
             }
         }

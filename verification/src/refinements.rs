@@ -2,6 +2,7 @@ use crate::hir_ext::TyExt;
 use anyhow::anyhow;
 use rustc_hir as hir;
 use rustc_middle::ty::TypeckResults;
+use syn::ExprCall;
 use syn::parse_quote;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
@@ -185,7 +186,23 @@ pub fn rename_ref_in_expr(
         syn::Expr::Block(_) => todo!(),
         syn::Expr::Box(_) => todo!(),
         syn::Expr::Break(_) => todo!(),
-        syn::Expr::Call(_) => todo!(),
+        syn::Expr::Call(ExprCall {
+            attrs,
+            func,
+            paren_token,
+            args,
+        }) => {
+            let renamed_args = args.iter().map(|arg| {
+                rename_ref_in_expr(arg, renamer)
+            }).collect::<anyhow::Result<_>>()?;
+
+            Ok(syn::Expr::Call(ExprCall {
+                attrs: attrs.clone(),
+                func: func.clone(),
+                paren_token: paren_token.clone(),
+                args: renamed_args,
+            }))
+        },
         syn::Expr::Cast(_) => todo!(),
         syn::Expr::Closure(_) => todo!(),
         syn::Expr::Continue(_) => todo!(),
@@ -337,7 +354,7 @@ pub fn encode_smt(expr: &syn::Expr) -> String {
             } else {
                 todo!()
             }
-        }
+        },
         _other => todo!("expr: {:?}", expr),
     }
 }

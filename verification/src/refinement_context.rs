@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     hir_ext::ExprExt,
-    refinements::{rename_ref_in_expr, vars_in_expr},
+    refinements::{rename_ref_in_expr, vars_in_expr, ReferenceRefinement, RefinementType},
     smtlib_ext::SmtResExt,
 };
 use hir::ExprKind;
@@ -24,27 +24,45 @@ use itertools::Itertools;
 
 use anyhow::anyhow;
 
-use crate::refinements::{self, RefinementType};
+use crate::refinements::{self, PredicateRefinement};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RContext<'tcx, K: Debug + Eq + Hash + Display + SmtFmt = hir::HirId> {
-    /// stack of formulas
-    formulas: Vec<syn::Expr>,
-    /// Association of variable declarations (K) with their current refinement type binder (String)
-    binders: HashMap<K, String>,
-    /// Association of the refinement type binder with the associated type
-    types: HashMap<String, RefinementType<'tcx>>,
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum TyId {
+    // Represents a associated type that is referencing another decl (HirId)
+    Ref(ReferenceRefinement),
+    // Represents an associated type that references a logical variable
+    LogicVar(String),
 }
 
-impl<'a, K> RContext<'a, K>
-where
-    K: Debug + Eq + Hash + Display + SmtFmt + Clone,
-{
-    pub fn new() -> RContext<'a, K> {
+impl TyId {
+    fn map_logic_var(self, f: impl FnOnce(String) -> String) -> Self {
+        match self {
+            TyId::Ref(_) => self,
+            TyId::LogicVar(i) => TyId::LogicVar(f(i)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RContext<'tcx> {
+    /// stack of path conditions
+    formulas: Vec<syn::Expr>,
+
+    /// Association of variable declarations with their current refinement type. This can either be:
+    /// - a lvar
+    /// - or a reference refinement
+    binders: HashMap<hir::HirId, TyId>,
+
+    /// Set of all PredicateRefinement in current context.
+    types: HashSet<PredicateRefinement<'tcx>>,
+}
+
+impl<'a> RContext<'a> {
+    pub fn new() -> RContext<'a> {
         RContext {
             formulas: Vec::new(),
-            types: HashMap::new(),
             binders: HashMap::new(),
+            types: HashSet::new(),
         }
     }
 
@@ -62,24 +80,43 @@ where
         }
     }
 
-    pub fn update_ty(&mut self, hir: K, ty: RefinementType<'a>) {
+    pub fn update_ty(&mut self, hir: hir::HirId, ty: RefinementType<'a>) {
+        use RefinementType::*;
+        // update should never change the rust base type.
+        // But changing from Predicate Type to Reference Type or vice versa would change
+        // the base type ==> Forbid!
+        match (&ty, self.lookup_hir(&hir)) {
+            (PredicateType { .. }, Some(PredicateType { .. })) => {
+                //ok
+            }
+            (ReferenceType { .. }, Some(ReferenceType { .. })) => {
+                //ok
+            }
+            _ => panic!(),
+        };
         self.binders.remove(&hir);
         self.add_ty(hir, ty);
         // self.garbage_collect();
     }
 
-    pub fn add_ty(&mut self, hir: K, ty: RefinementType<'a>) {
+    pub fn add_ty(&mut self, hir: hir::HirId, ty: RefinementType<'a>) {
         assert!(!self.binders.contains_key(&hir));
-        self.binders.insert(hir, ty.binder.clone());
-        self.types.insert(ty.binder.clone(), ty);
+        match ty {
+            RefinementType::PredicateType { kind } => {
+                let binder = kind.binder.clone();
+                self.types.insert(kind);
+                self.binders.insert(hir, TyId::LogicVar(binder));
+            }
+            RefinementType::ReferenceType { kind } => {
+                self.binders.insert(hir, TyId::Ref(kind));
+            }
+        }
     }
 
-    pub fn rename_binders(&self, renamer: &impl Fn(&str) -> String) -> anyhow::Result<Self> {
-        let binder_names: HashMap<&String, String> = self
-            .binders
-            .iter()
-            .map(|(_, name)| (name, renamer(name)))
-            .collect();
+    /// Changes the logic vars names according to renamer:
+    /// `ctx! { _2 > 2; a |-> a1 > 0, b |-> b1 == a1 }`.rename_logic_vars(|name| name + "_new")
+    /// `ctx! { _2_new > 2; a |-> a1_new > 0, b |-> b1_new == a1_new }`
+    pub fn rename_logic_vars(&self, renamer: &impl Fn(&str) -> String) -> anyhow::Result<Self> {
         let formulas = self
             .formulas
             .iter()
@@ -88,24 +125,17 @@ where
         let binders = self
             .binders
             .iter()
-            .map(|(hir_id, old_name)| {
+            .map(|(hir_id, ty_id)| {
                 anyhow::Ok((
                     hir_id.clone(),
-                    binder_names
-                        .get(old_name)
-                        .ok_or_else(|| anyhow!("name not found in binders list"))?
-                        .clone(),
+                    ty_id.clone().map_logic_var(|old_name| renamer(&old_name)),
                 ))
             })
             .try_collect()?;
         let types = self
             .types
             .iter()
-            .map(|(k, v)| {
-                let new_name = renamer(k);
-                assert_eq!(k, &v.binder);
-                anyhow::Ok((new_name, v.rename_binders(renamer)?))
-            })
+            .map(|v| anyhow::Ok(v.rename_binders(renamer)?))
             .try_collect()?;
         anyhow::Ok(RContext {
             formulas,
@@ -114,12 +144,27 @@ where
         })
     }
 
-    pub fn lookup_hir(&self, hir: &K) -> Option<RefinementType<'a>> {
-        self.binders
-            .get(&hir)
-            .and_then(|binder| self.types.get(binder))
-            .map(|entry| entry.clone())
-        // self.types.get(&hir).map(|entry| entry.clone())
+    pub fn lookup_logic_var(&self, logic_var: &str) -> Option<PredicateRefinement<'a>> {
+        self.types
+            .iter()
+            .find(|pred_ty| pred_ty.binder == logic_var)
+            .cloned()
+    }
+
+    pub fn lookup_hir(&self, hir: &hir::HirId) -> Option<RefinementType<'a>> {
+        self.binders.get(hir).and_then(|ty_id| match ty_id {
+            TyId::Ref(r) => Some(RefinementType::from(r.clone())),
+            TyId::LogicVar(lvar) => self.lookup_logic_var(lvar).map(|p| p.into()),
+        })
+    }
+
+    /// Find the logic variable belonging to `hir`. For reference types, this will return
+    /// the referenced hir's logic var!
+    pub fn lookup_binder_for_hir(&self, hir: &hir::HirId) -> Option<String> {
+        self.lookup_hir(hir).and_then(|ty| match ty {
+            RefinementType::PredicateType { kind } => Some(kind.binder),
+            RefinementType::ReferenceType { kind } => self.lookup_binder_for_hir(&kind.destination),
+        })
     }
 
     pub fn encode_smt<P>(&self, solver: &mut Solver<P>, tcx: &TyCtxt<'a>) -> anyhow::Result<()> {
@@ -127,7 +172,7 @@ where
         solver.push(1).into_anyhow()?;
 
         self.encode_binder_decls(solver, tcx)?;
-        self.encode_predicates(solver)?;
+        self.encode_predicates(solver, tcx)?;
         self.encode_formulas(solver)?;
 
         trace!("done encode_smt context");
@@ -135,22 +180,35 @@ where
         Ok(())
     }
 
-    pub fn loopup_decl_for_binder(&self, needle: &str) -> Option<&K> {
-        self.binders
+    pub fn origin_label_for_binder<'b, 'c: 'b, 'd>(
+        &self,
+        ty: &'b PredicateRefinement,
+        tcx: &'c TyCtxt<'d>,
+    ) -> String {
+        let associated_decl = self.binders.iter().find_map(|(hir_id, ty_id)| match ty_id {
+            TyId::LogicVar(logic_var) if &ty.binder == logic_var => Some(hir_id.fmt_str(tcx)),
+            _ => None,
+        });
+        associated_decl.unwrap_or("<dangling type>".to_string())
+    }
+
+    pub fn origin_label_for_binders<'b>(
+        &'b self,
+        tcx: &TyCtxt<'a>,
+    ) -> HashMap<&'b PredicateRefinement, String> {
+        self.types
             .iter()
-            .find_map(|(key, binder)| if binder == needle { Some(key) } else { None })
+            .map(|ty| (ty, self.origin_label_for_binder(ty, tcx)))
+            .collect::<HashMap<_, _>>()
     }
 
     pub fn encode_binder_decl<P>(
         &self,
         solver: &mut Solver<P>,
-        ty: &RefinementType<'a>,
+        ty: &PredicateRefinement<'a>,
         tcx: &TyCtxt<'a>,
     ) -> anyhow::Result<()> {
-        let ident = self
-            .loopup_decl_for_binder(&ty.binder)
-            .map(|decl| decl.fmt_str(tcx))
-            .unwrap_or("<dangling type>".to_string());
+        let ident = self.origin_label_for_binder(ty, tcx);
         solver
             .comment(&format!("decl for {}", ident))
             .into_anyhow()?;
@@ -162,7 +220,9 @@ where
                 rustc_middle::ty::TyKind::Int(_) => "Int".to_string(), // todo: respect size
                 rustc_middle::ty::TyKind::Uint(_) => "Int".to_string(), // Todo respect unsigned
                 rustc_middle::ty::TyKind::Ref(_region, ref_type, _mut) => encode_type(ref_type),
-                rustc_middle::ty::TyKind::Slice(inner_ty) => format!("(Array Int {})", encode_type(inner_ty)),
+                rustc_middle::ty::TyKind::Slice(inner_ty) => {
+                    format!("(Array Int {})", encode_type(inner_ty))
+                }
                 other => todo!("don't know how to encode ty {:?} in smt", other),
             }
         }
@@ -180,18 +240,19 @@ where
     ) -> anyhow::Result<()> {
         self.types
             .iter()
-            .try_for_each(|(_ident, ty)| self.encode_binder_decl(solver, ty, tcx))?;
+            .try_for_each(|ty| self.encode_binder_decl(solver, ty, tcx))?;
         Ok(())
     }
 
-    pub fn encode_predicates<P>(&self, solver: &mut Solver<P>) -> anyhow::Result<()> {
-        self.types.iter().try_for_each(|(binder, ty)| {
-            let decl_name = match self.loopup_decl_for_binder(binder) {
-                Some(hir_id) => hir_id.to_string(),
-                None => "<dangling type>".to_string(),
-            };
+    pub fn encode_predicates<P>(
+        &self,
+        solver: &mut Solver<P>,
+        tcx: &TyCtxt<'a>,
+    ) -> anyhow::Result<()> {
+        self.types.iter().try_for_each(|ty| {
+            let decl_name = self.origin_label_for_binder(ty, tcx);
             solver
-                .comment(&format!("predicate for {}: {}", binder, decl_name))
+                .comment(&format!("predicate for {}: {}", ty.binder, decl_name))
                 .into_anyhow()?;
             solver
                 .assert(refinements::encode_smt(&ty.predicate))
@@ -211,41 +272,37 @@ where
         Ok(())
     }
 
-    pub fn with_tcx<'b, 'c>(&'a self, tcx: &'b TyCtxt<'c>) -> FormatContext<'b, 'a, 'c, K> {
+    pub fn with_tcx<'b, 'c>(&'a self, tcx: &'b TyCtxt<'c>) -> FormatContext<'b, 'a, 'c> {
         FormatContext { ctx: self, tcx }
     }
 
-    #[instrument]
-    pub fn garbage_collect(&mut self) {
-        let mut live_variables: HashSet<String> = self
-            .binders
-            .values()
-            .map(|n| n.clone())
-            .chain(
-                self.formulas
-                    .iter()
-                    .flat_map(|formula| vars_in_expr(formula)),
-            )
-            .collect();
+    // #[instrument]
+    // pub fn garbage_collect(&mut self) {
+    //     let mut live_variables: HashSet<String> = self
+    //         .binders
+    //         .values()
+    //         .cloned()
+    //         .chain(self.formulas.iter().flat_map(vars_in_expr))
+    //         .collect();
 
-        loop {
-            let new_vars: HashSet<String> = live_variables
-                .iter()
-                .flat_map(|var| self.types.get(var).unwrap().free_vars())
-                .collect();
+    //     loop {
+    //         let new_vars: HashSet<String> = live_variables
+    //             .iter()
+    //             .flat_map(|var| self.types.get(var).unwrap().free_vars())
+    //             .collect();
 
-            trace!("live_variables {live_variables:#?}, referenced variables {new_vars:#?}");
+    //         trace!("live_variables {live_variables:#?}, referenced variables {new_vars:#?}");
 
-            if new_vars.is_subset(&live_variables) {
-                break;
-            }
+    //         if new_vars.is_subset(&live_variables) {
+    //             break;
+    //         }
 
-            live_variables = live_variables.union(&new_vars).cloned().collect();
-        }
+    //         live_variables = live_variables.union(&new_vars).cloned().collect();
+    //     }
 
-        self.types.retain(|k, _| live_variables.contains(k));
-        trace!(types=%self.types.values().map(|k| k.to_string()).collect::<String>(), "new types:")
-    }
+    //     self.types.retain(|k, _| live_variables.contains(k));
+    //     trace!(types=%self.types.values().map(|k| k.to_string()).collect::<String>(), "new types:")
+    // }
 
     /// Tries to construct a RefinementContext from a `assert_ctx` or `update_ctx` call.
     /// The call should look like this:
@@ -259,7 +316,7 @@ where
         func_args: &[hir::Expr<'a>],
         tcx: &TyCtxt<'a>,
         local_ctx: &TypeckResults<'a>,
-    ) -> anyhow::Result<RContext<'a, hir::HirId>> {
+    ) -> anyhow::Result<RContext<'a>> {
         match func_args {
             [hir::Expr {
                 kind:
@@ -331,7 +388,7 @@ where
                             trace!(var=?var, binder=?binder, pred=?predicate);
                             anyhow::Ok((
                                 var,
-                                RefinementType {
+                                PredicateRefinement {
                                     base: var_ty,
                                     binder,
                                     predicate: refinements::parse_predicate(&predicate)?,
@@ -342,20 +399,18 @@ where
                         }
                     })
                     .try_collect()?;
-                let binders: HashMap<hir::HirId, String> = refinement_symbols
+                let binders: HashMap<hir::HirId, TyId> = refinement_symbols
                     .iter()
                     .filter_map(|(maybe_hir, rt)| {
                         if let Some(hir) = maybe_hir {
-                            Some((hir.clone(), rt.binder.clone()))
+                            Some((hir.clone(), TyId::LogicVar(rt.binder.clone())))
                         } else {
                             None
                         }
                     })
                     .collect::<HashMap<_, _>>();
-                let types: HashMap<String, RefinementType> = refinement_symbols
-                    .into_iter()
-                    .map(|(_, rt)| (rt.binder.clone(), rt))
-                    .collect();
+                let types: HashSet<PredicateRefinement> =
+                    refinement_symbols.into_iter().map(|(_, rt)| rt).collect();
 
                 anyhow::Ok(RContext {
                     formulas: form_symbols,
@@ -369,9 +424,9 @@ where
 }
 
 #[instrument(skip_all, ret)]
-pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone, P>(
-    super_ctx: &RContext<'tcx, K>,
-    sub_ctx: &RContext<'tcx, K>,
+pub fn is_sub_context<'tcx, 'a, P>(
+    super_ctx: &RContext<'tcx>,
+    sub_ctx: &RContext<'tcx>,
     tcx: &TyCtxt<'tcx>,
     solver: &mut Solver<P>,
 ) -> anyhow::Result<()> {
@@ -395,13 +450,13 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
     // sub_ctx.encode_binder_decls(solver, tcx)?;
     // super_ctx.encode_binder_decls(solver, tcx)?;
 
-    let super_binder = super_ctx.types.keys().collect::<HashSet<_>>();
-    let sub_binder = sub_ctx.types.keys().collect::<HashSet<_>>();
-    super_binder.union(&sub_binder).try_for_each(|&binder| {
-        if let Some(ty) = sub_ctx.types.get(binder) {
-            sub_ctx.encode_binder_decl(solver, ty, tcx)?;
-        } else if let Some(ty) = super_ctx.types.get(binder) {
-            super_ctx.encode_binder_decl(solver, ty, tcx)?;
+    let super_binder = &super_ctx.types;
+    let sub_binder = &sub_ctx.types;
+    super_binder.union(&sub_binder).try_for_each(|ty| {
+        if let Some(sub_ty) = sub_ctx.lookup_logic_var(&ty.binder) {
+            sub_ctx.encode_binder_decl(solver, &sub_ty, tcx)?;
+        } else if let Some(super_ty) = super_ctx.lookup_logic_var(&ty.binder) {
+            super_ctx.encode_binder_decl(solver, &super_ty, tcx)?;
         } else {
             panic!("union is not a union?")
         }
@@ -436,18 +491,18 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
     let intersection_binder = sub_decls
         .intersection(&super_decls)
         .map(|hir_id| {
-            let sub_ty = sub_ctx
-                .lookup_hir(hir_id)
+            let sub_binder = sub_ctx
+                .lookup_binder_for_hir(hir_id)
                 .expect("sub_ctx must contain hir_id, b/c of intersection");
-            let super_ty = super_ctx
-                .lookup_hir(hir_id)
+            let super_binder = super_ctx
+                .lookup_binder_for_hir(hir_id)
                 .expect("super_ctx must contain hir_id, b/c of intersection");
 
-            (super_ty.binder, sub_ty.binder)
+            (super_binder, sub_binder)
         })
         .collect::<HashMap<_, _>>();
     trace!(?intersection_binder);
-    let intersection_renamed_super_ctx = super_ctx.rename_binders(&|old_name| {
+    let intersection_renamed_super_ctx = super_ctx.rename_logic_vars(&|old_name| {
         intersection_binder
             .get(old_name)
             .cloned()
@@ -472,7 +527,7 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
         .comment("left-over binders from sub_ctx {")
         .into_anyhow()?;
     sub_ctx.encode_formulas(solver)?;
-    sub_ctx.encode_predicates(solver)?;
+    sub_ctx.encode_predicates(solver, tcx)?;
     solver.comment("}").into_anyhow()?;
 
     // sub_ctx.types.iter().try_for_each(|(binder, sub_ty)| {
@@ -511,7 +566,7 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
     let super_term = intersection_renamed_super_ctx
         .types
         .iter()
-        .map(|(_, ty)| refinements::encode_smt(&ty.predicate))
+        .map(|ty| refinements::encode_smt(&ty.predicate))
         .chain(
             intersection_renamed_super_ctx
                 .formulas
@@ -550,8 +605,8 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
     }
 }
 
-pub struct FormatContext<'a, 'b, 'c, K: Debug + Eq + Hash + Display + SmtFmt> {
-    ctx: &'a RContext<'b, K>,
+pub struct FormatContext<'a, 'b, 'c> {
+    ctx: &'a RContext<'b>,
     tcx: &'a TyCtxt<'c>,
 }
 
@@ -562,7 +617,7 @@ pub trait SmtFmt {
 impl SmtFmt for hir::HirId {
     fn fmt_str<'tcx>(&self, tcx: &TyCtxt<'tcx>) -> String {
         let node_str = tcx.hir().node_to_string(*self);
-        let span = tcx.hir().span(self.clone()).data();
+        let span = tcx.hir().span(*self).data();
         format!("{:?} {}", span, node_str)
     }
 }
@@ -573,9 +628,7 @@ impl SmtFmt for &str {
     }
 }
 
-impl<'a, 'b, 'c, K: SmtFmt + Debug + Eq + Hash + Display + SmtFmt + Clone> Display
-    for FormatContext<'a, 'b, 'c, K>
-{
+impl<'a, 'b, 'c> Display for FormatContext<'a, 'b, 'c> {
     fn fmt<'tcx>(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "RContext {{")?;
         writeln!(f, "    // formulas")?;
@@ -583,17 +636,13 @@ impl<'a, 'b, 'c, K: SmtFmt + Debug + Eq + Hash + Display + SmtFmt + Clone> Displ
             writeln!(f, "    {}", quote! { #formula })?;
         }
         writeln!(f, "    // types")?;
-        for (binder, ty) in self
+        for ty in self
             .ctx
             .types
             .iter()
-            .sorted_by(|(key_a, _), (key_b, _)| key_a.cmp(key_b))
+            .sorted_by(|key_a, key_b| key_a.binder.cmp(&key_b.binder))
         {
-            let decl = self.ctx.loopup_decl_for_binder(binder);
-            let name = match decl {
-                Some(id) => id.fmt_str(self.tcx),
-                None => "<dangling>".to_string(),
-            };
+            let name = self.ctx.origin_label_for_binder(ty, self.tcx);
             writeln!(f, "    {} : {}", name, ty)?;
         }
         writeln!(f, "}}")

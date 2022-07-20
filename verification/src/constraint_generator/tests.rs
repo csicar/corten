@@ -45,7 +45,7 @@ fn test_type_of_lit() {
             let conf = SmtConf::default_z3();
             let mut solver = conf.spawn(()).unwrap();
 
-            let ctx = RContext::<hir::HirId>::new();
+            let ctx = RContext::new();
 
             let (ty, ctx_after) =
                 type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
@@ -72,7 +72,7 @@ fn test_subtype_lit_pos() {
             let conf = SmtConf::default_z3();
             let mut solver = conf.spawn(()).unwrap();
             solver.path_tee("/tmp/z3").unwrap();
-            let ctx = RContext::<hir::HirId>::new();
+            let ctx = RContext::new();
             let (ty, ctx_after) =
                 type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
             pretty::assert_eq!(ty.to_string(), "ty!{ x : i32 | x > 0 }");
@@ -99,7 +99,7 @@ fn test_subtype_lit_neg() {
             let conf = SmtConf::default_z3();
             let mut solver = conf.spawn(()).unwrap();
             solver.path_tee("/tmp/z3").unwrap();
-            let ctx = RContext::<hir::HirId>::new();
+            let ctx = RContext::new();
             let _ty = type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
             // ^- panic happens here
         },
@@ -122,7 +122,7 @@ fn test_subtype_lit_pos_nested() {
             let conf = SmtConf::default_z3();
             let mut solver = conf.spawn(()).unwrap();
             solver.path_tee("/tmp/z3").unwrap();
-            let ctx = RContext::<hir::HirId>::new();
+            let ctx = RContext::new();
 
             let (ty, ctx_after) =
                 type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
@@ -351,15 +351,15 @@ fn test_assign_single() {
             let conf = SmtConf::default_z3();
             let mut solver = conf.spawn(()).unwrap();
             solver.path_tee("/tmp/z3").unwrap();
-            let ctx = RContext::<hir::HirId>::new();
+            let ctx = RContext::new();
 
             let (ty, ctx_after) = type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
             pretty::assert_eq!(ctx_after.with_tcx(&tcx).to_string(), unindent("
                 RContext {
                     // formulas
                     // types
-                    <dangling> : ty!{ _0 : i32 | _0 == 3 }
-                    <dangling> : ty!{ _1 : i32 | _1 == 4 }
+                    <dangling type> : ty!{ _0 : i32 | _0 == 3 }
+                    <dangling type> : ty!{ _1 : i32 | _1 == 4 }
                     <fud.rs>:4:135: 4:140 (#0) local mut a (hir_id=HirId { owner: DefId(0:7 ~ rust_out[9149]::f), local_id: 4 }) : ty!{ _2 : i32 | _2 == 8 }
                 }
                 "));
@@ -712,6 +712,81 @@ fn test_update_ctx_neg() {
     .unwrap();
 }
 
+/// Tests for mutable references
+///
+mod mut_ref {
+    use super::*;
+
+    #[test]
+    fn basic_borrow_change_pos() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f() -> ty!{ v : i32 | v == 7 } {
+                    let mut a = 1;
+                    let b = &mut a;
+                    *b = 7;
+                    a
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == 7 }");
+            },
+        )
+        .unwrap();
+    }
+
+    #[should_panic]
+    #[test]
+    fn basic_borrow_change_neg() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f() -> ty!{ v : i32 | v == 8 } {
+                    let mut a = 1;
+                    let b = &mut a;
+                    *b = 7;
+                    a
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn basic_borrow_reassign_pos() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f() -> ty!{ v : i32 | v == 7 } {
+                    let mut a = 1;
+                    let mut b = 4;
+
+                    let mut r = &mut a;
+                    *r = 7;
+
+                    r = &mut b;
+                    *r = 2;
+
+                    a + b
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == 7 }");
+            },
+        )
+        .unwrap();
+    }
+}
+
 /// Test for fn calls
 ///
 mod fn_call {
@@ -943,34 +1018,6 @@ mod sub_context {
             .path_tee(format!("/tmp/z3-fn-{:?}.lisp", uuid::Uuid::new_v4()))
             .unwrap();
         solver
-    }
-
-    #[should_panic]
-    #[test]
-    fn test_weaken_direct_neg() {
-        init_tracing();
-        with_item("fn main() {}", |_, tcx| {
-            let mut super_ctx: RContext<&str> = RContext::new();
-            super_ctx.add_ty(
-                "a",
-                RefinementType {
-                    base: tcx.types.i32,
-                    binder: "v".to_string(),
-                    predicate: parse_quote! { v == 2},
-                },
-            );
-            let mut sub_ctx = super_ctx.clone();
-            sub_ctx.update_ty(
-                "a",
-                RefinementType {
-                    base: tcx.types.i32,
-                    binder: "v".to_string(),
-                    predicate: parse_quote! { v == 0 },
-                },
-            );
-            is_sub_context(&super_ctx, &sub_ctx, &tcx, &mut mk_z3()).unwrap();
-        })
-        .unwrap();
     }
 
     #[should_panic]

@@ -2,10 +2,10 @@ use crate::hir_ext::TyExt;
 use anyhow::anyhow;
 use rustc_hir as hir;
 use rustc_middle::ty::TypeckResults;
-use syn::ExprCall;
 use syn::parse_quote;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
+use syn::ExprCall;
 use tracing::trace;
 
 use core::fmt::Display;
@@ -15,22 +15,91 @@ use rustc_middle::ty::{Ty, TyCtxt};
 use std::collections::HashSet;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct RefinementType<'tcx> {
+pub enum RefinementType<'tcx> {
+    PredicateType { kind: PredicateRefinement<'tcx> },
+    ReferenceType { kind: ReferenceRefinement },
+}
+
+impl<'tcx> RefinementType<'tcx> {
+    pub fn map_predicate(
+        self,
+        f: impl Fn(PredicateRefinement<'tcx>) -> PredicateRefinement<'tcx>,
+    ) -> Self {
+        match self {
+            RefinementType::PredicateType { kind } => f(kind).into(),
+            RefinementType::ReferenceType { .. } => self,
+        }
+    }
+
+    pub fn try_map_predicate<E>(
+        self,
+        f: impl Fn(PredicateRefinement<'tcx>) -> Result<PredicateRefinement<'tcx>, E>,
+    ) -> Result<Self, E> {
+        match self {
+            RefinementType::PredicateType { kind } => Ok(f(kind)?.into()),
+            RefinementType::ReferenceType { .. } => Ok(self),
+        }
+    }
+}
+
+impl<'tcx> From<PredicateRefinement<'tcx>> for RefinementType<'tcx> {
+    fn from(ty: PredicateRefinement<'tcx>) -> Self {
+        RefinementType::PredicateType { kind: ty }
+    }
+}
+
+impl<'tcx> From<ReferenceRefinement> for RefinementType<'tcx> {
+    fn from(ty: ReferenceRefinement) -> Self {
+        RefinementType::ReferenceType { kind: ty }
+    }
+}
+
+impl<'tcx> Display for RefinementType<'tcx> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RefinementType::PredicateType { kind } => kind.fmt(f),
+            RefinementType::ReferenceType { kind } => kind.fmt(f),
+        }
+    }
+}
+
+/// E.g.
+/// ```rust
+/// let j = &mut i;
+/// ```
+/// - `*j` : tau_i
+/// - `j` : ref(i);
+/// - assigning to `*j` changes the type of `i`
+///
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ReferenceRefinement {
+    pub destination: hir::HirId,
+}
+
+impl Display for ReferenceRefinement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ref({})", self.destination)
+    }
+}
+
+/// E.g. `ty!{ v: i32 | v > 0}`
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PredicateRefinement<'tcx> {
     pub base: Ty<'tcx>,
     pub binder: String,
     pub predicate: syn::Expr,
 }
 
-impl<'a> RefinementType<'a> {
+impl<'a> PredicateRefinement<'a> {
     /// Extracts the Refinement Type from a `Refinement<T, B, P>` type alias
     pub fn from_type_alias<'b, 'tcx>(
         raw_type: &'a hir::Ty<'a>,
         tcx: &'b TyCtxt<'tcx>,
         base_ty: Ty<'a>,
-    ) -> anyhow::Result<RefinementType<'a>> {
+    ) -> anyhow::Result<PredicateRefinement<'a>> {
         if let Some((_base, binder, raw_predicate)) = raw_type.try_into_refinement(tcx) {
             let predicate = parse_predicate(raw_predicate.as_str())?;
-            Ok(RefinementType {
+            Ok(PredicateRefinement {
                 base: base_ty,
                 binder: binder.as_str().to_string(),
                 predicate,
@@ -47,16 +116,16 @@ impl<'a> RefinementType<'a> {
         expr: &hir::Expr,
         local_ctx: &TypeckResults<'a>,
         fresh_binder: String,
-    ) -> RefinementType<'a> {
+    ) -> PredicateRefinement<'a> {
         let unit_type = local_ctx.expr_ty(expr);
-        RefinementType {
+        PredicateRefinement {
             base: unit_type,
             binder: fresh_binder,
             predicate: parse_quote! { true },
         }
     }
 
-    pub fn rename_binder(&self, new_name: &str) -> anyhow::Result<RefinementType<'a>> {
+    pub fn rename_binder(&self, new_name: &str) -> anyhow::Result<PredicateRefinement<'a>> {
         self.rename_binders(&|name| {
             if name == self.binder {
                 new_name.to_string()
@@ -68,8 +137,11 @@ impl<'a> RefinementType<'a> {
 
     /// Create a new RefinementType where predicate is the conjunction of self's predicate and
     /// [additional_predicate]
-    pub fn with_additional_predicate(&self, additional_predicate: syn::Expr) -> RefinementType<'a> {
-        RefinementType {
+    pub fn with_additional_predicate(
+        &self,
+        additional_predicate: syn::Expr,
+    ) -> PredicateRefinement<'a> {
+        PredicateRefinement {
             predicate: syn::Expr::Binary(syn::ExprBinary {
                 attrs: Vec::new(),
                 left: Box::new(self.predicate.clone()),
@@ -83,8 +155,8 @@ impl<'a> RefinementType<'a> {
     pub fn rename_binders(
         &self,
         renamer: &impl Fn(&str) -> String,
-    ) -> anyhow::Result<RefinementType<'a>> {
-        Ok(RefinementType {
+    ) -> anyhow::Result<PredicateRefinement<'a>> {
+        Ok(PredicateRefinement {
             base: self.base,
             binder: renamer(&self.binder),
             predicate: rename_ref_in_expr(&self.predicate, renamer)?,
@@ -124,8 +196,8 @@ pub fn vars_in_expr(expr: &syn::Expr) -> HashSet<String> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MutRefinementType<'tcx> {
-    pub start: RefinementType<'tcx>,
-    pub end: RefinementType<'tcx>,
+    pub start: PredicateRefinement<'tcx>,
+    pub end: PredicateRefinement<'tcx>,
 }
 
 impl<'tcx> MutRefinementType<'tcx> {
@@ -140,12 +212,12 @@ impl<'tcx> MutRefinementType<'tcx> {
             let predicate1 = parse_predicate(raw_predicate1.as_str())?;
             let predicate2 = parse_predicate(raw_predicate2.as_str())?;
             Ok(MutRefinementType {
-                start: RefinementType {
+                start: PredicateRefinement {
                     base: base_ty,
                     binder: binder1.as_str().to_string(),
                     predicate: predicate1,
                 },
-                end: RefinementType {
+                end: PredicateRefinement {
                     base: base_ty,
                     binder: binder2.as_str().to_string(),
                     predicate: predicate2,
@@ -192,9 +264,10 @@ pub fn rename_ref_in_expr(
             paren_token,
             args,
         }) => {
-            let renamed_args = args.iter().map(|arg| {
-                rename_ref_in_expr(arg, renamer)
-            }).collect::<anyhow::Result<_>>()?;
+            let renamed_args = args
+                .iter()
+                .map(|arg| rename_ref_in_expr(arg, renamer))
+                .collect::<anyhow::Result<_>>()?;
 
             Ok(syn::Expr::Call(ExprCall {
                 attrs: attrs.clone(),
@@ -202,7 +275,7 @@ pub fn rename_ref_in_expr(
                 paren_token: paren_token.clone(),
                 args: renamed_args,
             }))
-        },
+        }
         syn::Expr::Cast(_) => todo!(),
         syn::Expr::Closure(_) => todo!(),
         syn::Expr::Continue(_) => todo!(),
@@ -270,7 +343,7 @@ pub fn rename_ref_in_expr(
     }
 }
 
-impl<'a> Display for RefinementType<'a> {
+impl<'a> Display for PredicateRefinement<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let pred = &self.predicate;
         write!(
@@ -354,7 +427,7 @@ pub fn encode_smt(expr: &syn::Expr) -> String {
             } else {
                 todo!()
             }
-        },
+        }
         _other => todo!("expr: {:?}", expr),
     }
 }

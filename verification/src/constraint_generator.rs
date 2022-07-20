@@ -5,6 +5,8 @@ use crate::refinement_context::is_sub_context;
 use crate::refinement_context::RContext;
 use crate::refinements;
 use crate::refinements::MutRefinementType;
+use crate::refinements::ReferenceRefinement;
+use crate::refinements::RefinementType;
 use crate::smtlib_ext::SmtResExt;
 use anyhow::anyhow;
 use anyhow::Context;
@@ -50,7 +52,7 @@ impl Fresh {
 mod tests;
 
 use crate::hir_ext::ExprExt;
-use crate::refinements::RefinementType;
+use crate::refinements::PredicateRefinement;
 
 pub fn type_check_function<'a, 'tcx, 'r>(
     function: &'a hir::Item<'tcx>,
@@ -92,20 +94,23 @@ where
 
             if CtxSpecFunctions::is_buildin(&ident.name.to_string()) {
                 let out_ty = fn_sig.output();
-                return anyhow::Ok(RefinementType {
-                    base: out_ty,
-                    binder: "v".to_string(),
-                    predicate: parse_quote! { true },
-                });
+                return anyhow::Ok(
+                    PredicateRefinement {
+                        base: out_ty,
+                        binder: "v".to_string(),
+                        predicate: parse_quote! { true },
+                    }
+                    .into(),
+                );
             }
 
             // get refinements for inputs
-            let mut ctx = RContext::<hir::HirId>::new();
-            let mut expected_end_state = RContext::<hir::HirId>::new();
+            let mut ctx = RContext::new();
+            let mut expected_end_state = RContext::new();
             for ((hir_ty, middle_ty), param) in inputs.iter().zip(fn_sig.inputs()).zip(body.params)
             {
                 let start_refinement =
-                    match RefinementType::from_type_alias(hir_ty, &tcx, middle_ty.clone()) {
+                    match PredicateRefinement::from_type_alias(hir_ty, &tcx, middle_ty.clone()) {
                         Ok(refinement) => {
                             trace!(%refinement, %param.pat.hir_id, "immut input type");
                             // Because mutable end-states may refer to immutable refinement binders
@@ -113,14 +118,14 @@ where
                             // Because immut types cannot chnge their predicates, the end state will need
                             // to have the same predicate as before.
                             // We could also use `ty!{ _ | true }}` here
-                            expected_end_state.add_ty(param.pat.hir_id, refinement.clone());
-                            refinement
+                            expected_end_state.add_ty(param.pat.hir_id, refinement.clone().into());
+                            refinement.into()
                         }
                         Err(_) => {
                             let MutRefinementType { start, end } =
                                 MutRefinementType::from_type_alias(hir_ty, tcx, *middle_ty)?;
-                            expected_end_state.add_ty(param.pat.hir_id, end);
-                            start
+                            expected_end_state.add_ty(param.pat.hir_id, end.into());
+                            start.into()
                         }
                     };
                 ctx.add_ty(param.pat.hir_id, start_refinement)
@@ -129,10 +134,10 @@ where
             // get refinement for output
             let expected_type = match output {
                 hir::FnRetTy::Return(return_type) => {
-                    RefinementType::from_type_alias(return_type, tcx, fn_sig.output())
+                    PredicateRefinement::from_type_alias(return_type, tcx, fn_sig.output())?.into()
                 }
                 _ => todo!(),
-            }?;
+            };
             trace!(%expected_type, "expected function type ");
 
             let conf = SmtConf::default_z3();
@@ -186,10 +191,12 @@ where
     for stmt in stmts {
         curr_ctx = match stmt.kind {
             hir::StmtKind::Local(local) => {
-                let initializer = local.init.ok_or(anyhow!(
-                    "All declarations are expected to contain initializers"
-                ))?;
+                let initializer = local.init.ok_or_else(|| {
+                    anyhow!("All declarations are expected to contain initializers")
+                })?;
 
+                // initializer might be a `&mut i`. In that case we need to note down
+                // `ctx.add_mut_ref_ty` the new reference.
                 let (type_of_init, mut ctx_after) =
                     type_of(initializer, tcx, &curr_ctx, local_ctx, solver, fresh)?;
                 assert!(
@@ -215,7 +222,14 @@ where
                     &local,
                     local.pat.hir_id
                 );
-                ctx_after.add_ty(local.pat.hir_id, type_of_init.clone());
+                let ty_to_add = match initializer.kind {
+                    ExprKind::AddrOf(hir::BorrowKind::Ref, hir::Mutability::Mut, referee_expr) => {
+                        let destination = referee_expr.try_into_path_hir_id(tcx, local_ctx)?;
+                        ReferenceRefinement { destination }.into()
+                    }
+                    _ => type_of_init.clone(),
+                };
+                ctx_after.add_ty(local.pat.hir_id, ty_to_add);
                 ctx_after
             }
             hir::StmtKind::Item(_) => todo!(),
@@ -271,11 +285,12 @@ where
             let base = local_ctx.node_type(expr.hir_id);
 
             anyhow::Ok((
-                RefinementType {
+                PredicateRefinement {
                     base,
                     binder: ident.to_string(),
                     predicate,
-                },
+                }
+                .into(),
                 ctx.clone(),
             ))
         }
@@ -307,21 +322,31 @@ where
                     tcx.hir().node_to_string(dest_hir_id)
                 )
             })?;
-            let new_name = fresh.fresh_ident();
-            let var_ty = ty_in_context.rename_binder(&new_name)?;
-            let combined_predicate = {
-                let new_pred = &var_ty.predicate;
-                let new_name = format_ident!("{}", &var_ty.binder);
-                let old_name = format_ident!("{}", &ty_in_context.binder);
-                parse_quote! {
-                    #new_pred && #new_name == #old_name
+            let full_ty = match ty_in_context {
+                RefinementType::PredicateType { kind: pred_ty } => {
+                    let new_name = fresh.fresh_ident();
+
+                    let var_ty = pred_ty.rename_binder(&new_name)?;
+                    let combined_predicate = {
+                        let new_pred = &var_ty.predicate;
+                        let new_name = format_ident!("{}", &var_ty.binder);
+                        let old_name = format_ident!("{}", &pred_ty.binder);
+                        parse_quote! {
+                            #new_pred && #new_name == #old_name
+                        }
+                    };
+                    let var_ty_with_eq_constraint = PredicateRefinement {
+                        predicate: combined_predicate,
+                        ..var_ty
+                    };
+                    var_ty_with_eq_constraint.into()
+                }
+                RefinementType::ReferenceType { kind } => {
+                    // if `a` has reference type, then we can simply copy the `ref(a)` type
+                    kind.clone().into()
                 }
             };
-            let var_ty_with_eq_constraint = RefinementType {
-                predicate: combined_predicate,
-                ..var_ty
-            };
-            Ok((var_ty_with_eq_constraint, ctx.clone()))
+            Ok((full_ty, ctx.clone()))
         }
         ExprKind::Box(_) => todo!(),
         ExprKind::ConstBlock(_) => todo!(),
@@ -331,8 +356,8 @@ where
             let func_decl = tcx.hir().get(path_hir_id);
 
             enum FnCallType<'tcx> {
-                AssertCtx(RContext<'tcx, hir::HirId>),
-                UpdateCtx(RContext<'tcx, hir::HirId>),
+                AssertCtx(RContext<'tcx>),
+                UpdateCtx(RContext<'tcx>),
                 NormalCall,
             }
             let fn_type = match func_decl
@@ -342,12 +367,12 @@ where
                 .to_string()
                 .as_ref()
             {
-                "assert_ctx" => FnCallType::AssertCtx(
-                    RContext::<hir::HirId>::try_from_assert_expr(args, tcx, local_ctx)?,
-                ),
-                "update_ctx" => FnCallType::UpdateCtx(
-                    RContext::<hir::HirId>::try_from_assert_expr(args, tcx, local_ctx)?,
-                ),
+                "assert_ctx" => {
+                    FnCallType::AssertCtx(RContext::try_from_assert_expr(args, tcx, local_ctx)?)
+                }
+                "update_ctx" => {
+                    FnCallType::UpdateCtx(RContext::try_from_assert_expr(args, tcx, local_ctx)?)
+                }
                 _ => FnCallType::NormalCall,
             };
 
@@ -359,11 +384,12 @@ where
                     is_sub_context(&assert_ctx, ctx, tcx, solver)?;
 
                     anyhow::Ok((
-                        RefinementType::new_empty_refinement_for(
+                        PredicateRefinement::new_empty_refinement_for(
                             expr,
                             local_ctx,
                             fresh.fresh_ident(),
-                        ),
+                        )
+                        .into(),
                         ctx.clone(),
                     ))
                 }
@@ -373,11 +399,12 @@ where
                     is_sub_context(&spec_ctx, ctx, tcx, solver)?;
 
                     anyhow::Ok((
-                        RefinementType::new_empty_refinement_for(
+                        PredicateRefinement::new_empty_refinement_for(
                             expr,
                             local_ctx,
                             fresh.fresh_ident(),
-                        ),
+                        )
+                        .into(),
                         spec_ctx,
                     ))
                 }
@@ -400,13 +427,13 @@ where
                     trace!(?fn_sig);
 
                     // get refinements for inputs
-                    let mut expected_input_ctx = RContext::<hir::HirId>::new();
+                    let mut expected_input_ctx = RContext::new();
                     let mut output_ctx = ctx.clone();
                     for ((hir_ty, middle_ty), arg) in
                         inputs.iter().zip(fn_sig.inputs()).zip(args.iter())
                     {
                         let (start_refinement_in_param, end_refinement) =
-                            match (RefinementType::from_type_alias(hir_ty, tcx, *middle_ty),MutRefinementType::from_type_alias(
+                            match (PredicateRefinement::from_type_alias(hir_ty, tcx, *middle_ty),MutRefinementType::from_type_alias(
                                 hir_ty, tcx, *middle_ty,
                             ))  {
                                 // both mut and immut type
@@ -440,9 +467,8 @@ where
                         let start_refinement = {
                             let param_binder = &start_refinement_in_param.binder;
                             let arg_binder = ctx
-                                .lookup_hir(&arg_hir_id)
-                                .expect("ctx must contain arg_hir_id")
-                                .binder;
+                                .lookup_binder_for_hir(&arg_hir_id)
+                                .expect("ctx must contain arg_hir_id");
                             let param_ident = format_ident!("{}", param_binder);
                             let arg_ident = format_ident!("{}", arg_binder);
 
@@ -452,18 +478,19 @@ where
                         };
                         trace!(%start_refinement, %start_refinement_in_param);
 
-                        expected_input_ctx.add_ty(arg_hir_id, start_refinement.clone());
+                        expected_input_ctx.add_ty(arg_hir_id, start_refinement.clone().into());
                         // this might seem weird, but `end_refinement` might refer to
                         // `start_refinement`. By first upserting it and directly afterwards
                         // end_refinement, we add start_refinements as dangling predicates.
-                        output_ctx.update_ty(arg_hir_id, start_refinement);
-                        output_ctx.update_ty(arg_hir_id, end_refinement);
+                        output_ctx.update_ty(arg_hir_id, start_refinement.into());
+                        output_ctx.update_ty(arg_hir_id, end_refinement.into());
+                        //TODO: Reference Types
                     }
 
                     // get refinement for output
                     let expected_type = match output {
                         hir::FnRetTy::Return(return_type) => {
-                            RefinementType::from_type_alias(return_type, tcx, fn_sig.output())
+                            PredicateRefinement::from_type_alias(return_type, tcx, fn_sig.output())
                         }
                         _ => todo!(),
                     }?;
@@ -473,19 +500,21 @@ where
                     trace!(output_ctx=%output_ctx.with_tcx(tcx));
                     is_sub_context(&expected_input_ctx, ctx, tcx, solver)?;
 
-                    Ok((expected_type, output_ctx))
+                    Ok((expected_type.into(), output_ctx))
                 }
             }
         }
         ExprKind::MethodCall(_, _, _) => todo!(),
         ExprKind::Tup(contents) => {
             let ty = match contents {
-                [] => {
-                    RefinementType::new_empty_refinement_for(expr, local_ctx, fresh.fresh_ident())
-                }
+                [] => PredicateRefinement::new_empty_refinement_for(
+                    expr,
+                    local_ctx,
+                    fresh.fresh_ident(),
+                ),
                 _o => todo!(),
             };
-            anyhow::Ok((ty, ctx.clone()))
+            anyhow::Ok((ty.into(), ctx.clone()))
         }
         ExprKind::Binary(Spanned { node: _bin_op, .. }, left, right) => {
             let sym = symbolic_execute(expr, tcx, ctx, local_ctx)?;
@@ -495,7 +524,7 @@ where
             let (_ty_left, ctx_after_left) = type_of(left, tcx, ctx, local_ctx, solver, fresh)?;
             let (_ty_right, ctx_after_right) =
                 type_of(right, tcx, &ctx_after_left, local_ctx, solver, fresh)?;
-            let ty = RefinementType {
+            let ty = PredicateRefinement {
                 base: local_ctx.expr_ty(expr),
                 binder: ident,
                 predicate: parse_quote! {
@@ -505,17 +534,26 @@ where
             trace!(%ty,"type of binary expr");
 
             //TODO check no mut in expr
-            anyhow::Ok((ty, ctx_after_right))
+            anyhow::Ok((ty.into(), ctx_after_right))
         }
         ExprKind::Unary(hir::UnOp::Deref, expr) => {
-            type_of(expr, tcx, ctx, local_ctx, solver, fresh)
+            let (referenced_ty, ctx_after) = type_of(expr, tcx, ctx, local_ctx, solver, fresh)?;
+            let ty = match referenced_ty {
+                RefinementType::PredicateType { kind } => panic!("type system error: Deref a PredicateType (should not happen when Rust is correct)"),
+                RefinementType::ReferenceType { kind } => ctx
+                    .lookup_hir(&kind.destination)
+                    .ok_or_else(|| anyhow!("Ctx is missing entry for hir id {}", kind.destination)),
+            }?;
+            anyhow::Ok((ty, ctx_after))
         }
         ExprKind::Unary(_, _) => todo!(),
         ExprKind::Cast(expr, cast_ty) => {
             // Generate sub-typing constraint
             let (expr_ty, ctx_after) = type_of(expr, tcx, ctx, local_ctx, solver, fresh)?;
 
-            let super_ty = RefinementType::from_type_alias(cast_ty, tcx, local_ctx.expr_ty(&expr))?;
+            let super_ty =
+                PredicateRefinement::from_type_alias(cast_ty, tcx, local_ctx.expr_ty(&expr))?
+                    .into();
 
             // SMT Subtyping
             // Why ctx_after_expr vs. ctx: For `a += 2 as ty!{v | v > 2}`, Type of `a += 2` will need to be a subtype
@@ -645,35 +683,53 @@ where
             };
 
             let refined_unit_type =
-                RefinementType::new_empty_refinement_for(expr, local_ctx, fresh.fresh_ident());
+                PredicateRefinement::new_empty_refinement_for(expr, local_ctx, fresh.fresh_ident());
 
             let exit_path_formula = negate_predicate(while_cond)?;
 
             let mut ctx_after = ctx_bang.clone();
             ctx_after.push_formula(exit_path_formula);
-            Ok((refined_unit_type, ctx_after))
+            Ok((refined_unit_type.into(), ctx_after))
         }
         ExprKind::Loop(_, _, _, _) => todo!(),
         ExprKind::Match(_, _, _) => todo!(),
         ExprKind::Closure(_, _, _, _, _) => todo!(),
         ExprKind::Assign(lhs, rhs, _span) => {
-            let dest_hir_id = match &lhs.kind {
-                ExprKind::Path(_path) => lhs.try_into_path_hir_id(tcx, local_ctx)?,
-                ExprKind::Unary(hir::UnOp::Deref, inner) => {
-                    inner.try_into_path_hir_id(tcx, local_ctx)?
+            // a is normal variable
+            // a  = expr;        a gets expr's type
+            // a is reference:
+            // a  = &mut expr;   a gets new mut reference entry
+            // *a = expr;        a's referenced variable gets new type
+
+            // rhs might be `&mut i`. In that case, we need to note down (`ctx.add_mut_ref_ty`)
+            // that the rhs is a new reference to `i`
+            let (rhs_ty, mut after_rhs) = type_of(rhs, tcx, ctx, local_ctx, solver, fresh)?;
+
+            match &lhs.kind {
+                ExprKind::Path(_path) => {
+                    let variable_hir = lhs.try_into_path_hir_id(tcx, local_ctx)?;
+
+                    after_rhs.update_ty(variable_hir, rhs_ty.clone());
+                }
+                ExprKind::Unary(hir::UnOp::Deref, lhs_inner) => {
+                    let lhs_dest = lhs_inner.try_into_path_hir_id(tcx, local_ctx)?;
+                    after_rhs.update_ty(lhs_dest, rhs_ty.clone())
                 }
                 other => todo!("don't know how to assign to {:?}", other),
             };
-
-            let (rhs_ty, mut after_rhs) = type_of(rhs, tcx, ctx, local_ctx, solver, fresh)?;
-            after_rhs.update_ty(dest_hir_id, rhs_ty.clone());
             trace!(%rhs_ty, after_rhs=%after_rhs.with_tcx(tcx), "rhs_ty is");
             anyhow::Ok((rhs_ty, after_rhs))
         }
         ExprKind::AssignOp(_, _, _) => todo!(),
         ExprKind::Field(_, _) => todo!(),
         ExprKind::Index(_, _) => todo!(),
-        ExprKind::AddrOf(_, _, _) => todo!(),
+        ExprKind::AddrOf(hir::BorrowKind::Ref, hir::Mutability::Mut, referee) => {
+            let referrer_id = referee.try_into_path_hir_id(tcx, local_ctx)?;
+            let referee_ty = ctx
+                .lookup_hir(&referrer_id)
+                .ok_or_else(|| anyhow!("Type for {} not found in ctx", &referrer_id))?;
+            anyhow::Ok((referee_ty, ctx.clone()))
+        }
         ExprKind::Break(_, _) => todo!(),
         ExprKind::Continue(_) => todo!(),
         ExprKind::Ret(_) => todo!(),
@@ -769,8 +825,13 @@ fn symbolic_execute<'a, 'b, 'c, 'tcx>(
                     ))?;
                     trace!(%ty_in_context, "found refinement type:");
 
-                    let refinement_ident = format_ident!("{}", &ty_in_context.binder);
-                    Ok(parse_quote! { #refinement_ident })
+                    match ty_in_context {
+                        RefinementType::PredicateType { kind: pred_ty } => {
+                            let refinement_ident = format_ident!("{}", &pred_ty.binder);
+                            Ok(parse_quote! { #refinement_ident })
+                        }
+                        RefinementType::ReferenceType { kind } => todo!(),
+                    }
                 }
                 hir::def::Res::Def(_, _) => todo!(),
                 other => anyhow::bail!("reference to unexpected resolution {:?}", other),
@@ -789,9 +850,9 @@ fn symbolic_execute<'a, 'b, 'c, 'tcx>(
 }
 
 #[instrument(skip_all, fields(%sub_ty, %super_ty))]
-fn require_is_subtype_of<'tcx, P>(
-    sub_ty: &RefinementType<'tcx>,
-    super_ty: &RefinementType<'tcx>,
+fn require_is_predicate_subtype_of<'tcx, P>(
+    sub_ty: &PredicateRefinement<'tcx>,
+    super_ty: &PredicateRefinement<'tcx>,
     ctx: &RContext<'tcx>,
     tcx: &TyCtxt<'tcx>,
     solver: &mut Solver<P>,
@@ -850,4 +911,29 @@ fn require_is_subtype_of<'tcx, P>(
         // no counterexample found => everything is fine => continue
     };
     Ok(())
+}
+
+#[instrument(skip_all, fields(%sub_ty, %super_ty))]
+fn require_is_subtype_of<'tcx, P>(
+    sub_ty: &RefinementType<'tcx>,
+    super_ty: &RefinementType<'tcx>,
+    ctx: &RContext<'tcx>,
+    tcx: &TyCtxt<'tcx>,
+    solver: &mut Solver<P>,
+) -> anyhow::Result<()> {
+    match (sub_ty, super_ty) {
+        (
+            RefinementType::PredicateType {
+                kind: sub_refinement,
+            },
+            RefinementType::PredicateType {
+                kind: super_refinement,
+            },
+        ) => require_is_predicate_subtype_of(sub_refinement, super_refinement, ctx, tcx, solver),
+        (
+            RefinementType::ReferenceType { kind: sub_ref },
+            RefinementType::ReferenceType { kind: super_ref },
+        ) => todo!(),
+        _ => Err(anyhow!("cannot match reference and predicate types")),
+    }
 }

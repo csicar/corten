@@ -259,7 +259,7 @@ fn negate_predicate(pred: syn::Expr) -> anyhow::Result<syn::Expr> {
 }
 
 /// Computes the type of [`expr`], but mutates the `ctx` according to the execution
-#[instrument(skip_all, fields(expr=?expr.pretty_print()))]
+#[instrument(skip_all, fields(expr=?expr.pretty_print()), ret)]
 pub fn type_of<'a, 'b, 'c, 'tcx, P>(
     expr: &'a Expr<'tcx>,
     tcx: &'b TyCtxt<'tcx>,
@@ -538,8 +538,8 @@ where
         }
         ExprKind::Unary(hir::UnOp::Deref, expr) => {
             let (referenced_ty, ctx_after) = type_of(expr, tcx, ctx, local_ctx, solver, fresh)?;
-            let ty = match referenced_ty {
-                RefinementType::PredicateType { kind } => panic!("type system error: Deref a PredicateType (should not happen when Rust is correct)"),
+            let ty = match &referenced_ty {
+                RefinementType::PredicateType { kind } => panic!("type system error: Deref a PredicateType (should not happen when Rust is correct). Type was: {referenced_ty}"),
                 RefinementType::ReferenceType { kind } => ctx
                     .lookup_hir(&kind.destination)
                     .ok_or_else(|| anyhow!("Ctx is missing entry for hir id {}", kind.destination)),

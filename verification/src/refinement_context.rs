@@ -450,12 +450,12 @@ pub fn is_sub_context<'tcx, 'a, P>(
     // sub_ctx.encode_binder_decls(solver, tcx)?;
     // super_ctx.encode_binder_decls(solver, tcx)?;
 
-    let super_binder = &super_ctx.types;
-    let sub_binder = &sub_ctx.types;
-    super_binder.union(&sub_binder).try_for_each(|ty| {
-        if let Some(sub_ty) = sub_ctx.lookup_logic_var(&ty.binder) {
+    let super_binder: HashSet<&str> = super_ctx.types.iter().map(|it| it.binder.as_ref()).collect();
+    let sub_binder: HashSet<&str> = sub_ctx.types.iter().map(|it| it.binder.as_ref()).collect();
+    super_binder.union(&sub_binder).try_for_each(|binder| {
+        if let Some(sub_ty) = sub_ctx.lookup_logic_var(binder) {
             sub_ctx.encode_binder_decl(solver, &sub_ty, tcx)?;
-        } else if let Some(super_ty) = super_ctx.lookup_logic_var(&ty.binder) {
+        } else if let Some(super_ty) = super_ctx.lookup_logic_var(binder) {
             super_ctx.encode_binder_decl(solver, &super_ty, tcx)?;
         } else {
             panic!("union is not a union?")

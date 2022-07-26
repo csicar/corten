@@ -7,7 +7,7 @@ use std::{
 use crate::{
     hir_ext::ExprExt,
     refinements::{rename_ref_in_expr, vars_in_expr},
-    smtlib_ext::SmtResExt,
+    smtlib_ext::{SmtResExt, SolverExt},
 };
 use hir::ExprKind;
 use quote::quote;
@@ -30,8 +30,14 @@ use crate::refinements::{self, RefinementType};
 pub struct RContext<'tcx, K: Debug + Eq + Hash + Display + SmtFmt = hir::HirId> {
     /// stack of formulas
     formulas: Vec<syn::Expr>,
+
     /// Association of variable declarations (K) with their current refinement type binder (String)
     binders: HashMap<K, String>,
+
+    /// Association of program variables and their hir ids
+    /// E.g. for `ty!{ v: &mut i32 | v == &a }` we need to know what hir id `a` belongs to
+    reference_destinations: HashMap<String, K>,
+
     /// Association of the refinement type binder with the associated type
     types: HashMap<String, RefinementType<'tcx>>,
 }
@@ -44,6 +50,7 @@ where
         RContext {
             formulas: Vec::new(),
             types: HashMap::new(),
+            reference_destinations: HashMap::new(),
             binders: HashMap::new(),
         }
     }
@@ -58,6 +65,7 @@ where
         RContext {
             formulas,
             binders: self.binders.clone(),
+            reference_destinations: self.reference_destinations.clone(),
             types: self.types.clone(),
         }
     }
@@ -111,6 +119,7 @@ where
             formulas,
             binders,
             types,
+            reference_destinations: self.reference_destinations.clone(),
         })
     }
 
@@ -162,7 +171,9 @@ where
                 rustc_middle::ty::TyKind::Int(_) => "Int".to_string(), // todo: respect size
                 rustc_middle::ty::TyKind::Uint(_) => "Int".to_string(), // Todo respect unsigned
                 rustc_middle::ty::TyKind::Ref(_region, ref_type, _mut) => encode_type(ref_type),
-                rustc_middle::ty::TyKind::Slice(inner_ty) => format!("(Array Int {})", encode_type(inner_ty)),
+                rustc_middle::ty::TyKind::Slice(inner_ty) => {
+                    format!("(Array Int {})", encode_type(inner_ty))
+                }
                 other => todo!("don't know how to encode ty {:?} in smt", other),
             }
         }
@@ -245,6 +256,14 @@ where
 
         self.types.retain(|k, _| live_variables.contains(k));
         trace!(types=%self.types.values().map(|k| k.to_string()).collect::<String>(), "new types:")
+    }
+
+    pub fn add_reference_dest(&mut self, name: String, hir_id: K) {
+        self.reference_destinations.insert(name, hir_id);
+    }
+
+    pub fn lookup_reference_dest(&self, name: &syn::Ident) -> anyhow::Result<&K> {
+        self.reference_destinations.get(&name.to_string()).ok_or_else (|| anyhow!("Missing {name} in reference destination set"))
     }
 
     /// Tries to construct a RefinementContext from a `assert_ctx` or `update_ctx` call.
@@ -361,6 +380,7 @@ where
                     formulas: form_symbols,
                     binders,
                     types,
+                    reference_destinations: HashMap::new(),
                 })
             }
             _other => todo!(),
@@ -380,6 +400,7 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
         .comment("checking is_sub_context ...")
         .into_anyhow()?;
     solver.push(1).into_anyhow()?;
+    solver.add_prelude().into_anyhow()?;
 
     if super_ctx
         .binders

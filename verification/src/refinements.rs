@@ -245,7 +245,15 @@ pub fn rename_ref_in_expr(
             }
         }
         syn::Expr::Range(_) => todo!(),
-        syn::Expr::Reference(_) => todo!(),
+        syn::Expr::Reference(syn::ExprReference {attrs, and_token, raw, mutability, expr: inner}) => {
+            anyhow::Ok(syn::Expr::Reference(syn::ExprReference {
+                attrs: attrs.clone(),
+                and_token: and_token.clone(),
+                raw: raw.clone(),
+                mutability:mutability.clone(),
+                expr: Box::new(rename_ref_in_expr(inner, renamer)?)
+            }))
+        },
         syn::Expr::Repeat(_) => todo!(),
         syn::Expr::Return(_) => todo!(),
         syn::Expr::Struct(_) => todo!(),
@@ -331,7 +339,7 @@ pub fn encode_smt(expr: &syn::Expr) -> String {
             _ => todo!(),
         },
         syn::Expr::Paren(syn::ExprParen { expr, .. }) => {
-            format!("{}", encode_smt(expr))
+            encode_smt(expr)
         }
         syn::Expr::Block(syn::ExprBlock {
             block: syn::Block { stmts, .. },
@@ -355,7 +363,10 @@ pub fn encode_smt(expr: &syn::Expr) -> String {
                 todo!()
             }
         },
-        _other => todo!("expr: {:?}", expr),
+        syn::Expr::Reference(syn::ExprReference {expr: inner, ..}) => {
+            format!("(ref {:?})", encode_smt(inner))
+        },
+        _other => todo!("expr: {}, {:?}", quote! { #expr }, expr),
     }
 }
 

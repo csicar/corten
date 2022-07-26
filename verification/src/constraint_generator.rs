@@ -6,6 +6,7 @@ use crate::refinement_context::RContext;
 use crate::refinements;
 use crate::refinements::MutRefinementType;
 use crate::smtlib_ext::SmtResExt;
+use crate::smtlib_ext::SolverExt;
 use anyhow::anyhow;
 use anyhow::Context;
 
@@ -186,7 +187,7 @@ where
     for stmt in stmts {
         curr_ctx = match stmt.kind {
             hir::StmtKind::Local(local) => {
-                let initializer = local.init.ok_or(anyhow!(
+                let initializer = local.init.ok_or_else(|| anyhow!(
                     "All declarations are expected to contain initializers"
                 ))?;
 
@@ -215,6 +216,7 @@ where
                     &local,
                     local.pat.hir_id
                 );
+                ctx_after.add_reference_dest(tcx.hir().name(local.pat.hir_id).to_ident_string(), local.pat.hir_id);
                 ctx_after.add_ty(local.pat.hir_id, type_of_init.clone());
                 ctx_after
             }
@@ -244,7 +246,7 @@ fn negate_predicate(pred: syn::Expr) -> anyhow::Result<syn::Expr> {
     }))
 }
 
-/// Computes the type of [`expr`], but mutates the `ctx` according to the execution
+/// Computes the type of [`expr`] and returns its type, together with the  `ctx` after its execution
 #[instrument(skip_all, fields(expr=?expr.pretty_print()))]
 pub fn type_of<'a, 'b, 'c, 'tcx, P>(
     expr: &'a Expr<'tcx>,
@@ -309,12 +311,17 @@ where
             })?;
             let new_name = fresh.fresh_ident();
             let var_ty = ty_in_context.rename_binder(&new_name)?;
-            let combined_predicate = {
-                let new_pred = &var_ty.predicate;
-                let new_name = format_ident!("{}", &var_ty.binder);
-                let old_name = format_ident!("{}", &ty_in_context.binder);
-                parse_quote! {
-                    #new_pred && #new_name == #old_name
+            let combined_predicate = match ty_in_context.base.kind() {
+                rustc_middle::ty::TyKind::Ref(_, _, _) => var_ty.predicate.clone(),
+                _ => {
+                    let new_pred = &var_ty.predicate;
+                    let new_name = format_ident!("{}", &var_ty.binder);
+                    let old_name = format_ident!("{}", &ty_in_context.binder);
+
+                    // TODO: special handling for mut ref? => no `newname = oldname` constraint?
+                    parse_quote! {
+                        #new_pred && #new_name == #old_name
+                    }
                 }
             };
             let var_ty_with_eq_constraint = RefinementType {
@@ -508,7 +515,18 @@ where
             anyhow::Ok((ty, ctx_after_right))
         }
         ExprKind::Unary(hir::UnOp::Deref, expr) => {
-            type_of(expr, tcx, ctx, local_ctx, solver, fresh)
+            let (inner_ty, ctx_after) = type_of(expr, tcx, ctx, local_ctx, solver, fresh)?;
+            match inner_ty.predicate {
+                syn::Expr::Binary(syn::ExprBinary {
+                    left,
+                    op: syn::BinOp::Eq(_),
+                    right,
+                    ..
+                }) => {
+                    todo!("{left:?}, {right:?}")
+                }
+                _ => anyhow::bail!("must be a single eq expr"),
+            }
         }
         ExprKind::Unary(_, _) => todo!(),
         ExprKind::Cast(expr, cast_ty) => {
@@ -657,10 +675,36 @@ where
         ExprKind::Match(_, _, _) => todo!(),
         ExprKind::Closure(_, _, _, _, _) => todo!(),
         ExprKind::Assign(lhs, rhs, _span) => {
+            // lhs = rhs
+            // e.g. *b = 2;
+            // e.g. a = 2;
             let dest_hir_id = match &lhs.kind {
                 ExprKind::Path(_path) => lhs.try_into_path_hir_id(tcx, local_ctx)?,
                 ExprKind::Unary(hir::UnOp::Deref, inner) => {
-                    inner.try_into_path_hir_id(tcx, local_ctx)?
+                    let (reference_type, ctx_after) =
+                        type_of(inner, tcx, ctx, local_ctx, solver, fresh)?;
+                    // `*b = 2`; b's type: ty!{ v : &mut i32 | v == &a }
+                    // ==> because b refers to a, change a's type
+                    trace!(%reference_type);
+                    match reference_type.predicate {
+                        syn::Expr::Binary(syn::ExprBinary {
+                            left,
+                            op: syn::BinOp::Eq(_),
+                            right,
+                            ..
+                        }) => match *right {
+                            syn::Expr::Reference(syn::ExprReference{mutability, expr: inner, ..}) => {
+                                let symbol = match *inner {
+                                    syn::Expr::Path(syn::ExprPath {path, ..}) => path.get_ident().cloned().unwrap(),
+                                    _ => todo!()
+                                };
+                                *ctx.lookup_reference_dest(&symbol)?
+                            }
+                            _ => todo!("{right:?}"),
+                        },
+                        _ => todo!("{}", reference_type),
+                    }
+
                 }
                 other => todo!("don't know how to assign to {:?}", other),
             };
@@ -673,6 +717,29 @@ where
         ExprKind::AssignOp(_, _, _) => todo!(),
         ExprKind::Field(_, _) => todo!(),
         ExprKind::Index(_, _) => todo!(),
+        ExprKind::AddrOf(hir::BorrowKind::Ref, hir::Mutability::Mut, destination_expr) => {
+            let dest_hir_id = destination_expr.try_into_path_hir_id(tcx, local_ctx)?;
+            let dst_ty = ctx
+                .lookup_hir(&dest_hir_id)
+                .ok_or_else(|| anyhow!("Type for {} not found in ctx", &dest_hir_id))?;
+            let fresh_lvar = fresh.fresh_ident();
+            let base_ty = local_ctx.expr_ty(expr);
+            let predicate = {
+                let dest_symbol = tcx.hir().name(dest_hir_id);
+                // TODO use as_u32()
+                let dest_encoded = format_ident!("{}", dest_symbol.as_str());
+                let fresh_lvar = format_ident!("{}", fresh_lvar);
+                parse_quote! {
+                    #fresh_lvar == &#dest_encoded
+                }
+            };
+            let ty = RefinementType {
+                base: base_ty,
+                binder: fresh_lvar,
+                predicate,
+            };
+            Ok((ty, ctx.clone()))
+        }
         ExprKind::AddrOf(_, _, _) => todo!(),
         ExprKind::Break(_, _) => todo!(),
         ExprKind::Continue(_) => todo!(),
@@ -804,6 +871,7 @@ fn require_is_subtype_of<'tcx, P>(
     );
     solver.comment("checking is_subtype_of").into_anyhow()?;
     solver.push(1).into_anyhow()?;
+    solver.add_prelude().into_anyhow()?;
     ctx.encode_smt(solver, tcx)?;
 
     solver.declare_const(&sub_ty.binder, "Int").into_anyhow()?;

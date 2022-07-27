@@ -2,10 +2,10 @@ use crate::hir_ext::TyExt;
 use anyhow::anyhow;
 use rustc_hir as hir;
 use rustc_middle::ty::TypeckResults;
-use syn::ExprCall;
 use syn::parse_quote;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
+use syn::ExprCall;
 use tracing::trace;
 
 use core::fmt::Display;
@@ -53,6 +53,54 @@ impl<'a> RefinementType<'a> {
             base: unit_type,
             binder: fresh_binder,
             predicate: parse_quote! { true },
+        }
+    }
+
+    /// Tries to get the type contents as a reference type:
+    /// E.g. `ty!{ v: &mut i32 | v == &a }` => a
+    pub fn get_as_reference_type(&self) -> anyhow::Result<syn::Ident> {
+        match &self.predicate {
+            syn::Expr::Binary(syn::ExprBinary {
+                left,
+                op: syn::BinOp::Eq(_),
+                right:
+                    box syn::Expr::Call(syn::ExprCall {
+                        func: box syn::Expr::Path(syn::ExprPath { path: fn_name, .. }),
+                        args,
+                        ..
+                    }),
+                ..
+            }) => {
+                if fn_name.get_ident().unwrap() == "anon_loc_ref_by" && args.len() == 1 {
+                    let arg = args.first().unwrap();
+                    match arg {
+                        syn::Expr::Path(syn::ExprPath { path, .. }) => {
+                            Ok(path.get_ident().cloned().unwrap())
+                        }
+                        _ => todo!(),
+                    }
+                } else {
+                    Err(anyhow!("unexpected fn call"))
+                }
+            }
+            syn::Expr::Binary(syn::ExprBinary {
+                left,
+                op: syn::BinOp::Eq(_),
+                right:
+                    box syn::Expr::Reference(syn::ExprReference {
+                        mutability,
+                        expr: inner,
+                        ..
+                    }),
+                ..
+            }) => match inner {
+                box syn::Expr::Path(syn::ExprPath { path, .. }) => {
+                    Ok(path.get_ident().cloned().unwrap())
+                }
+                _ => todo!(),
+            },
+
+            _ => todo!("{self}"),
         }
     }
 
@@ -192,9 +240,10 @@ pub fn rename_ref_in_expr(
             paren_token,
             args,
         }) => {
-            let renamed_args = args.iter().map(|arg| {
-                rename_ref_in_expr(arg, renamer)
-            }).collect::<anyhow::Result<_>>()?;
+            let renamed_args = args
+                .iter()
+                .map(|arg| rename_ref_in_expr(arg, renamer))
+                .collect::<anyhow::Result<_>>()?;
 
             Ok(syn::Expr::Call(ExprCall {
                 attrs: attrs.clone(),
@@ -202,7 +251,7 @@ pub fn rename_ref_in_expr(
                 paren_token: paren_token.clone(),
                 args: renamed_args,
             }))
-        },
+        }
         syn::Expr::Cast(_) => todo!(),
         syn::Expr::Closure(_) => todo!(),
         syn::Expr::Continue(_) => todo!(),
@@ -245,15 +294,19 @@ pub fn rename_ref_in_expr(
             }
         }
         syn::Expr::Range(_) => todo!(),
-        syn::Expr::Reference(syn::ExprReference {attrs, and_token, raw, mutability, expr: inner}) => {
-            anyhow::Ok(syn::Expr::Reference(syn::ExprReference {
-                attrs: attrs.clone(),
-                and_token: and_token.clone(),
-                raw: raw.clone(),
-                mutability:mutability.clone(),
-                expr: Box::new(rename_ref_in_expr(inner, renamer)?)
-            }))
-        },
+        syn::Expr::Reference(syn::ExprReference {
+            attrs,
+            and_token,
+            raw,
+            mutability,
+            expr: inner,
+        }) => anyhow::Ok(syn::Expr::Reference(syn::ExprReference {
+            attrs: attrs.clone(),
+            and_token: and_token.clone(),
+            raw: raw.clone(),
+            mutability: mutability.clone(),
+            expr: Box::new(rename_ref_in_expr(inner, renamer)?),
+        })),
         syn::Expr::Repeat(_) => todo!(),
         syn::Expr::Return(_) => todo!(),
         syn::Expr::Struct(_) => todo!(),
@@ -338,9 +391,7 @@ pub fn encode_smt(expr: &syn::Expr) -> String {
             Some(syn::PathSegment { ident, .. }) => encode_ident(ident),
             _ => todo!(),
         },
-        syn::Expr::Paren(syn::ExprParen { expr, .. }) => {
-            encode_smt(expr)
-        }
+        syn::Expr::Paren(syn::ExprParen { expr, .. }) => encode_smt(expr),
         syn::Expr::Block(syn::ExprBlock {
             block: syn::Block { stmts, .. },
             label: None,
@@ -362,9 +413,21 @@ pub fn encode_smt(expr: &syn::Expr) -> String {
             } else {
                 todo!()
             }
-        },
-        syn::Expr::Reference(syn::ExprReference {expr: inner, ..}) => {
+        }
+        syn::Expr::Reference(syn::ExprReference { expr: inner, .. }) => {
             format!("(ref {:?})", encode_smt(inner))
+        }
+        syn::Expr::Call(syn::ExprCall {
+            func: box syn::Expr::Path(syn::ExprPath { path: fn_name, .. }),
+            args,
+            ..
+        }) => {
+            if fn_name.get_ident().unwrap() == "anon_loc_ref_by" && args.len() == 1 {
+                let arg = args.first().unwrap();
+                    format!("(anon_loc_ref_by {:?})", encode_smt(arg))
+            } else {
+               todo!()
+            }
         },
         _other => todo!("expr: {}, {:?}", quote! { #expr }, expr),
     }

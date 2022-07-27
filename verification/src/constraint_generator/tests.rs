@@ -824,7 +824,7 @@ mod fn_call {
         init_tracing();
         with_item_and_rt_lib(
             &quote! {
-                fn g(p : &mut ty!{ a : i32 | a > 0 => b | b > 10}) -> ty!{ v : () } {
+                fn g(p : &mut ty!{ a : i32 | *a > 0 => b | *b > 10}) -> ty!{ v : () } {
                     *p = 11; ()
                 }
 
@@ -961,7 +961,7 @@ mod sub_context {
             );
             let mut sub_ctx = super_ctx.clone();
             sub_ctx.update_ty(
-                "a",
+                TypeTarget::Definition("a"),
                 RefinementType {
                     base: tcx.types.i32,
                     binder: "v".to_string(),
@@ -1084,6 +1084,48 @@ mod mut_ref {
                     let b = &mut res; // ty!{ _2 : i32 | _2 = &res }
                     *b = 2;
                     res
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_read_ref_pos() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f() -> ty!{ v : i32 | v == 2} {
+                    let mut res = 0;
+                    let b = &mut res;
+                    *b = 2;
+                    *b
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == 2 }");
+            },
+        )
+        .unwrap();
+    }
+
+    #[should_panic]
+    #[test]
+    fn test_read_ref_neg() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f() -> ty!{ v : i32 | v == 0} {
+                    let mut res = 0;
+                    let b = &mut res;
+                    *b = 2;
+                    *b
                 }
             }
             .to_string(),

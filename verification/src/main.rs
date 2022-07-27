@@ -1,4 +1,5 @@
 #![feature(rustc_private)]
+#![feature(box_patterns)]
 
 // NOTE: For the example to compile, you will need to first run the following:
 //     rustup component add rustc-dev llvm-tools-preview

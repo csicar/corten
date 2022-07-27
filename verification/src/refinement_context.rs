@@ -9,7 +9,7 @@ use crate::{
     refinements::{rename_ref_in_expr, vars_in_expr},
     smtlib_ext::{SmtResExt, SolverExt},
 };
-use hir::ExprKind;
+use hir::{ExprKind, HirId};
 use quote::quote;
 use rsmt2::Solver;
 use rustc_hir as hir;
@@ -26,17 +26,43 @@ use anyhow::anyhow;
 
 use crate::refinements::{self, RefinementType};
 
+/// Represents the entity, that a type should be attached to. There are two options:
+/// - attach to a definition site (i.e. hir id)
+///     For `let a = 2`, we attach `ty!{==2}` to hir id of a
+/// - attach to a anonymous location (i.e. an argument)
+///     For `fn(a: &mut ty!{ v : i32 | v == 2 })` we attach
+///     - `ty!{ == &a}` to `Definition(<a's hir id>)`
+///     - `ty!{==2}` to `Anonymous(<a's hir id>)`
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TypeTarget<K> {
+    Definition(K),
+    /// Anonymous Definition, which is referenced by `.0`
+    /// In general targetting a location by a reference is problematic, because we might
+    /// overlook aliasing to that location.
+    /// `Anonymous` may only be used for parameters. They are known to be non aliased (inside the current scope)
+    Anonymous(K),
+}
+
+impl<K: SmtFmt> SmtFmt for TypeTarget<K> {
+    fn fmt_str<'tcx>(&self, tcx: &TyCtxt<'tcx>) -> String {
+        match self {
+            TypeTarget::Definition(d) => d.fmt_str(tcx),
+            TypeTarget::Anonymous(d) => format!("<anon decl referenced by>: {}", d.fmt_str(tcx)),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RContext<'tcx, K: Debug + Eq + Hash + Display + SmtFmt = hir::HirId> {
     /// stack of formulas
     formulas: Vec<syn::Expr>,
 
     /// Association of variable declarations (K) with their current refinement type binder (String)
-    binders: HashMap<K, String>,
+    binders: HashMap<TypeTarget<K>, String>,
 
     /// Association of program variables and their hir ids
-    /// E.g. for `ty!{ v: &mut i32 | v == &a }` we need to know what hir id `a` belongs to
-    reference_destinations: HashMap<String, K>,
+    /// E.g. for `ty!{ v: &mut i32 | v == &a }` we need to know what the identifier `a` belongs to the hir id of `a`
+    reference_destinations: HashMap<String, TypeTarget<K>>,
 
     /// Association of the refinement type binder with the associated type
     types: HashMap<String, RefinementType<'tcx>>,
@@ -70,16 +96,26 @@ where
         }
     }
 
-    pub fn update_ty(&mut self, hir: K, ty: RefinementType<'a>) {
-        self.binders.remove(&hir);
-        self.add_ty(hir, ty);
+    pub fn update_ty(&mut self, target: TypeTarget<K>, ty: RefinementType<'a>) {
+        self.binders.remove(&target);
+        self.add_any_ty(target, ty);
         // self.garbage_collect();
     }
 
-    pub fn add_ty(&mut self, hir: K, ty: RefinementType<'a>) {
-        assert!(!self.binders.contains_key(&hir));
-        self.binders.insert(hir, ty.binder.clone());
+    fn add_any_ty(&mut self, def_hir_id: TypeTarget<K>, ty: RefinementType<'a>) {
+        assert!(!self.binders.contains_key(&def_hir_id));
+        self.binders.insert(def_hir_id, ty.binder.clone());
         self.types.insert(ty.binder.clone(), ty);
+    }
+
+    pub fn add_ty(&mut self, hir: K, ty: RefinementType<'a>) {
+        let def_hir_id = TypeTarget::Definition(hir);
+        self.add_any_ty(def_hir_id, ty)
+    }
+
+    pub fn add_anonymous_ty_referenced_by(&mut self, hir: K, ty: RefinementType<'a>) {
+        let def_hir_id = TypeTarget::Anonymous(hir);
+        self.add_any_ty(def_hir_id, ty)
     }
 
     pub fn rename_binders(&self, renamer: &impl Fn(&str) -> String) -> anyhow::Result<Self> {
@@ -124,11 +160,14 @@ where
     }
 
     pub fn lookup_hir(&self, hir: &K) -> Option<RefinementType<'a>> {
+        self.lookup_type_by_type_target(&TypeTarget::Definition(hir.clone()))
+    }
+
+    pub fn lookup_type_by_type_target(&self, target: &TypeTarget<K>) -> Option<RefinementType<'a>> {
         self.binders
-            .get(&hir)
+            .get(target)
             .and_then(|binder| self.types.get(binder))
-            .map(|entry| entry.clone())
-        // self.types.get(&hir).map(|entry| entry.clone())
+            .cloned()
     }
 
     pub fn encode_smt<P>(&self, solver: &mut Solver<P>, tcx: &TyCtxt<'a>) -> anyhow::Result<()> {
@@ -144,7 +183,8 @@ where
         Ok(())
     }
 
-    pub fn loopup_decl_for_binder(&self, needle: &str) -> Option<&K> {
+    /// Get the Hir of the decl currently associated with the logic variable `needle`
+    pub fn lookup_decl_for_binder(&self, needle: &str) -> Option<&TypeTarget<K>> {
         self.binders
             .iter()
             .find_map(|(key, binder)| if binder == needle { Some(key) } else { None })
@@ -157,9 +197,9 @@ where
         tcx: &TyCtxt<'a>,
     ) -> anyhow::Result<()> {
         let ident = self
-            .loopup_decl_for_binder(&ty.binder)
+            .lookup_decl_for_binder(&ty.binder)
             .map(|decl| decl.fmt_str(tcx))
-            .unwrap_or("<dangling type>".to_string());
+            .unwrap_or_else(|| "<dangling type>".to_string());
         solver
             .comment(&format!("decl for {}", ident))
             .into_anyhow()?;
@@ -197,8 +237,9 @@ where
 
     pub fn encode_predicates<P>(&self, solver: &mut Solver<P>) -> anyhow::Result<()> {
         self.types.iter().try_for_each(|(binder, ty)| {
-            let decl_name = match self.loopup_decl_for_binder(binder) {
-                Some(hir_id) => hir_id.to_string(),
+            let decl_name = match self.lookup_decl_for_binder(binder) {
+                Some(TypeTarget::Definition(hir_id)) => hir_id.to_string(),
+                Some(TypeTarget::Anonymous(hir_id)) => hir_id.to_string(),
                 None => "<dangling type>".to_string(),
             };
             solver
@@ -231,7 +272,7 @@ where
         let mut live_variables: HashSet<String> = self
             .binders
             .values()
-            .map(|n| n.clone())
+            .cloned()
             .chain(
                 self.formulas
                     .iter()
@@ -258,12 +299,19 @@ where
         trace!(types=%self.types.values().map(|k| k.to_string()).collect::<String>(), "new types:")
     }
 
-    pub fn add_reference_dest(&mut self, name: String, hir_id: K) {
+    pub fn add_reference_dest(&mut self, name: String, hir_id: TypeTarget<K>) {
         self.reference_destinations.insert(name, hir_id);
     }
 
-    pub fn lookup_reference_dest(&self, name: &syn::Ident) -> anyhow::Result<&K> {
-        self.reference_destinations.get(&name.to_string()).ok_or_else (|| anyhow!("Missing {name} in reference destination set"))
+    pub fn lookup_reference_dest(&self, name: &syn::Ident) -> anyhow::Result<&TypeTarget<K>> {
+        self.reference_destinations
+            .get(&name.to_string())
+            .ok_or_else(|| {
+                anyhow!(
+                    "Missing {name} in reference destination set {:?}",
+                    self.reference_destinations
+                )
+            })
     }
 
     /// Tries to construct a RefinementContext from a `assert_ctx` or `update_ctx` call.
@@ -361,11 +409,11 @@ where
                         }
                     })
                     .try_collect()?;
-                let binders: HashMap<hir::HirId, String> = refinement_symbols
+                let binders: HashMap<TypeTarget<HirId>, String> = refinement_symbols
                     .iter()
                     .filter_map(|(maybe_hir, rt)| {
                         if let Some(hir) = maybe_hir {
-                            Some((hir.clone(), rt.binder.clone()))
+                            Some((TypeTarget::Definition(hir.clone()), rt.binder.clone()))
                         } else {
                             None
                         }
@@ -456,13 +504,13 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
     // Maps sub binder to their hir_id-corresponding super binder
     let intersection_binder = sub_decls
         .intersection(&super_decls)
-        .map(|hir_id| {
+        .map(|target| {
             let sub_ty = sub_ctx
-                .lookup_hir(hir_id)
-                .expect("sub_ctx must contain hir_id, b/c of intersection");
+                .lookup_type_by_type_target(target)
+                .expect("sub_ctx must contain target, b/c of intersection");
             let super_ty = super_ctx
-                .lookup_hir(hir_id)
-                .expect("super_ctx must contain hir_id, b/c of intersection");
+                .lookup_type_by_type_target(target)
+                .expect("super_ctx must contain target, b/c of intersection");
 
             (super_ty.binder, sub_ty.binder)
         })
@@ -610,7 +658,7 @@ impl<'a, 'b, 'c, K: SmtFmt + Debug + Eq + Hash + Display + SmtFmt + Clone> Displ
             .iter()
             .sorted_by(|(key_a, _), (key_b, _)| key_a.cmp(key_b))
         {
-            let decl = self.ctx.loopup_decl_for_binder(binder);
+            let decl = self.ctx.lookup_decl_for_binder(binder);
             let name = match decl {
                 Some(id) => id.fmt_str(self.tcx),
                 None => "<dangling>".to_string(),

@@ -1,0 +1,136 @@
+\documentclass{article}
+\usepackage{bussproofs}
+\usepackage{ amssymb }
+\usepackage{ amsmath }
+\usepackage[utf8]{inputenc}
+\usepackage{draculatheme}
+
+\begin{document}
+  
+
+\section{Definitions}
+
+\paragraph*{$P$} is the set of program variables used in rust program. Common names $a, b, c$
+\paragraph*{$L$} is the set of logic variables used in refinement types. Common names: $\alpha, \beta$
+
+\paragraph*{$\Gamma = (\mu, \sigma)$} is a tuple containing a function $\mu: P \to L$ mapping all program variables to their (current) logic variable and a set of formulas $\sigma$ over $L$. During execution of statements, the set increases monotonically
+
+\paragraph*{$\tau$} is a user defined type $\{ \alpha : b \mid \varphi\}$. Where $\alpha$ is a logic variable from $L$, $b$ is a base type from Rust (like \texttt{i32}) and $\varphi$ is a formula over variables in $L$.
+
+\section{Typing Rules}
+
+\paragraph*{Abbreviations}
+We write:
+\begin{itemize}
+  \item  $\Gamma, c$ for $(\mu, \sigma \wedge c)$
+  \item $\Gamma[a \mapsto \alpha]$ for $(\mu[a \mapsto \alpha], \sigma)$
+\end{itemize}
+
+
+\subsection{Expression Typing: $\Gamma \vdash e : \tau$}
+
+\begin{prooftree}
+  \AxiomC{$l \text{ fresh}$}
+  \AxiomC{$\text{base\_ty}(v) = b$}
+  \LeftLabel{$\text{LIT}$}
+  \BinaryInfC{$\Gamma \vdash v: \{ l : b \mid l \doteq v\} \Rightarrow \Gamma$}
+\end{prooftree}
+
+\begin{prooftree}
+  \AxiomC{$\beta \text{ fresh}$}
+  \AxiomC{$\{ \beta : b \mid \beta \doteq \alpha \}$}
+  \LeftLabel{$\text{VAR}$}
+  \BinaryInfC{$\Gamma \vdash x : \{ \alpha : b \mid \varphi\} \Rightarrow \Gamma$}
+\end{prooftree}
+
+\begin{prooftree}
+  \AxiomC{$\Gamma \vdash c : \text{bool} \Rightarrow \Gamma_c$}
+  \AxiomC{$\Gamma_c, c \vdash c_t : \tau \Rightarrow \Gamma_t$}
+  \AxiomC{$\Gamma_c, \neg c \vdash c_e : \tau \Rightarrow \Gamma_t$}
+  \LeftLabel{$\text{IF}$}
+  \TrinaryInfC{$\Gamma \vdash \text{if } c \text{ then }c_t\text{ else } c_e : \tau \Rightarrow \Gamma_t$}
+\end{prooftree}
+
+\begin{prooftree}
+  \AxiomC{$\Gamma_I, c \vdash s \Rightarrow \Gamma_I' $}
+  \AxiomC{$\Gamma_I' \preceq \Gamma_I$}
+  \LeftLabel{$\text{WHILE}$}
+  \BinaryInfC{$\Gamma_I \vdash \texttt{while}(c) s \Rightarrow \Gamma_I,\neg c$}
+\end{prooftree}
+
+
+\begin{prooftree}
+  \AxiomC{$\Gamma \vdash s_1 : \tau_1 \Rightarrow \Gamma'$}
+  \AxiomC{$\Gamma' \vdash \bar s : \tau \Rightarrow \Gamma''$}
+  \LeftLabel{$\text{SEQ}$}
+  \BinaryInfC{$\Gamma \vdash s_1 ; \bar s : \tau \Rightarrow \Gamma''$}
+\end{prooftree}
+
+
+
+\begin{prooftree}
+  \AxiomC{$\Gamma \vdash e_1 : \{v_1:b \mid \varphi_1\} \Rightarrow \Gamma'$}
+  \AxiomC{$\Gamma' \vdash e_2 : \{v_2:b \mid \varphi_2\} \Rightarrow \Gamma''$}
+  \LeftLabel{$\text{ADD}$}
+  \BinaryInfC{$\Gamma \vdash e_1 + e_2 : \{ v: b \mid v \doteq [e_1] + [e_2]\} \Rightarrow \Gamma'', \varphi_1, \varphi_2$}
+\end{prooftree}
+
+
+\begin{prooftree}
+  \AxiomC{$\Gamma \vdash e : \{ \beta \mid \varphi \} \Rightarrow \Gamma'$}
+  \LeftLabel{$\text{ASSIGN}$}
+  \UnaryInfC{$\Gamma \vdash x = e : \tau \Rightarrow \Gamma' [x \mapsto \beta], \varphi$}
+\end{prooftree}
+
+
+\begin{prooftree}
+  \AxiomC{$\Gamma \vdash e : \{ \beta \mid \varphi \} \Rightarrow \Gamma'$}
+  \AxiomC{$\text{reference destination of } x \text{ is } y$}
+  \LeftLabel{$\text{ASSIGN-REF}$}
+  \BinaryInfC{$\Gamma \vdash *x = e : \tau \Rightarrow \Gamma' [y \mapsto \beta], \varphi$}
+\end{prooftree}
+
+
+\begin{prooftree}
+  \AxiomC{$ (\{a \mapsto \tau_a, \dots\}, \{\alpha \doteq \mu(a), \dots, \varphi_{\alpha}, \dots\}) \preceq \Gamma$}
+  \AxiomC{$f : (\{ \alpha \mid \varphi_{\alpha} \} \Rightarrow \{ \alpha' \mid \varphi'_{\alpha} \}, \dots)$}
+  \LeftLabel{$\text{Fn-Call}$}
+  \BinaryInfC{$\Gamma \vdash f(a, \dots)  \Rightarrow (\mu[a \mapsto \alpha', \dots], \sigma \wedge \varphi'_{\alpha} \wedge \dots)$}
+\end{prooftree}
+
+\begin{prooftree}
+  \AxiomC{$\Gamma \vdash e : \tau$}
+  \AxiomC{$\Gamma \vdash \tau \preceq \tau'$}
+  \LeftLabel{$\text{INTRO-SUB}$}
+  \BinaryInfC{$\Gamma \vdash e \texttt{ as } \tau': \tau'$}
+\end{prooftree}
+
+\subsection{Sub-Typing Rules: $\Gamma \vdash \tau \preceq \tau'$}
+
+\begin{prooftree}
+  \AxiomC{$\sigma \wedge \varphi'[\beta \triangleright \alpha ] \vDash \varphi$}
+  \LeftLabel{$\text{$\preceq$-TY}$}
+  \UnaryInfC{$\Gamma = (\mu, \sigma) \vdash \{ \alpha \mid \varphi\} \preceq \{ \beta \mid \varphi' \}$}
+\end{prooftree}
+
+alternative (should be equivalent):
+
+\begin{prooftree}
+  \AxiomC{$\Gamma[f \mapsto \alpha], \varphi \preceq \Gamma[f \mapsto \beta], \varphi'$}
+  \AxiomC{$f \text{ fresh}$}
+  \LeftLabel{$\text{$\preceq$-TY-ALT}$}
+  \BinaryInfC{$\Gamma \vdash \{ \alpha \mid \varphi\} \preceq \{ \beta \mid \varphi' \}$}
+\end{prooftree}
+
+
+\subsection{Sub-Context Rules: $\Gamma \preceq \Gamma'$}
+
+
+\begin{prooftree}
+  \AxiomC{$\sigma'[\mu(\alpha) \triangleright \mu'(\alpha)\ \mid \alpha \in dom(\mu)] \vDash \sigma$}
+  \AxiomC{$dom(\mu) \subseteq dom(\mu')$}
+  \LeftLabel{$\text{$\preceq$-CTX}$}
+  \BinaryInfC{$(\sigma, \mu) \preceq (\sigma', \mu')$}
+\end{prooftree}
+
+\end{document}

@@ -38,9 +38,9 @@ We write:
 
 \begin{prooftree}
   \AxiomC{$\beta \text{ fresh}$}
-  \AxiomC{$\{ \beta : b \mid \beta \doteq \alpha \}$}
+  \AxiomC{$\mu(x) = \alpha$}
   \LeftLabel{$\text{VAR}$}
-  \BinaryInfC{$\Gamma \vdash x : \{ \alpha : b \mid \varphi\} \Rightarrow \Gamma$}
+  \BinaryInfC{$\Gamma = (\mu, \sigma)\vdash x : \{ \alpha : b \mid \beta \doteq \alpha \} \Rightarrow \Gamma$}
 \end{prooftree}
 
 
@@ -48,7 +48,7 @@ We write:
   \AxiomC{$\beta \text{ TODO}$}
   \AxiomC{$\{ \beta : b \mid \beta \doteq \alpha \}$}
   \LeftLabel{$\text{VAR-REF}$}
-  \BinaryInfC{$\Gamma \vdash x : \{ \alpha : b \mid \varphi\} \Rightarrow \Gamma$}
+  \BinaryInfC{$\Gamma \vdash *x : \{ \alpha : b \mid \varphi\} \Rightarrow \Gamma$}
 \end{prooftree}
 
 \begin{prooftree}

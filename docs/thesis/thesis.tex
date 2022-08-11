@@ -3,7 +3,7 @@
 \usepackage{ amssymb }
 \usepackage{ amsmath }
 \usepackage[utf8]{inputenc}
-\usepackage{draculatheme}
+% \usepackage{draculatheme}
 
 \begin{document}
   
@@ -85,16 +85,26 @@ We write:
 
 \begin{prooftree}
   \AxiomC{$\Gamma \vdash e : \{ \beta \mid \varphi \} \Rightarrow \Gamma'$}
-  \AxiomC{$\text{reference destination of } x \text{ is } y$}
-  \LeftLabel{$\text{ASSIGN-REF}$}
+  \AxiomC{$\Gamma \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y\}$}
+  \LeftLabel{$\text{ASSIGN-STRONG}$}
   \BinaryInfC{$\Gamma \vdash *x = e : \tau \Rightarrow \Gamma' [y \mapsto \beta], \varphi$}
+\end{prooftree}
+
+
+\begin{prooftree}
+  \AxiomC{$\Gamma \vdash e : \tau \Rightarrow \Gamma'$}
+  \AxiomC{$\Gamma \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y \vee \alpha \doteq \&z \vee \dots\}$}
+  \AxiomC{$\Gamma \vdash \tau \preceq \tau_y$}
+  \AxiomC{$\Gamma \vdash y : \tau_y$}
+  \LeftLabel{$\text{ASSIGN-WEAK}$}
+  \QuaternaryInfC{$\Gamma \vdash *x = e : \tau \Rightarrow \Gamma'$}
 \end{prooftree}
 
 
 \begin{prooftree}
   \AxiomC{$ (\{a \mapsto \tau_a, \dots\}, \{\alpha \doteq \mu(a), \dots, \varphi_{\alpha}, \dots\}) \preceq \Gamma$}
   \AxiomC{$f : (\{ \alpha \mid \varphi_{\alpha} \} \Rightarrow \{ \alpha' \mid \varphi'_{\alpha} \}, \dots)$}
-  \LeftLabel{$\text{Fn-Call}$}
+  \LeftLabel{$\text{FN-CALL}$}
   \BinaryInfC{$\Gamma \vdash f(a, \dots)  \Rightarrow (\mu[a \mapsto \alpha', \dots], \sigma \wedge \varphi'_{\alpha} \wedge \dots)$}
 \end{prooftree}
 

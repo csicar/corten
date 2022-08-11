@@ -43,6 +43,14 @@ We write:
   \BinaryInfC{$\Gamma \vdash x : \{ \alpha : b \mid \varphi\} \Rightarrow \Gamma$}
 \end{prooftree}
 
+
+\begin{prooftree}
+  \AxiomC{$\beta \text{ TODO}$}
+  \AxiomC{$\{ \beta : b \mid \beta \doteq \alpha \}$}
+  \LeftLabel{$\text{VAR-REF}$}
+  \BinaryInfC{$\Gamma \vdash x : \{ \alpha : b \mid \varphi\} \Rightarrow \Gamma$}
+\end{prooftree}
+
 \begin{prooftree}
   \AxiomC{$\Gamma \vdash c : \text{bool} \Rightarrow \Gamma_c$}
   \AxiomC{$\Gamma_c, c \vdash c_t : \tau \Rightarrow \Gamma_t$}

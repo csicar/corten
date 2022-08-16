@@ -46,10 +46,10 @@ We write:
 
 
 \begin{prooftree}
-  \AxiomC{$\beta \text{ TODO}$}
-  \AxiomC{$\{ \beta : b \mid \beta \doteq \alpha \}$}
+  \AxiomC{$\Gamma \vdash y : \tau $}
+  \AxiomC{$\Gamma \vdash x : \{ \beta : \&b \mid \beta \doteq \&y \}$}
   \LeftLabel{$\text{VAR-REF}$}
-  \BinaryInfC{$\Gamma \vdash *x : \{ \alpha : b \mid \varphi\} \Rightarrow \Gamma$}
+  \BinaryInfC{$\Gamma \vdash *x : \tau \Rightarrow \Gamma$}
 \end{prooftree}
 
 \begin{prooftree}

@@ -18,7 +18,7 @@ use rustc_middle::ty::{TyCtxt, TypeckResults};
 use std::fmt::Debug;
 use std::hash::Hash;
 
-use tracing::{info, instrument, trace};
+use tracing::{error, info, instrument, trace};
 
 use itertools::Itertools;
 
@@ -40,14 +40,23 @@ pub enum TypeTarget<K> {
     /// In general targetting a location by a reference is problematic, because we might
     /// overlook aliasing to that location.
     /// `Anonymous` may only be used for parameters. They are known to be non aliased (inside the current scope)
-    Anonymous(K),
+    Anonymous(usize),
+}
+
+impl<K> TypeTarget<K> {
+    fn map<K2>(self, f: &impl Fn(K) -> K2) -> TypeTarget<K2> {
+        match self {
+            TypeTarget::Definition(d) => TypeTarget::Definition(f(d)),
+            TypeTarget::Anonymous(id) => TypeTarget::Anonymous(id),
+        }
+    }
 }
 
 impl<K: SmtFmt> SmtFmt for TypeTarget<K> {
     fn fmt_str<'tcx>(&self, tcx: &TyCtxt<'tcx>) -> String {
         match self {
             TypeTarget::Definition(d) => d.fmt_str(tcx),
-            TypeTarget::Anonymous(d) => format!("<anon decl referenced by>: {}", d.fmt_str(tcx)),
+            TypeTarget::Anonymous(d) => format!("<anon decl from argument {}>", d),
         }
     }
 }
@@ -113,8 +122,8 @@ where
         self.add_any_ty(def_hir_id, ty)
     }
 
-    pub fn add_anonymous_ty_referenced_by(&mut self, hir: K, ty: RefinementType<'a>) {
-        let def_hir_id = TypeTarget::Anonymous(hir);
+    pub fn add_argument_no(&mut self, number: usize, ty: RefinementType<'a>) {
+        let def_hir_id = TypeTarget::Anonymous(number);
         self.add_any_ty(def_hir_id, ty)
     }
 
@@ -235,6 +244,19 @@ where
         Ok(())
     }
 
+    /// To encode a predicate `l == &p` to smt, we need to know the logic var associated with `p`
+    /// `self.get_logic_var_for_reference_target(TypeTarget::Definition(p))` returns p's logic variable
+    pub fn get_logic_var_for_reference_target(&self, target: &TypeTarget<syn::Ident>) -> String {
+        let target = self.lookup_reference_dest(target).unwrap();
+
+        self.binders
+            .iter()
+            .find(|(k, _)| k == &&target)
+            .unwrap()
+            .1
+            .clone()
+    }
+
     pub fn encode_predicates<P>(&self, solver: &mut Solver<P>) -> anyhow::Result<()> {
         self.types.iter().try_for_each(|(binder, ty)| {
             let decl_name = match self.lookup_decl_for_binder(binder) {
@@ -245,8 +267,11 @@ where
             solver
                 .comment(&format!("predicate for {}: {}", binder, decl_name))
                 .into_anyhow()?;
+            solver.comment(&format!("    {}", ty)).into_anyhow()?;
             solver
-                .assert(refinements::encode_smt(&ty.predicate))
+                .assert(refinements::encode_smt(&ty.predicate, &|target| {
+                    self.get_logic_var_for_reference_target(target)
+                }))
                 .into_anyhow()?;
             anyhow::Ok(())
         })?;
@@ -256,7 +281,11 @@ where
 
     pub fn encode_formulas<P>(&self, solver: &mut Solver<P>) -> anyhow::Result<()> {
         self.formulas.iter().try_for_each(|expr| {
-            solver.assert(refinements::encode_smt(expr)).into_anyhow()?;
+            solver
+                .assert(refinements::encode_smt(expr, &|target| {
+                    self.get_logic_var_for_reference_target(target)
+                }))
+                .into_anyhow()?;
 
             anyhow::Ok(())
         })?;
@@ -303,15 +332,26 @@ where
         self.reference_destinations.insert(name, hir_id);
     }
 
-    pub fn lookup_reference_dest(&self, name: &syn::Ident) -> anyhow::Result<&TypeTarget<K>> {
-        self.reference_destinations
-            .get(&name.to_string())
-            .ok_or_else(|| {
-                anyhow!(
-                    "Missing {name} in reference destination set {:?}",
-                    self.reference_destinations
-                )
-            })
+    // Try to get the type target belonging to `target`
+    // - For `a` if returns a's hir id
+    // - For an anonymous target, it will return that target
+    pub fn lookup_reference_dest(
+        &self,
+        target: &TypeTarget<syn::Ident>,
+    ) -> anyhow::Result<TypeTarget<K>> {
+        match target {
+            TypeTarget::Definition(name) => self
+                .reference_destinations
+                .get(&name.to_string())
+                .cloned()
+                .ok_or_else(|| {
+                    anyhow!(
+                        "Missing {name} in reference destination set {:?}",
+                        self.reference_destinations
+                    )
+                }),
+            TypeTarget::Anonymous(arg_no) => Ok(TypeTarget::Anonymous(*arg_no)),
+        }
     }
 
     /// Tries to construct a RefinementContext from a `assert_ctx` or `update_ctx` call.
@@ -580,12 +620,20 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
     let super_term = intersection_renamed_super_ctx
         .types
         .iter()
-        .map(|(_, ty)| refinements::encode_smt(&ty.predicate))
+        .map(|(_, ty)| {
+            refinements::encode_smt(&ty.predicate, &|target| {
+                intersection_renamed_super_ctx.get_logic_var_for_reference_target(target)
+            })
+        })
         .chain(
             intersection_renamed_super_ctx
                 .formulas
                 .iter()
-                .map(refinements::encode_smt),
+                .map(|formula| {
+                    refinements::encode_smt(formula, &|target| {
+                        intersection_renamed_super_ctx.get_logic_var_for_reference_target(target)
+                    })
+                }),
         )
         .collect::<Vec<_>>()
         .join("\n       ");
@@ -616,6 +664,78 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
         ))
     } else {
         anyhow::Ok(())
+    }
+}
+
+#[instrument(skip_all, fields(%sub_ty, %super_ty))]
+pub fn require_is_subtype_of<'tcx, P>(
+    sub_ty: &RefinementType<'tcx>,
+    super_ty: &RefinementType<'tcx>,
+    ctx: &RContext<'tcx>,
+    tcx: &TyCtxt<'tcx>,
+    solver: &mut Solver<P>,
+) -> anyhow::Result<()> {
+    info!(
+        "need to do subtyping judgement: {} ≼  {} in ctx {}",
+        sub_ty,
+        super_ty,
+        ctx.with_tcx(tcx)
+    );
+    solver.comment("checking is_subtype_of").into_anyhow()?;
+    solver.push(1).into_anyhow()?;
+    solver.add_prelude().into_anyhow()?;
+    ctx.encode_smt(solver, tcx)?;
+
+    if ctx.lookup_decl_for_binder(&sub_ty.binder).is_none() {
+        solver.declare_const(&sub_ty.binder, "Int").into_anyhow()?;
+    }
+    solver
+        .assert(refinements::encode_smt(&sub_ty.predicate, &|target| {
+            ctx.get_logic_var_for_reference_target(target)
+        }))
+        .into_anyhow()?;
+
+    // solver
+    //     .declare_const(&super_ty.binder, "Int")
+    //     .into_anyhow()?;
+
+    // solver
+    //     .assert(format!("(= {} {})", &super_ty.binder, &sub_ty.binder))
+    //     .into_anyhow()?;
+    let renamed_super_ty = super_ty.rename_binder(&sub_ty.binder)?;
+
+    solver
+        .assert(format!(
+            "(not {})",
+            refinements::encode_smt(&renamed_super_ty.predicate, &|target| {
+                ctx.get_logic_var_for_reference_target(target)
+            })
+        ))
+        .into_anyhow()?;
+
+    solver
+        .comment(&format!("checking: {} ≼  {}", sub_ty, super_ty))
+        .into_anyhow()?;
+    solver.flush()?;
+    trace!("checking: {} ≼  {}", sub_ty, super_ty);
+    let is_sat = solver.check_sat().into_anyhow()?;
+    solver
+        .comment(&format!("done checking is_subtype_of! is sat: {}", is_sat))
+        .into_anyhow()?;
+
+    solver.pop(2).into_anyhow()?;
+    solver.comment(&"-".repeat(80)).into_anyhow()?;
+    if is_sat {
+        let msg = format!(
+            "Subtyping judgement failed: {} is not a sub_ty of {}",
+            &sub_ty, &super_ty
+        );
+        error!("{} in ctx {}", msg, ctx.with_tcx(tcx));
+        Err(anyhow!(msg))
+    } else {
+        info!("no counterexample found 🮱");
+        // no counterexample found => everything is fine => continue
+        Ok(())
     }
 }
 

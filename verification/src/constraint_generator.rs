@@ -2,6 +2,7 @@ use std::io::Write;
 
 use crate::buildin_functions::CtxSpecFunctions;
 use crate::refinement_context::is_sub_context;
+use crate::refinement_context::require_is_subtype_of;
 use crate::refinement_context::RContext;
 use crate::refinement_context::TypeTarget;
 use crate::refinements;
@@ -106,7 +107,11 @@ where
             // get refinements for inputs
             let mut ctx = RContext::<hir::HirId>::new();
             let mut expected_end_state = RContext::<hir::HirId>::new();
-            for ((hir_ty, middle_ty), param) in inputs.iter().zip(fn_sig.inputs()).zip(body.params)
+            for (arg_no, ((hir_ty, middle_ty), param)) in inputs
+                .iter()
+                .zip(fn_sig.inputs())
+                .zip(body.params)
+                .enumerate()
             {
                 let start_refinement =
                     match RefinementType::from_type_alias(hir_ty, tcx, *middle_ty) {
@@ -124,7 +129,7 @@ where
                             let MutRefinementType { start, end } =
                                 MutRefinementType::from_type_alias(hir_ty, tcx, *middle_ty)?;
                             info!(%start, %end, "found mutable ty");
-                            ctx.add_anonymous_ty_referenced_by(param.pat.hir_id, start);
+                            ctx.add_argument_no(arg_no, start);
                             let pat_path_name = param
                                 .pat
                                 .simple_ident()
@@ -133,17 +138,16 @@ where
                                 .to_string();
                             ctx.add_reference_dest(
                                 pat_path_name.to_string(),
-                                TypeTarget::Anonymous(param.pat.hir_id),
+                                TypeTarget::Anonymous(arg_no),
                             );
-                            expected_end_state.add_anonymous_ty_referenced_by(param.pat.hir_id, end);
+                            expected_end_state.add_argument_no(arg_no, end);
 
                             let anon_ident = fresh.fresh_ident();
                             let anon_ident_syn = format_ident!("{}", anon_ident);
-                            let referenced_by = format_ident!("{}", pat_path_name);
                             RefinementType {
                                 base: *middle_ty,
                                 predicate: parse_quote! {
-                                    #anon_ident_syn == anon_loc_ref_by(#referenced_by)
+                                    #anon_ident_syn == arg(#arg_no)
                                 },
                                 binder: anon_ident,
                             }
@@ -545,9 +549,11 @@ where
             trace!(%reference_ty);
             let ident = reference_ty.get_as_reference_type()?;
             let dest_hir_id = ctx.lookup_reference_dest(&ident)?;
+            //TODO Fix: type should be
             let ty = ctx
-                .lookup_type_by_type_target(dest_hir_id)
+                .lookup_type_by_type_target(&dest_hir_id)
                 .ok_or_else(|| anyhow!("ctx must contain hirid"))?;
+            info!("type targed {ty}");
             anyhow::Ok((ty, ctx_after))
         }
         ExprKind::Unary(_, _) => todo!(),
@@ -799,6 +805,46 @@ fn symbolic_execute<'a, 'b, 'c, 'tcx>(
                 right: Box::new(right_syn),
             }))
         }
+        ExprKind::Unary(hir::UnOp::Deref, inner) => {
+            // In the program `let mut i; let j = &mut i`,
+            // with
+            // - i : ty!{ _0 | ... }
+            // - j : ty!{ _1 | _1 == &i }
+            // symbolically executing `*j` should return the `_i`
+
+            // In the example `ref_var` would be the hir of `j`
+            let ref_var = {
+                match &inner.kind {
+                    ExprKind::Path(path) => {
+                        let res = local_ctx.qpath_res(path, inner.hir_id);
+                        match res {
+                            hir::def::Res::Local(hir_id) => anyhow::Ok(hir_id),
+                            hir::def::Res::Def(_def_kind, def_id) => match def_id.as_local() {
+                                Some(local_id) => Ok(tcx.hir().local_def_id_to_hir_id(local_id)),
+                                None => todo!(),
+                            },
+                            other => {
+                                anyhow::bail!("reference to unexpected resolution {:?}", other)
+                            }
+                        }
+                    }
+                    other => anyhow::bail!("given expr in not a path ({:?})", other),
+                }
+            }?;
+
+            // In the example `type_target` would be `i`
+            let type_target = ctx.lookup_hir(&ref_var).unwrap().get_as_reference_type()?;
+
+            // In the example `lvar_of_type_target` would be the hir of `i`
+            let lvar_of_type_target = ctx.get_logic_var_for_reference_target(&type_target);
+
+            let refinement_ident = format_ident!("{}", &lvar_of_type_target);
+            trace!(
+                "treating reference {} as {refinement_ident}",
+                expr.pretty_print()
+            );
+            Ok(parse_quote! { #refinement_ident })
+        }
         ExprKind::Unary(op, inner) => {
             let syn_op = syn::parse_str::<syn::UnOp>(op.as_str())?;
             let inner_syn = symbolic_execute(inner, tcx, ctx, local_ctx)?;
@@ -860,73 +906,5 @@ fn symbolic_execute<'a, 'b, 'c, 'tcx>(
         ExprKind::Repeat(_, _) => todo!(),
         ExprKind::Yield(_, _) => todo!(),
         ExprKind::Err => todo!(),
-    }
-}
-
-#[instrument(skip_all, fields(%sub_ty, %super_ty))]
-fn require_is_subtype_of<'tcx, P>(
-    sub_ty: &RefinementType<'tcx>,
-    super_ty: &RefinementType<'tcx>,
-    ctx: &RContext<'tcx>,
-    tcx: &TyCtxt<'tcx>,
-    solver: &mut Solver<P>,
-) -> anyhow::Result<()> {
-    info!(
-        "need to do subtyping judgement: {} ≼  {} in ctx {}",
-        sub_ty,
-        super_ty,
-        ctx.with_tcx(tcx)
-    );
-    solver.comment("checking is_subtype_of").into_anyhow()?;
-    solver.push(1).into_anyhow()?;
-    solver.add_prelude().into_anyhow()?;
-    ctx.encode_smt(solver, tcx)?;
-
-    if ctx.lookup_decl_for_binder(&sub_ty.binder).is_none() {
-        solver.declare_const(&sub_ty.binder, "Int").into_anyhow()?;
-    }
-    solver
-        .assert(refinements::encode_smt(&sub_ty.predicate))
-        .into_anyhow()?;
-
-    // solver
-    //     .declare_const(&super_ty.binder, "Int")
-    //     .into_anyhow()?;
-
-    // solver
-    //     .assert(format!("(= {} {})", &super_ty.binder, &sub_ty.binder))
-    //     .into_anyhow()?;
-    let renamed_super_ty = super_ty.rename_binder(&sub_ty.binder)?;
-
-    solver
-        .assert(format!(
-            "(not {})",
-            refinements::encode_smt(&renamed_super_ty.predicate)
-        ))
-        .into_anyhow()?;
-
-    solver
-        .comment(&format!("checking: {} ≼  {}", sub_ty, super_ty))
-        .into_anyhow()?;
-    solver.flush()?;
-    trace!("checking: {} ≼  {}", sub_ty, super_ty);
-    let is_sat = solver.check_sat().into_anyhow()?;
-    solver
-        .comment(&format!("done checking is_subtype_of! is sat: {}", is_sat))
-        .into_anyhow()?;
-
-    solver.pop(2).into_anyhow()?;
-    solver.comment(&"-".repeat(80)).into_anyhow()?;
-    if is_sat {
-        let msg = format!(
-            "Subtyping judgement failed: {} is not a sub_ty of {}",
-            &sub_ty, &super_ty
-        );
-        error!("{} in ctx {}", msg, ctx.with_tcx(tcx));
-        Err(anyhow!(msg))
-    } else {
-        info!("no counterexample found 🮱");
-        // no counterexample found => everything is fine => continue
-        Ok(())
     }
 }

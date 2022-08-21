@@ -991,7 +991,7 @@ mod sub_context {
             }
             .to_string(),
             |item, tcx| {
-                let _ty = type_check_function(item, &tcx).unwrap();
+                type_check_function(item, &tcx).unwrap();
             },
         )
         .unwrap();
@@ -1048,7 +1048,7 @@ mod sub_context {
 }
 
 /// Mutable References
-/// 
+///
 mod mut_ref {
     use super::*;
 
@@ -1160,6 +1160,7 @@ mod mut_ref {
         .unwrap();
     }
 
+    #[should_panic]
     #[test]
     fn test_assign_multiple_references_neg() {
         init_tracing();
@@ -1168,17 +1169,62 @@ mod mut_ref {
                 fn f() -> ty!{ v : i32 | v == 2 } {
                     let mut a = 0;
                     let mut b = 1;
-                    let mut r = &mut a; // ty!{ _2 : i32 | _2 = &res }
-                    *r = 2;
-                    r = &mut b;
-                    *r = 5;
-                    a + b
+                    let mut r = &mut a; // ty!{ _2 : &mut i32 | _2 = &a }
+                    *r = 2;             // a = 2
+                    r = &mut b;         // ty!{ _5 : &mut i32 | _5 = &b }
+                    *r = 5;             // b = 5
+                    a + b               // == 7
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
+
+    #[should_panic]
+    #[test]
+    fn test_mut_referencial_neg() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn step(
+                    n: ty!{ nv : i32 | nv > 0 },
+                    i: &mut ty!{i0 : i32 | i0 < nv  => i1 | i1 <= nv },
+                    sum: &mut ty!{s0: i32 | s0 == nv * i0 => s1 | s1 == nv * i1 }
+                ) -> ty!{ v: i32 } {
+                    *i = (*i - 1);
+                    0
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
+
+    #[should_panic]
+    #[test]
+    fn test_step_neg_local() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn step(
+                ) -> ty!{ v: i32 | v > 2 } {
+                    let mut v = 2;
+                    let i = &mut v;
+                    *i = (*i - 1);
+                    *i
                 }
             }
             .to_string(),
             |item, tcx| {
                 let ty = type_check_function(item, &tcx).unwrap();
-                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == 7 }");
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 2 }");
             },
         )
         .unwrap();

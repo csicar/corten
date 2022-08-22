@@ -161,7 +161,7 @@ pub trait ExprExt<'a> {
 
     /// tries to turn Expr `my_identifier` into the HirId that `my_identifier` refers to
     fn try_into_path_hir_id<'tcx>(
-        &'a self,
+        &self,
         tcx: &TyCtxt<'tcx>,
         typeck_results: &TypeckResults<'tcx>,
     ) -> anyhow::Result<hir::HirId>;
@@ -201,7 +201,7 @@ impl<'a> ExprExt<'a> for hir::Expr<'a> {
     /// Example: Expr `a` returns Ok(`local mut a { hir_id: ... }`)
     /// Example: Expr `1` returns Err(...)
     fn try_into_path_hir_id<'tcx>(
-        &'a self,
+        &self,
         tcx: &TyCtxt<'tcx>,
         local_ctx: &TypeckResults<'tcx>,
     ) -> anyhow::Result<hir::HirId> {

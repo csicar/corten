@@ -824,7 +824,7 @@ mod fn_call {
         init_tracing();
         with_item_and_rt_lib(
             &quote! {
-                fn g(p : &mut ty!{ a : i32 | a > 0 => b | b > 10}) -> ty!{ v : () } {
+                fn g(p : &mut ty!{ a : i32 | *a > 0 => b | *b > 10}) -> ty!{ v : () } {
                     *p = 11; ()
                 }
 
@@ -961,7 +961,7 @@ mod sub_context {
             );
             let mut sub_ctx = super_ctx.clone();
             sub_ctx.update_ty(
-                "a",
+                TypeTarget::Definition("a"),
                 RefinementType {
                     base: tcx.types.i32,
                     binder: "v".to_string(),
@@ -991,7 +991,7 @@ mod sub_context {
             }
             .to_string(),
             |item, tcx| {
-                let _ty = type_check_function(item, &tcx).unwrap();
+                type_check_function(item, &tcx).unwrap();
             },
         )
         .unwrap();
@@ -1041,6 +1041,190 @@ mod sub_context {
             |item, tcx| {
                 let ty = type_check_function(item, &tcx).unwrap();
                 pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | true }");
+            },
+        )
+        .unwrap();
+    }
+}
+
+/// Mutable References
+///
+mod mut_ref {
+    use super::*;
+
+    #[test]
+    fn test_assign_ref_pos() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f() -> ty!{ v : i32 | v == 2} {
+                    let mut res = 0;
+                    let b = &mut res; // ty!{ _2 : i32 | _2 = &res }
+                    *b = 2;
+                    res
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == 2 }");
+            },
+        )
+        .unwrap();
+    }
+
+    #[should_panic]
+    #[test]
+    fn test_assign_ref_neg() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f() -> ty!{ v : i32 | v == 0} {
+                    let mut res = 0;
+                    let b = &mut res; // ty!{ _2 : i32 | _2 = &res }
+                    *b = 2;
+                    res
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_read_ref_pos() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f() -> ty!{ v : i32 | v == 2} {
+                    let mut res = 0;
+                    let b = &mut res;
+                    *b = 2;
+                    *b
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == 2 }");
+            },
+        )
+        .unwrap();
+    }
+
+    #[should_panic]
+    #[test]
+    fn test_read_ref_neg() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f() -> ty!{ v : i32 | v == 0} {
+                    let mut res = 0;
+                    let b = &mut res;
+                    *b = 2;
+                    *b
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_assign_multiple_references_pos() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f() -> ty!{ v : i32 | v == 7} {
+                    let mut a = 0;
+                    let mut b = 1;
+                    let mut r = &mut a; // ty!{ _2 : i32 | _2 = &res }
+                    *r = 2;
+                    r = &mut b;
+                    *r = 5;
+                    a + b
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == 7 }");
+            },
+        )
+        .unwrap();
+    }
+
+    #[should_panic]
+    #[test]
+    fn test_assign_multiple_references_neg() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f() -> ty!{ v : i32 | v == 2 } {
+                    let mut a = 0;
+                    let mut b = 1;
+                    let mut r = &mut a; // ty!{ _2 : &mut i32 | _2 = &a }
+                    *r = 2;             // a = 2
+                    r = &mut b;         // ty!{ _5 : &mut i32 | _5 = &b }
+                    *r = 5;             // b = 5
+                    a + b               // == 7
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
+
+    #[should_panic]
+    #[test]
+    fn test_mut_referencial_neg() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn step(
+                    n: ty!{ nv : i32 | nv > 0 },
+                    i: &mut ty!{i0 : i32 | i0 < nv  => i1 | i1 <= nv },
+                    sum: &mut ty!{s0: i32 | s0 == nv * i0 => s1 | s1 == nv * i1 }
+                ) -> ty!{ v: i32 } {
+                    *i = (*i - 1);
+                    0
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
+
+    #[should_panic]
+    #[test]
+    fn test_step_neg_local() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn step(
+                ) -> ty!{ v: i32 | v > 2 } {
+                    let mut v = 2;
+                    let i = &mut v;
+                    *i = (*i - 1);
+                    *i
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 2 }");
             },
         )
         .unwrap();

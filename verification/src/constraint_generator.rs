@@ -1,11 +1,12 @@
-use std::io::Write;
-
 use crate::buildin_functions::CtxSpecFunctions;
 use crate::refinement_context::is_sub_context;
+use crate::refinement_context::require_is_subtype_of;
 use crate::refinement_context::RContext;
-use crate::refinements;
+use crate::refinement_context::TypeTarget;
+
 use crate::refinements::MutRefinementType;
 use crate::smtlib_ext::SmtResExt;
+
 use anyhow::anyhow;
 use anyhow::Context;
 
@@ -20,7 +21,7 @@ use rustc_hir::{Expr, ExprKind};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::ty::TypeckResults;
 use rustc_span::source_map::Spanned;
-use tracing::error;
+
 use tracing::Level;
 
 use syn::parse_quote;
@@ -87,7 +88,7 @@ where
             let sigs = local_ctx.liberated_fn_sigs();
             let fn_sig = sigs
                 .get(function.hir_id())
-                .ok_or(anyhow!("function not found in typeck result"))?;
+                .ok_or_else(|| anyhow!("function not found in typeck result"))?;
             trace!(?fn_sig);
 
             if CtxSpecFunctions::is_buildin(&ident.name.to_string()) {
@@ -99,13 +100,19 @@ where
                 });
             }
 
+            let mut fresh = Fresh::new();
+
             // get refinements for inputs
             let mut ctx = RContext::<hir::HirId>::new();
             let mut expected_end_state = RContext::<hir::HirId>::new();
-            for ((hir_ty, middle_ty), param) in inputs.iter().zip(fn_sig.inputs()).zip(body.params)
+            for (arg_no, ((hir_ty, middle_ty), param)) in inputs
+                .iter()
+                .zip(fn_sig.inputs())
+                .zip(body.params)
+                .enumerate()
             {
                 let start_refinement =
-                    match RefinementType::from_type_alias(hir_ty, &tcx, middle_ty.clone()) {
+                    match RefinementType::from_type_alias(hir_ty, tcx, *middle_ty) {
                         Ok(refinement) => {
                             trace!(%refinement, %param.pat.hir_id, "immut input type");
                             // Because mutable end-states may refer to immutable refinement binders
@@ -119,8 +126,29 @@ where
                         Err(_) => {
                             let MutRefinementType { start, end } =
                                 MutRefinementType::from_type_alias(hir_ty, tcx, *middle_ty)?;
-                            expected_end_state.add_ty(param.pat.hir_id, end);
-                            start
+                            info!(%start, %end, "found mutable ty");
+                            ctx.add_argument_no(arg_no, start);
+                            let pat_path_name = param
+                                .pat
+                                .simple_ident()
+                                .ok_or_else(|| anyhow!("must just be a simple ident"))?
+                                .as_str()
+                                .to_string();
+                            ctx.add_reference_dest(
+                                pat_path_name.to_string(),
+                                TypeTarget::Anonymous(arg_no),
+                            );
+                            expected_end_state.add_argument_no(arg_no, end);
+
+                            let anon_ident = fresh.fresh_ident();
+                            let anon_ident_syn = format_ident!("{}", anon_ident);
+                            RefinementType {
+                                base: *middle_ty,
+                                predicate: parse_quote! {
+                                    #anon_ident_syn == arg(#arg_no)
+                                },
+                                binder: anon_ident,
+                            }
                         }
                     };
                 ctx.add_ty(param.pat.hir_id, start_refinement)
@@ -140,8 +168,6 @@ where
             solver
                 .path_tee(format!("/tmp/z3-fn-{:?}.lisp", uuid::Uuid::new_v4()))
                 .unwrap();
-
-            let mut fresh = Fresh::new();
 
             let (actual_ty, ctx_after) =
                 type_of(&body.value, tcx, &ctx, local_ctx, &mut solver, &mut fresh)?;
@@ -186,9 +212,9 @@ where
     for stmt in stmts {
         curr_ctx = match stmt.kind {
             hir::StmtKind::Local(local) => {
-                let initializer = local.init.ok_or(anyhow!(
-                    "All declarations are expected to contain initializers"
-                ))?;
+                let initializer = local.init.ok_or_else(|| {
+                    anyhow!("All declarations are expected to contain initializers")
+                })?;
 
                 let (type_of_init, mut ctx_after) =
                     type_of(initializer, tcx, &curr_ctx, local_ctx, solver, fresh)?;
@@ -214,6 +240,10 @@ where
                     &type_of_init,
                     &local,
                     local.pat.hir_id
+                );
+                ctx_after.add_reference_dest(
+                    tcx.hir().name(local.pat.hir_id).to_ident_string(),
+                    TypeTarget::Definition(local.pat.hir_id),
                 );
                 ctx_after.add_ty(local.pat.hir_id, type_of_init.clone());
                 ctx_after
@@ -244,7 +274,7 @@ fn negate_predicate(pred: syn::Expr) -> anyhow::Result<syn::Expr> {
     }))
 }
 
-/// Computes the type of [`expr`], but mutates the `ctx` according to the execution
+/// Computes the type of [`expr`] and returns its type, together with the  `ctx` after its execution
 #[instrument(skip_all, fields(expr=?expr.pretty_print()))]
 pub fn type_of<'a, 'b, 'c, 'tcx, P>(
     expr: &'a Expr<'tcx>,
@@ -309,12 +339,17 @@ where
             })?;
             let new_name = fresh.fresh_ident();
             let var_ty = ty_in_context.rename_binder(&new_name)?;
-            let combined_predicate = {
-                let new_pred = &var_ty.predicate;
-                let new_name = format_ident!("{}", &var_ty.binder);
-                let old_name = format_ident!("{}", &ty_in_context.binder);
-                parse_quote! {
-                    #new_pred && #new_name == #old_name
+            let combined_predicate = match ty_in_context.base.kind() {
+                rustc_middle::ty::TyKind::Ref(_, _, _) => var_ty.predicate.clone(),
+                _ => {
+                    let new_pred = &var_ty.predicate;
+                    let new_name = format_ident!("{}", &var_ty.binder);
+                    let old_name = format_ident!("{}", &ty_in_context.binder);
+
+                    // TODO: special handling for mut ref? => no `newname = oldname` constraint?
+                    parse_quote! {
+                        #new_pred && #new_name == #old_name
+                    }
                 }
             };
             let var_ty_with_eq_constraint = RefinementType {
@@ -456,8 +491,8 @@ where
                         // this might seem weird, but `end_refinement` might refer to
                         // `start_refinement`. By first upserting it and directly afterwards
                         // end_refinement, we add start_refinements as dangling predicates.
-                        output_ctx.update_ty(arg_hir_id, start_refinement);
-                        output_ctx.update_ty(arg_hir_id, end_refinement);
+                        output_ctx.update_ty(TypeTarget::Definition(arg_hir_id), start_refinement);
+                        output_ctx.update_ty(TypeTarget::Definition(arg_hir_id), end_refinement);
                     }
 
                     // get refinement for output
@@ -508,7 +543,16 @@ where
             anyhow::Ok((ty, ctx_after_right))
         }
         ExprKind::Unary(hir::UnOp::Deref, expr) => {
-            type_of(expr, tcx, ctx, local_ctx, solver, fresh)
+            let (reference_ty, ctx_after) = type_of(expr, tcx, ctx, local_ctx, solver, fresh)?;
+            trace!(%reference_ty);
+            let ident = reference_ty.get_as_reference_type()?;
+            let dest_hir_id = ctx.lookup_reference_dest(&ident)?;
+            //TODO Fix: type should be
+            let ty = ctx
+                .lookup_type_by_type_target(&dest_hir_id)
+                .ok_or_else(|| anyhow!("ctx must contain hirid"))?;
+            info!("type targed {ty}");
+            anyhow::Ok((ty, ctx_after))
         }
         ExprKind::Unary(_, _) => todo!(),
         ExprKind::Cast(expr, cast_ty) => {
@@ -657,15 +701,27 @@ where
         ExprKind::Match(_, _, _) => todo!(),
         ExprKind::Closure(_, _, _, _, _) => todo!(),
         ExprKind::Assign(lhs, rhs, _span) => {
-            let dest_hir_id = match &lhs.kind {
-                ExprKind::Path(_path) => lhs.try_into_path_hir_id(tcx, local_ctx)?,
+            // lhs = rhs
+            // e.g. *b = 2;
+            // e.g. a = 2;
+            let (dest_hir_id, after_lhs) = match &lhs.kind {
+                ExprKind::Path(_path) => (
+                    TypeTarget::Definition(lhs.try_into_path_hir_id(tcx, local_ctx)?),
+                    ctx.clone(),
+                ),
                 ExprKind::Unary(hir::UnOp::Deref, inner) => {
-                    inner.try_into_path_hir_id(tcx, local_ctx)?
+                    let (reference_type, ctx_after) =
+                        type_of(inner, tcx, ctx, local_ctx, solver, fresh)?;
+                    // `*b = 2`; b's type: ty!{ v : &mut i32 | v == &a }
+                    // ==> because b refers to a, change a's type
+                    trace!(%reference_type, ctx=%ctx.with_tcx(tcx));
+                    let ident = reference_type.get_as_reference_type()?;
+                    (ctx.lookup_reference_dest(&ident)?.clone(), ctx_after)
                 }
                 other => todo!("don't know how to assign to {:?}", other),
             };
 
-            let (rhs_ty, mut after_rhs) = type_of(rhs, tcx, ctx, local_ctx, solver, fresh)?;
+            let (rhs_ty, mut after_rhs) = type_of(rhs, tcx, &after_lhs, local_ctx, solver, fresh)?;
             after_rhs.update_ty(dest_hir_id, rhs_ty.clone());
             trace!(%rhs_ty, after_rhs=%after_rhs.with_tcx(tcx), "rhs_ty is");
             anyhow::Ok((rhs_ty, after_rhs))
@@ -673,6 +729,27 @@ where
         ExprKind::AssignOp(_, _, _) => todo!(),
         ExprKind::Field(_, _) => todo!(),
         ExprKind::Index(_, _) => todo!(),
+        ExprKind::AddrOf(hir::BorrowKind::Ref, hir::Mutability::Mut, destination_expr) => {
+            let dest_hir_id = destination_expr.try_into_path_hir_id(tcx, local_ctx)?;
+
+            let fresh_lvar = fresh.fresh_ident();
+            let base_ty = local_ctx.expr_ty(expr);
+            let predicate = {
+                let dest_symbol = tcx.hir().name(dest_hir_id);
+                // TODO use as_u32()
+                let dest_encoded = format_ident!("{}", dest_symbol.as_str());
+                let fresh_lvar = format_ident!("{}", fresh_lvar);
+                parse_quote! {
+                    #fresh_lvar == &#dest_encoded
+                }
+            };
+            let ty = RefinementType {
+                base: base_ty,
+                binder: fresh_lvar,
+                predicate,
+            };
+            Ok((ty, ctx.clone()))
+        }
         ExprKind::AddrOf(_, _, _) => todo!(),
         ExprKind::Break(_, _) => todo!(),
         ExprKind::Continue(_) => todo!(),
@@ -723,6 +800,46 @@ fn symbolic_execute<'a, 'b, 'c, 'tcx>(
                 op: syn_op,
                 right: Box::new(right_syn),
             }))
+        }
+        ExprKind::Unary(hir::UnOp::Deref, inner) => {
+            // In the program `let mut i; let j = &mut i`,
+            // with
+            // - i : ty!{ _0 | ... }
+            // - j : ty!{ _1 | _1 == &i }
+            // symbolically executing `*j` should return the `_i`
+
+            // In the example `ref_var` would be the hir of `j`
+            let ref_var = {
+                match &inner.kind {
+                    ExprKind::Path(path) => {
+                        let res = local_ctx.qpath_res(path, inner.hir_id);
+                        match res {
+                            hir::def::Res::Local(hir_id) => anyhow::Ok(hir_id),
+                            hir::def::Res::Def(_def_kind, def_id) => match def_id.as_local() {
+                                Some(local_id) => Ok(tcx.hir().local_def_id_to_hir_id(local_id)),
+                                None => todo!(),
+                            },
+                            other => {
+                                anyhow::bail!("reference to unexpected resolution {:?}", other)
+                            }
+                        }
+                    }
+                    other => anyhow::bail!("given expr in not a path ({:?})", other),
+                }
+            }?;
+
+            // In the example `type_target` would be `i`
+            let type_target = ctx.lookup_hir(&ref_var).unwrap().get_as_reference_type()?;
+
+            // In the example `lvar_of_type_target` would be the hir of `i`
+            let lvar_of_type_target = ctx.get_logic_var_for_reference_target(&type_target);
+
+            let refinement_ident = format_ident!("{}", &lvar_of_type_target);
+            trace!(
+                "treating reference {} as {refinement_ident}",
+                expr.pretty_print()
+            );
+            Ok(parse_quote! { #refinement_ident })
         }
         ExprKind::Unary(op, inner) => {
             let syn_op = syn::parse_str::<syn::UnOp>(op.as_str())?;
@@ -786,68 +903,4 @@ fn symbolic_execute<'a, 'b, 'c, 'tcx>(
         ExprKind::Yield(_, _) => todo!(),
         ExprKind::Err => todo!(),
     }
-}
-
-#[instrument(skip_all, fields(%sub_ty, %super_ty))]
-fn require_is_subtype_of<'tcx, P>(
-    sub_ty: &RefinementType<'tcx>,
-    super_ty: &RefinementType<'tcx>,
-    ctx: &RContext<'tcx>,
-    tcx: &TyCtxt<'tcx>,
-    solver: &mut Solver<P>,
-) -> anyhow::Result<()> {
-    info!(
-        "need to do subtyping judgement: {} ≼  {} in ctx {}",
-        sub_ty,
-        super_ty,
-        ctx.with_tcx(tcx)
-    );
-    solver.comment("checking is_subtype_of").into_anyhow()?;
-    solver.push(1).into_anyhow()?;
-    ctx.encode_smt(solver, tcx)?;
-
-    solver.declare_const(&sub_ty.binder, "Int").into_anyhow()?;
-    solver
-        .assert(refinements::encode_smt(&sub_ty.predicate))
-        .into_anyhow()?;
-
-    solver
-        .declare_const(&super_ty.binder, "Int")
-        .into_anyhow()?;
-
-    solver
-        .assert(format!("(= {} {})", &super_ty.binder, &sub_ty.binder))
-        .into_anyhow()?;
-
-    solver
-        .assert(format!(
-            "(not {})",
-            refinements::encode_smt(&super_ty.predicate)
-        ))
-        .into_anyhow()?;
-
-    solver
-        .comment(&format!("checking: {} ≼  {}", sub_ty, super_ty))
-        .into_anyhow()?;
-    solver.flush()?;
-    trace!("checking: {} ≼  {}", sub_ty, super_ty);
-    let is_sat = solver.check_sat().into_anyhow()?;
-    solver
-        .comment(&format!("done checking is_subtype_of! is sat: {}", is_sat))
-        .into_anyhow()?;
-
-    solver.pop(2).into_anyhow()?;
-    solver.comment(&"-".repeat(80)).into_anyhow()?;
-    if is_sat {
-        let msg = format!(
-            "Subtyping judgement failed: {} is not a sub_ty of {}",
-            &sub_ty, &super_ty
-        );
-        error!("{} in ctx {}", msg, ctx.with_tcx(tcx));
-        Err(anyhow!(msg))?;
-    } else {
-        info!("no counterexample found 🮱")
-        // no counterexample found => everything is fine => continue
-    };
-    Ok(())
 }

@@ -103,6 +103,28 @@ This also works with variables declarations: In that case $`\Gamma'`$ contains a
   {\Gamma \vdash e_1 + e_2 : \{ v: b \mid v == [e_1] + [e_2]\} \Rightarrow \Gamma}
 ```
 
+## FnCall
+
+
+```math
+\text{FnCall}
+\frac
+  {
+    \begin{aligned}
+      a : \mu_a, b : \mu_b, \dots \in \Gamma \\
+      \{a \mapsto \tau_a  \wedge lvar(\tau_a) \doteq lvar(\mu_a), \dots\} \preceq \Gamma \\
+      f : (\tau_a \Rightarrow \tau_a', \tau_b \Rightarrow \tau_b', \dots) \in \Gamma
+    \end{aligned}
+  }
+  {
+    \Gamma \vdash f(a, b, \dots) 
+    \Rightarrow \Gamma \langle \{a \mapsto \tau'_a, b \mapsto \tau'_b, \dots\} \rangle,
+  }
+```
+where $`\Gamma \langle \Gamma' \rangle = (\Gamma_{pvar} [\Gamma'_{pvar}], \Gamma_{pred} \cup \Gamma'_{pred})`$
+- update PVar to LVar map according to $`\Gamma'`$
+- add pvar facts from $`\Gamma'`$
+
 Subtyping Rules as Implemented
 ==============================
 
@@ -119,19 +141,13 @@ Refinement Context Subtyping as Implemented
 
 
 ```math
-\text{$\preceq$-BASE}
+\text{$\preceq$-CTX}
 \frac
   {\neg\text{SMT-SAT}(
-      [\Gamma] 
-      \wedge \text{equate}(\Gamma, \Gamma') \wedge \neg [\Gamma']
+      [\Gamma] \wedge \neg [\Gamma'[l_1 \triangleright l_1', \dots, l_n \triangleright l_n']]
     )
-    \qquad 
-    \text{progVar}(\Gamma') \subseteq \text{progVar}(\Gamma)
+    \qquad \text{pvar}(\Gamma') \subseteq \text{pvar}(\Gamma)
+    \qquad l_1, \dots l_n \text{ belong to same pvar as } l'_1 \dots l'_n
   }
   {\Gamma  \preceq \Gamma'}
-```
-where
-
-```math
-\text{equate}(\Gamma, \Gamma') = \bigwedge_{i \in \text{progVar}(\Gamma)} \text{binder}_{\Gamma}(i) \doteq \text{binder}_{\Gamma'}(i)
 ```

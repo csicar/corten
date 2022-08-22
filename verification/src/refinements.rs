@@ -1,10 +1,12 @@
 use crate::hir_ext::TyExt;
+use crate::refinement_context::TypeTarget;
 use anyhow::anyhow;
 use rustc_hir as hir;
 use rustc_middle::ty::TypeckResults;
 use syn::parse_quote;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
+use syn::ExprCall;
 use tracing::trace;
 
 use core::fmt::Display;
@@ -52,6 +54,55 @@ impl<'a> RefinementType<'a> {
             base: unit_type,
             binder: fresh_binder,
             predicate: parse_quote! { true },
+        }
+    }
+
+    /// Tries to get the type contents as a reference type:
+    /// E.g. `ty!{ v: &mut i32 | v == &a }` => a
+    pub fn get_as_reference_type(&self) -> anyhow::Result<TypeTarget<syn::Ident>> {
+        match &self.predicate {
+            syn::Expr::Binary(syn::ExprBinary {
+                left: _,
+                op: syn::BinOp::Eq(_),
+                right:
+                    box syn::Expr::Call(syn::ExprCall {
+                        func: box syn::Expr::Path(syn::ExprPath { path: fn_name, .. }),
+                        args,
+                        ..
+                    }),
+                ..
+            }) => {
+                if fn_name.get_ident().unwrap() == "arg" && args.len() == 1 {
+                    let arg = args.first().unwrap();
+                    match arg {
+                        syn::Expr::Lit(syn::ExprLit {
+                            lit: syn::Lit::Int(v),
+                            ..
+                        }) => Ok(TypeTarget::Anonymous(v.base10_parse()?)),
+                        _ => todo!("{}", quote! {#arg}),
+                    }
+                } else {
+                    Err(anyhow!("unexpected fn call"))
+                }
+            }
+            syn::Expr::Binary(syn::ExprBinary {
+                left: _,
+                op: syn::BinOp::Eq(_),
+                right:
+                    box syn::Expr::Reference(syn::ExprReference {
+                        mutability: _,
+                        expr: inner,
+                        ..
+                    }),
+                ..
+            }) => match inner {
+                box syn::Expr::Path(syn::ExprPath { path, .. }) => {
+                    Ok(TypeTarget::Definition(path.get_ident().cloned().unwrap()))
+                }
+                _ => todo!(),
+            },
+
+            _ => todo!("{self}"),
         }
     }
 
@@ -185,7 +236,24 @@ pub fn rename_ref_in_expr(
         syn::Expr::Block(_) => todo!(),
         syn::Expr::Box(_) => todo!(),
         syn::Expr::Break(_) => todo!(),
-        syn::Expr::Call(_) => todo!(),
+        syn::Expr::Call(ExprCall {
+            attrs,
+            func,
+            paren_token,
+            args,
+        }) => {
+            let renamed_args = args
+                .iter()
+                .map(|arg| rename_ref_in_expr(arg, renamer))
+                .collect::<anyhow::Result<_>>()?;
+
+            Ok(syn::Expr::Call(ExprCall {
+                attrs: attrs.clone(),
+                func: func.clone(),
+                paren_token: paren_token.clone(),
+                args: renamed_args,
+            }))
+        }
         syn::Expr::Cast(_) => todo!(),
         syn::Expr::Closure(_) => todo!(),
         syn::Expr::Continue(_) => todo!(),
@@ -228,7 +296,19 @@ pub fn rename_ref_in_expr(
             }
         }
         syn::Expr::Range(_) => todo!(),
-        syn::Expr::Reference(_) => todo!(),
+        syn::Expr::Reference(syn::ExprReference {
+            attrs,
+            and_token,
+            raw,
+            mutability,
+            expr: inner,
+        }) => anyhow::Ok(syn::Expr::Reference(syn::ExprReference {
+            attrs: attrs.clone(),
+            and_token: and_token.clone(),
+            raw: raw.clone(),
+            mutability: mutability.clone(),
+            expr: Box::new(rename_ref_in_expr(inner, renamer)?),
+        })),
         syn::Expr::Repeat(_) => todo!(),
         syn::Expr::Return(_) => todo!(),
         syn::Expr::Struct(_) => todo!(),
@@ -266,7 +346,13 @@ impl<'a> Display for RefinementType<'a> {
     }
 }
 
-pub fn encode_smt(expr: &syn::Expr) -> String {
+/// Arguments:
+/// - expr to encode
+/// - For `arg(0)` or `pvar` we will need to find their logic binder.
+pub fn encode_smt(
+    expr: &syn::Expr,
+    target_to_binder: &impl Fn(&TypeTarget<syn::Ident>) -> String,
+) -> String {
     match expr {
         syn::Expr::Binary(syn::ExprBinary {
             left, right, op, ..
@@ -286,10 +372,15 @@ pub fn encode_smt(expr: &syn::Expr) -> String {
                 syn::BinOp::Rem(_) => "mod",
                 _ => todo!("not implemented {op:?}"),
             };
-            format!("({} {} {})", smt_op, encode_smt(left), encode_smt(right))
+            format!(
+                "({} {} {})",
+                smt_op,
+                encode_smt(left, target_to_binder),
+                encode_smt(right, target_to_binder)
+            )
         }
         syn::Expr::Unary(syn::ExprUnary { op, expr, .. }) => {
-            let inner_enc = encode_smt(expr);
+            let inner_enc = encode_smt(expr, target_to_binder);
             match op {
                 syn::UnOp::Deref(_) => inner_enc,
                 syn::UnOp::Not(_) => format!("(not {})", inner_enc),
@@ -313,9 +404,7 @@ pub fn encode_smt(expr: &syn::Expr) -> String {
             Some(syn::PathSegment { ident, .. }) => encode_ident(ident),
             _ => todo!(),
         },
-        syn::Expr::Paren(syn::ExprParen { expr, .. }) => {
-            format!("{}", encode_smt(expr))
-        }
+        syn::Expr::Paren(syn::ExprParen { expr, .. }) => encode_smt(expr, target_to_binder),
         syn::Expr::Block(syn::ExprBlock {
             block: syn::Block { stmts, .. },
             label: None,
@@ -329,16 +418,46 @@ pub fn encode_smt(expr: &syn::Expr) -> String {
             if let Some((syn::Stmt::Expr(in_expr), var_declarations)) = stmts.split_last() {
                 let converted = var_declarations
                     .iter()
-                    .map(|decl| encode_let_binding_smt(decl).unwrap())
+                    .map(|decl| encode_let_binding_smt(decl, target_to_binder).unwrap())
                     .collect::<Vec<String>>();
-                let block_enc = format!("(let ({}) {})", converted.join(" "), encode_smt(in_expr));
+                let block_enc = format!(
+                    "(let ({}) {})",
+                    converted.join(" "),
+                    encode_smt(in_expr, target_to_binder)
+                );
                 trace!("encoding of block is {}", block_enc);
                 block_enc
             } else {
                 todo!()
             }
         }
-        _other => todo!("expr: {:?}", expr),
+        syn::Expr::Reference(syn::ExprReference { expr: inner, .. }) => match inner {
+            box syn::Expr::Path(syn::ExprPath { path, .. }) => {
+                let ident = path.get_ident().unwrap();
+                target_to_binder(&TypeTarget::Definition(ident.clone()))
+            }
+            _ => todo!(),
+        },
+        syn::Expr::Call(syn::ExprCall {
+            func: box syn::Expr::Path(syn::ExprPath { path: fn_name, .. }),
+            args,
+            ..
+        }) => {
+            if fn_name.get_ident().unwrap() == "arg" && args.len() == 1 {
+                let arg = args.first().unwrap();
+                let arg_no = match arg {
+                    syn::Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Int(v),
+                        ..
+                    }) => v.base10_parse::<usize>().unwrap(),
+                    _ => todo!(),
+                };
+                target_to_binder(&TypeTarget::Anonymous(arg_no))
+            } else {
+                todo!()
+            }
+        }
+        _other => todo!("expr: {}, {:?}", quote! { #expr }, expr),
     }
 }
 
@@ -349,7 +468,10 @@ pub fn encode_smt(expr: &syn::Expr) -> String {
 /// let output = encode_let_binding_smt(input);
 /// assert_eq(output, "(_t (> a 0))");
 /// ```
-fn encode_let_binding_smt(decl: &syn::Stmt) -> anyhow::Result<String> {
+fn encode_let_binding_smt(
+    decl: &syn::Stmt,
+    target_to_binder: &impl Fn(&TypeTarget<syn::Ident>) -> String,
+) -> anyhow::Result<String> {
     match decl {
         syn::Stmt::Local(syn::Local {
             pat:
@@ -365,7 +487,11 @@ fn encode_let_binding_smt(decl: &syn::Stmt) -> anyhow::Result<String> {
         }) => {
             trace!(?ident, ?expr, "encode binding");
 
-            Ok(format!("({} {})", encode_ident(ident), encode_smt(expr)))
+            Ok(format!(
+                "({} {})",
+                encode_ident(ident),
+                encode_smt(expr, target_to_binder)
+            ))
         }
         other => todo!("unknown: {:?}", other),
     }
@@ -389,14 +515,14 @@ mod test {
     #[test_log::test]
     fn test_encode_let_binding() {
         let input: Vec<_> = parse_quote! { let _t = a > 0; };
-        let output = encode_let_binding_smt(&input[0]).unwrap();
+        let output = encode_let_binding_smt(&input[0], &|_| todo!()).unwrap();
         pretty::assert_eq!(output, "(|_t| (> |a| 0))");
     }
 
     #[test_log::test]
     fn test_encode_expr_with_let() {
         let input = parse_quote! { { let _t = a > 0; _t } };
-        let output = encode_smt(&input);
+        let output = encode_smt(&input, &|_| todo!());
         pretty::assert_eq!(output, "(let ((|_t| (> |a| 0))) |_t|)");
     }
 }

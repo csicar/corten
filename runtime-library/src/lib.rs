@@ -48,6 +48,11 @@ macro_rules! ctx {
 pub fn assert_ctx(_formulas: &[&'static str], _entries: &[(&dyn Any, &'static str, &'static str)]) {
 }
 
+#[inline(always)]
+pub fn assert(formula: bool) {
+    assert!(formula)
+}
+
 #[macro_export]
 macro_rules! relax_ctx {
   ( $($var:ident |-> $binder:ident | $pred:expr),*) => {

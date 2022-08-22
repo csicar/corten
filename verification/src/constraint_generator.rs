@@ -368,26 +368,23 @@ where
             enum FnCallType<'tcx> {
                 AssertCtx(RContext<'tcx, hir::HirId>),
                 UpdateCtx(RContext<'tcx, hir::HirId>),
+                AssertFormula(syn::Expr),
                 NormalCall,
             }
-            let fn_type = match func_decl
-                .ident()
-                .expect("func decl must have an ident()")
-                .name
-                .to_string()
-                .as_ref()
-            {
-                "assert_ctx" => FnCallType::AssertCtx(
-                    RContext::<hir::HirId>::try_from_assert_expr(args, tcx, local_ctx)?,
-                ),
-                "update_ctx" => FnCallType::UpdateCtx(
-                    RContext::<hir::HirId>::try_from_assert_expr(args, tcx, local_ctx)?,
-                ),
-                _ => FnCallType::NormalCall,
-            };
+
+            let fn_type = CtxSpecFunctions::from_name(
+                func_decl
+                    .ident()
+                    .expect("func decl must have an ident()")
+                    .name
+                    .to_string()
+                    .as_ref(),
+            );
 
             match fn_type {
-                FnCallType::AssertCtx(assert_ctx) => {
+                Some(CtxSpecFunctions::AssertCtx) => {
+                    let assert_ctx =
+                        RContext::<hir::HirId>::try_from_assert_expr(args, tcx, local_ctx)?;
                     // do sub typing checkings
                     trace!(ctx=%assert_ctx.with_tcx(tcx), "found ctx assertion");
                     is_sub_context(ctx, &assert_ctx, tcx, solver)?;
@@ -402,7 +399,10 @@ where
                         ctx.clone(),
                     ))
                 }
-                FnCallType::UpdateCtx(spec_ctx) => {
+                Some(CtxSpecFunctions::UpdateCtx) => {
+                    let spec_ctx =
+                        RContext::<hir::HirId>::try_from_assert_expr(args, tcx, local_ctx)?;
+
                     // do sub typing checkings
                     trace!(ctx=%spec_ctx.with_tcx(tcx), "found ctx update");
                     is_sub_context(&spec_ctx, ctx, tcx, solver)?;
@@ -416,7 +416,21 @@ where
                         spec_ctx,
                     ))
                 }
-                FnCallType::NormalCall => {
+                Some(CtxSpecFunctions::AssertFormula) => {
+                    let formula = symbolic_execute(&args[0], tcx, ctx, local_ctx)?;
+                    trace!("found assertion to add to ctx");
+                    let new_ctx = ctx.assume_formula(formula);
+                    anyhow::Ok((
+                        RefinementType::new_empty_refinement_for(
+                            expr,
+                            local_ctx,
+                            fresh.fresh_ident(),
+                        ),
+                        new_ctx,
+                    ))
+                }
+                // Normal Function Call
+                None => {
                     let sig = func_decl.fn_sig().unwrap();
                     let inputs = sig.decl.inputs;
                     let output = &sig.decl.output;

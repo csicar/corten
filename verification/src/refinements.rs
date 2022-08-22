@@ -62,7 +62,7 @@ impl<'a> RefinementType<'a> {
     pub fn get_as_reference_type(&self) -> anyhow::Result<TypeTarget<syn::Ident>> {
         match &self.predicate {
             syn::Expr::Binary(syn::ExprBinary {
-                left,
+                left: _,
                 op: syn::BinOp::Eq(_),
                 right:
                     box syn::Expr::Call(syn::ExprCall {
@@ -86,11 +86,11 @@ impl<'a> RefinementType<'a> {
                 }
             }
             syn::Expr::Binary(syn::ExprBinary {
-                left,
+                left: _,
                 op: syn::BinOp::Eq(_),
                 right:
                     box syn::Expr::Reference(syn::ExprReference {
-                        mutability,
+                        mutability: _,
                         expr: inner,
                         ..
                     }),

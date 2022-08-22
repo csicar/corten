@@ -1,14 +1,12 @@
-use std::io::Write;
-
 use crate::buildin_functions::CtxSpecFunctions;
 use crate::refinement_context::is_sub_context;
 use crate::refinement_context::require_is_subtype_of;
 use crate::refinement_context::RContext;
 use crate::refinement_context::TypeTarget;
-use crate::refinements;
+
 use crate::refinements::MutRefinementType;
 use crate::smtlib_ext::SmtResExt;
-use crate::smtlib_ext::SolverExt;
+
 use anyhow::anyhow;
 use anyhow::Context;
 
@@ -23,7 +21,7 @@ use rustc_hir::{Expr, ExprKind};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::ty::TypeckResults;
 use rustc_span::source_map::Spanned;
-use tracing::error;
+
 use tracing::Level;
 
 use syn::parse_quote;
@@ -733,9 +731,7 @@ where
         ExprKind::Index(_, _) => todo!(),
         ExprKind::AddrOf(hir::BorrowKind::Ref, hir::Mutability::Mut, destination_expr) => {
             let dest_hir_id = destination_expr.try_into_path_hir_id(tcx, local_ctx)?;
-            let dst_ty = ctx
-                .lookup_hir(&dest_hir_id)
-                .ok_or_else(|| anyhow!("Type for {} not found in ctx", &dest_hir_id))?;
+
             let fresh_lvar = fresh.fresh_ident();
             let base_ty = local_ctx.expr_ty(expr);
             let predicate = {

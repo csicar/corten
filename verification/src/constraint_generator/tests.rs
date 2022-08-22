@@ -712,6 +712,25 @@ fn test_update_ctx_neg() {
     .unwrap();
 }
 
+#[test]
+fn test_assert_pos() {
+    init_tracing();
+    with_item_and_rt_lib(
+        &quote! {
+            fn f(n: ty!{ nv : i32 }) -> ty!{ v : i32 | v > 0 } {
+                assert(n > 0);
+                n
+            }
+        }
+        .to_string(),
+        |item, tcx| {
+            let ty = type_check_function(item, &tcx).unwrap();
+            pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }");
+        },
+    )
+    .unwrap();
+}
+
 /// Test for fn calls
 ///
 mod fn_call {

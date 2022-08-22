@@ -105,6 +105,19 @@ where
         }
     }
 
+    pub fn assume_formula(&self, formula: syn::Expr) -> Self {
+        let formulas = vec![formula]
+            .into_iter()
+            .chain(self.formulas.clone())
+            .collect();
+        RContext {
+            formulas,
+            binders: self.binders.clone(),
+            reference_destinations: self.reference_destinations.clone(),
+            types: self.types.clone(),
+        }
+    }
+
     pub fn update_ty(&mut self, target: TypeTarget<K>, ty: RefinementType<'a>) {
         self.binders.remove(&target);
         self.add_any_ty(target, ty);

@@ -151,15 +151,31 @@ where
                 ))
             })
             .try_collect()?;
-        let types = self
+        let types_entries: Vec<_> = self
             .types
             .iter()
             .map(|(k, v)| {
                 let new_name = renamer(k);
                 assert_eq!(k, &v.binder);
+                trace!("renamed {k} to {new_name}");
                 anyhow::Ok((new_name, v.rename_binders(renamer)?))
             })
             .try_collect()?;
+        // `types_entries` might have multiple enties for one key.
+        // this happens if the renaming in not injective.
+        let types = {
+            let mut map = HashMap::new();
+            types_entries.into_iter().for_each(|(k, v)| {
+                let current_value: Option<RefinementType> = map.remove(&k);
+                let new_value = match current_value {
+                    None => v,
+                    Some(pred) => pred.with_additional_predicate(v.predicate),
+                };
+                map.insert(k, new_value);
+            });
+
+            map
+        };
         anyhow::Ok(RContext {
             formulas,
             binders,

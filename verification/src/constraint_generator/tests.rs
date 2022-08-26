@@ -1470,6 +1470,48 @@ mod loops {
         )
         .unwrap();
     }
+
+    #[test]
+    fn test_loop_gauss() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn gauss(n: ty!{ nv : i32 | nv > 0 }) -> ty!{ v : i32 | 2 * v == nv * (nv + 1) } {
+                    let mut i = 0 as ty!{ iv : i32 | iv == 0 };
+
+                    let mut sum = 0 as ty!{ sv : i32 | sv == iv * nv };
+                    relax_ctx!{
+                        ; 
+                        n |-> nv | nv > 0,
+                        i |-> iv | iv <= nv,
+                        sum |-> sv | 2 * sv == iv * (iv + 1)
+                    }
+                    while i < n {
+                        // Gamma! = {
+                            // i : {i1 | true} => {i2 | i2 == i1 + 1}
+                            // sum : {s1 | i1 * nv} => {s2 | s2 == i2 * nv}
+                        //}
+                        i = (i + 1);
+                        sum = (sum + i);
+                        relax_ctx!{
+                            true;
+                            n |-> nv | nv > 0,
+                            i |-> iv | iv <= nv,
+                            sum |-> sv | 2 * sv == iv * (iv + 1)
+                        }
+                        ()
+                    }
+                    sum
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | 2 * v == nv * (nv + 1) }");
+            },
+        )
+        .unwrap();
+    }
 }
 
 /// Mutable Type Annotations

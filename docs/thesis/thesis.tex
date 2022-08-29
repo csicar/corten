@@ -1,12 +1,49 @@
 \documentclass{article}
 \usepackage{bussproofs}
 \usepackage{ amssymb }
+\usepackage{xargs}
+\usepackage{xcolor}
 \usepackage{ amsmath }
 \usepackage[utf8]{inputenc}
-% \usepackage{draculatheme}
+\usepackage{draculatheme}
+
+
+\usepackage[colorinlistoftodos,prependcaption,textsize=tiny]{todonotes}
+
+\newcommandx{\unsure}[2][1=]{\todo[linecolor=red,backgroundcolor=red!25,bordercolor=red,#1]{#2}}
+\newcommandx{\change}[2][1=]{\todo[linecolor=blue,backgroundcolor=blue!25,bordercolor=blue,#1]{#2}}
+\newcommandx{\info}[2][1=]{\todo[linecolor=OliveGreen,backgroundcolor=OliveGreen!25,bordercolor=OliveGreen,#1]{#2}}
+\newcommandx{\improvement}[2][1=]{\todo[linecolor=Plum,backgroundcolor=Plum!25,bordercolor=Plum,#1]{#2}}
+\newcommand{\code}[1]{\texttt{#1}}
 
 \begin{document}
-  
+
+\tableofcontents
+
+\section{The Case for Rust as a Target Language}
+
+Rust is split into two languages: safe and unsafe Rust. Like most type systems, Rust's type and ownership system is conservative, meaning any (safe) Rust program that type checks, will not crash due to memory safety or type errors. Unsafe Rust gives the programmer the ability to expand the programs accepted by Rust. 
+
+In this thesis, we will only consider safe Rust, which is the subset of Rust most programmers interact with (See \ref{ss:unsafe-rust}).
+
+\paragraph{Aliasing XOR Mutabillity} The key behind Rusts type system is, that for every variable at every point during the execution, that variable is either aliased or mutable, but never both at the same time. 
+
+Rust accomplished this by introducing three types of access permissions for a variable, which are associated with every scope\footnote{In modern Rust, this model was generalized to cover more cases, but the idea is still valid}:
+\begin{enumerate}
+  \item The scope \textit{owns} the variable. This guarantees, that no other scope has access to any part of the variable and allows the scope to create references to (part of) the variable. 
+  \item The scope (immutably) \textit{borrows} the variable. This guarantees, that as long as the variable is used, its \textit{value will not change} and allows the scope to further lend the variable to other scoped.
+  \item The scope \textit{mutably borrows} the variable. This guarantees, that there are no other active references to any part of the memory of the variable. 
+\end{enumerate}
+
+A consequence of these rules it, that at any time, every piece of memory has a unique and compile-time known owner. There are no reference cycles.
+
+This makes both aliasing as well as mutability quite tame:
+If a variable is aliased, it must be immutable and as a result, represents just a value (like in pure functional languages).
+If a variable is mutable, it can not be aliased and as a result, any effect of the mutation is well known and locally visible.
+
+\section{Usage Of Rust}
+
+\label{ss:unsafe-rust}\subsection{Unsafe Rust}
 
 \section{Definitions}
 

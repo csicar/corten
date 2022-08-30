@@ -2,6 +2,7 @@
 \usepackage[utf8]{inputenc}
 \usepackage{ bussproofs }
 \usepackage{ amssymb }
+\usepackage{hyperref}
 \usepackage{xargs}
 \usepackage{simplebnf}
 \usepackage{xcolor}
@@ -64,21 +65,23 @@ In contrast, languages with instance-of-checks allow an implementation of a poly
 
 \label{ss:unsafe-rust}\subsection{Unsafe Rust}
 
-\section{Subset of Rust}
+\section{The MiniCorten Language}
 
-Rust's main disadvantage as a target language it its size: There is a lot of syntax and semantics that would need to be accounted.Some even incidental to the verification. To reduce the complexity and amount of work, that needs to be done, we will focus on a subset of Rust described in this section.
+Rust's main disadvantage as a target language it its size: There is a lot of syntax and semantics that would need to be accounted. A lot of it even incidental to the verification. To reduce the complexity and amount of work, that needs to be done, we will focus on a subset of Rust described in this section.
 
 The goal is to remove as much incidental complexity as possible without compromising to the central topic of research: How to extend LiquidTypes to mutability under the presence of Rust's ownership model.
 
-
-
 \subsection{Syntax}
+
+\todo{Call it CortenRust (after Weathering Steel)}
+This subsection will introduce the syntax of MiniCorten, a language modelled after a simplified version of Rust, with the addition of refinement types.
+
 \begin{bnfgrammar}
   $decl$ ::=
     $func\_decl$ * : function declaration
   ;;
   $func\_decl$ ::=
-    $ident$( $param$ * ) -> $ty$ \{ $stmt$ * \}
+    $ident$( $param$ * ) -> $ty$ \{ $stmt$ \}
   ;;
   $param$ ::= $ident$ \ccolon  $ty$
   ;;
@@ -86,7 +89,7 @@ The goal is to remove as much incidental complexity as possible without compromi
     $expr$                                                : expression
     | let mut? $ident$ = $expr$                           : declaration
     | $ident$ = $expr$                                    : assignment
-    | while ($expr$) \{ $stmt$ *\}                        : while loop
+    | while ($expr$) \{ $stmt$ \}                        : while loop
     | relax\_ctx!\{ $pred$* ; ($ident$ \ccolon $ty$)* \}  : context relaxation
   ;;
   $expr$ ::=
@@ -94,7 +97,8 @@ The goal is to remove as much incidental complexity as possible without compromi
     | $lit$                                         : constant
     | $expr$ + $expr$                               : addition
     | $ident$($ident$ *)                            : function call
-    | if $expr$ \{ $stmt$ * \} else \{ $stmt$ * \}  : if expression
+    | if $expr$ \{ $stmt$ \} else \{ $stmt$ \}      : if expression
+    | $stmt$; $expr$                                : sequence
     | * $ident$                                     : dereference
     | \& $ident$                                    : immutable reference
     | \&mut $ident$                                 : mutable reference
@@ -110,6 +114,12 @@ The goal is to remove as much incidental complexity as possible without compromi
 \end{bnfgrammar}
 
 \subsection{Semantics}
+
+The semantics mostly standard. The main difference being that Rust and our simplified language enable most statements to be used in place of an expression. The value is determined by the last statement in the sequence. For example If-Expressions, sequences of statements and function all follow this rule: Their (return) value is determined by the last statement or expression in the sequence.
+
+The semantics loosely based on Jung's MiniRust.
+
+Another difference between Rust and MiniLiquidRust is of course the addition of refinement types
 
 \section{Definitions}
 

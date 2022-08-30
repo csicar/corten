@@ -1481,7 +1481,7 @@ mod loops {
 
                     let mut sum = 0 as ty!{ sv : i32 | sv == iv * nv };
                     relax_ctx!{
-                        ; 
+                        ;
                         n |-> nv | nv > 0,
                         i |-> iv | iv <= nv,
                         sum |-> sv | 2 * sv == iv * (iv + 1)

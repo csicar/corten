@@ -1,10 +1,17 @@
 \documentclass{article}
-\usepackage{bussproofs}
+\usepackage[utf8]{inputenc}
+\usepackage{ bussproofs }
 \usepackage{ amssymb }
 \usepackage{xargs}
+\usepackage{simplebnf}
 \usepackage{xcolor}
 \usepackage{ amsmath }
-\usepackage[utf8]{inputenc}
+\usepackage{csquotes}
+\usepackage[british]{babel}
+
+\usepackage[bibstyle=numeric, backend=bibtex, sorting=none]{biblatex}
+\addbibresource{../Meine Bibliothek.bib}
+
 \usepackage{draculatheme}
 
 
@@ -16,6 +23,9 @@
 \newcommandx{\improvement}[2][1=]{\todo[linecolor=Plum,backgroundcolor=Plum!25,bordercolor=Plum,#1]{#2}}
 \newcommand{\code}[1]{\texttt{#1}}
 
+\newcommand{\ccolon}[0]{: }
+\newcommand{\cmid}[0]{| }
+
 \begin{document}
 
 \tableofcontents
@@ -25,6 +35,8 @@
 Rust is split into two languages: safe and unsafe Rust. Like most type systems, Rust's type and ownership system is conservative, meaning any (safe) Rust program that type checks, will not crash due to memory safety or type errors. Unsafe Rust gives the programmer the ability to expand the programs accepted by Rust. 
 
 In this thesis, we will only consider safe Rust, which is the subset of Rust most programmers interact with (See \ref{ss:unsafe-rust}).
+
+Rust features a few unusual design decisions that profoundly influence the design of verification systems for it. The following paragraphs will elaborate on this.
 
 \paragraph{Aliasing XOR Mutabillity} The key behind Rusts type system is, that for every variable at every point during the execution, that variable is either aliased or mutable, but never both at the same time. 
 
@@ -41,9 +53,63 @@ This makes both aliasing as well as mutability quite tame:
 If a variable is aliased, it must be immutable and as a result, represents just a value (like in pure functional languages).
 If a variable is mutable, it can not be aliased and as a result, any effect of the mutation is well known and locally visible.
 
+\paragraph*{Opaque Generics} Rust does not provide a way to check a generic parameter for its instantiation. This means that we cannot extract any additional information from a generic parameter \code{T}. A function from \code{T} to \code{T} can therefor only be the identity function.
+Wadler \cite{wadler_theorems_1989} shows, that it is possible to derive facts about the behaviour of such polymorphic functions.
+
+In contrast, languages with instance-of-checks allow an implementation of a polymorphic function to distinguish between different instances of the generic parameter, precluding this extensive reasoning.
+
+\paragraph*{Explicit Mutable Access} A consequence of the ownership rules is, that a function can only mutate (part of) the state, that is passed to it as a parameter. There is no global state and there is no implicit access to an object instance. Thus any intention of mutating state must already be expressed in the function signature, which makes the specification of this mutation quite natural.
+
 \section{Usage Of Rust}
 
 \label{ss:unsafe-rust}\subsection{Unsafe Rust}
+
+\section{Subset of Rust}
+
+Rust's main disadvantage as a target language it its size: There is a lot of syntax and semantics that would need to be accounted.Some even incidental to the verification. To reduce the complexity and amount of work, that needs to be done, we will focus on a subset of Rust described in this section.
+
+The goal is to remove as much incidental complexity as possible without compromising to the central topic of research: How to extend LiquidTypes to mutability under the presence of Rust's ownership model.
+
+
+
+\subsection{Syntax}
+\begin{bnfgrammar}
+  $decl$ ::=
+    $func\_decl$ * : function declaration
+  ;;
+  $func\_decl$ ::=
+    $ident$( $param$ * ) -> $ty$ \{ $stmt$ * \}
+  ;;
+  $param$ ::= $ident$ \ccolon  $ty$
+  ;;
+  $stmt$ ::= 
+    $expr$                                                : expression
+    | let mut? $ident$ = $expr$                           : declaration
+    | $ident$ = $expr$                                    : assignment
+    | while ($expr$) \{ $stmt$ *\}                        : while loop
+    | relax\_ctx!\{ $pred$* ; ($ident$ \ccolon $ty$)* \}  : context relaxation
+  ;;
+  $expr$ ::=
+    $ident$                                         : variable reference
+    | $lit$                                         : constant
+    | $expr$ + $expr$                               : addition
+    | $ident$($ident$ *)                            : function call
+    | if $expr$ \{ $stmt$ * \} else \{ $stmt$ * \}  : if expression
+    | * $ident$                                     : dereference
+    | \& $ident$                                    : immutable reference
+    | \&mut $ident$                                 : mutable reference
+    | $expr$ as $ty$                                : type relaxation
+  ;;
+  $ty$ ::= ty!\{ $logic\_ident$ \ccolon $base\_ty$ \cmid $pred$ \} : refinement type
+  ;;
+  $pred$ ::=
+    $logic\_ident$                      : variable
+    | $pred$ \&\& $pred$        : conjunction
+    | $pred$ \cmid\cmid $pred$  : disjunction
+    | ! $pred$                     : negation
+\end{bnfgrammar}
+
+\subsection{Semantics}
 
 \section{Definitions}
 

@@ -946,6 +946,38 @@ mod fn_call {
         )
         .unwrap();
     }
+
+    #[should_panic]
+    #[test]
+    fn use_end_state_neg() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn native_panic() -> ty!{ v : () | false } {
+                    while(true) { () }
+                }
+
+                fn native_assert(cond: ty!{ c : bool }) -> ty!{ v: () | c } {
+                    if cond {
+                        () as ty!{ v: () | c }
+                    } else {
+                        native_panic()
+                    }
+                }
+
+                fn client(a : ty!{ av: i32 }) -> ty!{ v: i32 | v > 1 } {
+                    let arg = a > 0;
+                    let proof = native_assert(arg);
+                    a
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                type_check_function(item, &tcx).unwrap();
+            },
+        )
+        .unwrap();
+    }
 }
 
 /// Tests for `is_sub_context`

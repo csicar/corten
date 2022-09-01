@@ -1626,10 +1626,13 @@ mod evaluation {
             &quote! {
                 fn fib(n: ty!{ nv: i32 | nv >= 0}) -> ty!{ v: i32 | v >= nv * nv } {
                     if n >= 2 {
+                        // n1, n2 needed for ANF
                         let n1 = n - 1;
-                        let nm2 = n - 2;
-                        let f1 = fib(n1); // f1 > (n-1)²
-                        let f2 = fib(nm2); // f2 > (n-2)²
+                        let n2 = n - 2;
+
+                        let f1 = fib(n1);
+                        let f2 = fib(nm2);
+                        // f1, f2 needed for Symbolic Execution
                         (f1 + f2) as ty!{ r : i32 | r >= nv * nv  }
                     } else {
                         1 as ty!{ s : i32 | s >= nv * nv  }

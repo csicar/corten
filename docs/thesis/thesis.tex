@@ -143,6 +143,7 @@ This subsection will introduce the syntax of MiniCorten, a language modelled aft
   | $pred$ \&\& $pred$            : conjunction
   | $pred$ \cdisj $pred$          : disjunction
   | ! $pred$                      : negation
+  ;;
   $base\_ty$ ::=
     i32                     : integer
     | unit                  : unit type
@@ -261,7 +262,7 @@ We write:
 \end{prooftree}
 
 \begin{prooftree}
-  \AxiomC{$\Gamma_I, c \vdash s \Rightarrow \Gamma_I' $}
+  \AxiomC{$\Gamma_I, [c \doteq \code{true}] \vdash s \Rightarrow \Gamma_I' $}
   \AxiomC{$\Gamma_I',c \preceq \Gamma_I$}
   \LeftLabel{$\text{WHILE}$}
   \BinaryInfC{$\Gamma_I \vdash \texttt{while}(c) s \Rightarrow \Gamma_I,\neg c$}
@@ -369,7 +370,7 @@ By induction over the typing derivations $\Gamma \vdash t : \tau \Rightarrow \Ga
 
 \mtext{LIT} is trivial, \mtext{Var} and \mtext{VAR-REF} cannot occur because $t$ is closed.
 
-\paragraph*{Case LIT} 
+\paragraph*{Case SEQ} 
 
 \section{Evaluation}
 

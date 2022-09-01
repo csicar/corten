@@ -3,10 +3,12 @@
 \usepackage{ bussproofs }
 \usepackage{ amssymb }
 \usepackage{hyperref}
+\usepackage{listings}
 \usepackage{xargs}
 \usepackage{simplebnf}
 \usepackage{xcolor}
 \usepackage{ amsmath }
+\usepackage{amsthm}
 \usepackage{csquotes}
 \usepackage[british]{babel}
 
@@ -24,18 +26,31 @@
 \newcommandx{\improvement}[2][1=]{\todo[linecolor=Plum,backgroundcolor=Plum!25,bordercolor=Plum,#1]{#2}}
 \newcommand{\code}[1]{\texttt{#1}}
 
+\newcommand{\mtext}[1]{$\text{#1}$}
+
+
 \newcommand{\ccolon}[0]{: }
 \newcommand{\cmid}[0]{| }
+\newcommand{\cdisj}[0]{|| }
+
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{corollary}{Corollary}[theorem]
+\newtheorem{lemma}[theorem]{Lemma}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
 
 \begin{document}
 
 \tableofcontents
 
+\section{Introduction}
+
 \section{The Case for Rust as a Target Language}
 
-Rust is split into two languages: safe and unsafe Rust. Like most type systems, Rust's type and ownership system is conservative, meaning any (safe) Rust program that type checks, will not crash due to memory safety or type errors. Unsafe Rust gives the programmer the ability to expand the programs accepted by Rust. 
+Rust is split into two languages: safe and unsafe Rust. Like most type systems, Rust's type and ownership system is conservative, meaning any (safe) Rust program that type checks, will not crash due to memory safety or type errors. Unsafe Rust gives the programmer the ability to expand the programs accepted by Rust outside that known-safe subset.
 
-In this thesis, we will only consider safe Rust, which is the subset of Rust most programmers interact with (See \ref{ss:unsafe-rust}).
+In this thesis, we will only consider safe Rust, which is the subset of Rust most programmers interact with (see section \ref{ss:unsafe-rust}).
 
 Rust features a few unusual design decisions that profoundly influence the design of verification systems for it. The following paragraphs will elaborate on this.
 
@@ -61,6 +76,15 @@ In contrast, languages with instance-of-checks allow an implementation of a poly
 
 \paragraph*{Explicit Mutable Access} A consequence of the ownership rules is, that a function can only mutate (part of) the state, that is passed to it as a parameter. There is no global state and there is no implicit access to an object instance. Thus any intention of mutating state must already be expressed in the function signature, which makes the specification of this mutation quite natural.
 
+\paragraph*{What Rust does not solve} Eventhough Rust siplifies reasoning about mutability and aliasing of mutable data, Rust does not eliminate the need to reason about multiple references to mutable data. For example, Listing \ref{lst:alias-mut} shows how \code{cell}'s type is influenced by changes to \code{r}. This does not mean, that the ownership rule  \textit{mutability XOR aliasing} are broken: Eventhough both \code{cell} and \code{r} are mutable, but only one is active.
+
+\label{lst:alias-mut}\begin{lstlisting}
+let mut cell = 2;
+let r = &mut cell;
+r+= 1;
+assert(cell, 2)
+\end{lstlisting}
+
 \section{Usage Of Rust}
 
 \label{ss:unsafe-rust}\subsection{Unsafe Rust}
@@ -77,7 +101,7 @@ The goal is to remove as much incidental complexity as possible without compromi
 This subsection will introduce the syntax of MiniCorten, a language modelled after a simplified version of Rust, with the addition of refinement types.
 
 \begin{bnfgrammar}
-  $decl$ ::=
+  $program$ ::=
     $func\_decl$ * : function declaration
   ;;
   $func\_decl$ ::=
@@ -89,7 +113,7 @@ This subsection will introduce the syntax of MiniCorten, a language modelled aft
     $expr$                                                : expression
     | let mut? $ident$ = $expr$                           : declaration
     | $ident$ = $expr$                                    : assignment
-    | while ($expr$) \{ $stmt$ \}                        : while loop
+    | while ($expr$) \{ $stmt$ \}                         : while loop
     | relax\_ctx!\{ $pred$* ; ($ident$ \ccolon $ty$)* \}  : context relaxation
   ;;
   $expr$ ::=
@@ -107,21 +131,86 @@ This subsection will introduce the syntax of MiniCorten, a language modelled aft
   $ty$ ::= ty!\{ $logic\_ident$ \ccolon $base\_ty$ \cmid $pred$ \} : refinement type
   ;;
   $pred$ ::=
-    $logic\_ident$                      : variable
-    | $pred$ \&\& $pred$        : conjunction
-    | $pred$ \cmid\cmid $pred$  : disjunction
-    | ! $pred$                     : negation
+    $ref\_pred$                                     : predicate for a reference type 
+    | $value\_pred$                                 : predicate for a value type
+  ;;
+  $ref\_pred$ ::=
+    $logic\_ident$ = \& $ident$
+    | $ref\_pred$ \cdisj $ref\_pred$         : mutable reference 
+  ;;
+  $value\_pred$ ::=
+    $logic\_ident$                : variable
+  | $pred$ \&\& $pred$            : conjunction
+  | $pred$ \cdisj $pred$          : disjunction
+  | ! $pred$                      : negation
+  $base\_ty$ ::=
+    i32                     : integer
+    | unit                  : unit type
+    | bool                  : boolean
+    | \& $base\_ty$         : immutable reference
+    | \&mut $base\_ty$      : mutable reference
+  ;;
+  $lit$ ::=
+      0,1,...,n             : integer
+    | true                  : boolean true
+    | false                 : boolean false
+    | ()                    : unit value
 \end{bnfgrammar}
 
 \subsection{Semantics}
 
-The semantics mostly standard. The main difference being that Rust and our simplified language enable most statements to be used in place of an expression. The value is determined by the last statement in the sequence. For example If-Expressions, sequences of statements and function all follow this rule: Their (return) value is determined by the last statement or expression in the sequence.
+The semantics are mostly standard. The main difference being that Rust and our simplified language enable most statements to be used in place of an expression. The value is determined by the last statement in the sequence. For example If-Expressions, sequences of statements and function all follow this rule: Their (return) value is determined by the last statement or expression in the sequence.
 
 The semantics loosely based on Jung's MiniRust.
 
-Another difference between Rust and MiniLiquidRust is of course the addition of refinement types
+Another difference between Rust and MiniCorten is of course the addition of refinement types. 
 
-\section{Definitions}
+In terms of the formal description, the rules are similar to Pierce's \cite[p. 166f]{pierce_types_2002-3} Reference language. The main difference is, that in Rust, every piece of data has a unique, known owner. This fact makes the concept of locations redundant. Instead we treat $\code{ref } x$ as a value itself. The following definitions show the new execution rules.
+
+\begin{definition}[Execution-State]
+  The state of execution is given by $\mu : \text{PVar} \to \text{Value}$. The set of function declarations is constant and given by $\Sigma : \text{Fn-Name} \to ((\text{Arg}_1, \dots, \text{Arg}_n), \text(ReturnValue))$
+\end{definition}
+
+\begin{definition}[Small-Step Semantics of MiniCorten: $t \mid \mu \leadsto t' \mid \mu'$]
+  
+
+  \begin{prooftree}
+    \AxiomC{$\star$}
+    \LeftLabel{\mtext{SS-Assign}}
+    \UnaryInfC{$x = v \mid \mu \leadsto \code{unit} \mid \mu[x \mapsto v]$}
+  \end{prooftree}
+
+
+  \begin{prooftree}
+    \AxiomC{$\mu(x) = v$}
+    \LeftLabel{\mtext{SS-Deref}}
+    \UnaryInfC{$* \code{ref } x \mid \mu \leadsto v \mid \mu$}
+  \end{prooftree}
+
+
+  \begin{prooftree}
+    \AxiomC{$t \mid \mu \leadsto t' \mid \mu'$}
+    \LeftLabel{\mtext{SS-Deref-Inner}}
+    \UnaryInfC{$* t \mid \mu \leadsto * t' \mid \mu'$}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$t \mid \mu \leadsto t' \mid \mu'$}
+    \LeftLabel{\mtext{SS-Ref-Inner}}
+    \UnaryInfC{$\code{ref } t \mid \mu \leadsto \code{ref } t' \mid \mu'$}
+  \end{prooftree}
+
+  \begin{prooftree}
+    \AxiomC{$t \mid \mu \leadsto t' \mid \mu'$}
+    \LeftLabel{\mtext{SS-Assign-Inner}}
+    \UnaryInfC{$x = t \mid \mu \leadsto x = t' \mid \mu'$}
+  \end{prooftree}
+
+\end{definition}
+
+\section{The Refinement Type System}
+
+\subsection{Definitions}
 
 \paragraph*{$P$} is the set of program variables used in rust program. Common names $a, b, c$
 \paragraph*{$L$} is the set of logic variables used in refinement types. Common names: $\alpha, \beta$
@@ -129,8 +218,6 @@ Another difference between Rust and MiniLiquidRust is of course the addition of 
 \paragraph*{$\Gamma = (\mu, \sigma)$} is a tuple containing a function $\mu: P \to L$ mapping all program variables to their (current) logic variable and a set of formulas $\sigma$ over $L$. During execution of statements, the set increases monotonically
 
 \paragraph*{$\tau$} is a user defined type $\{ \alpha : b \mid \varphi\}$. Where $\alpha$ is a logic variable from $L$, $b$ is a base type from Rust (like \texttt{i32}) and $\varphi$ is a formula over variables in $L$.
-
-\section{Typing Rules}
 
 \paragraph*{Abbreviations}
 We write:
@@ -264,5 +351,39 @@ alternative (should be equivalent):
   \LeftLabel{$\text{$\preceq$-CTX}$}
   \BinaryInfC{$(\sigma, \mu) \preceq (\sigma', \mu')$}
 \end{prooftree}
+
+\subsection{Soundness of the Type System}
+
+As usual, we consider the two properties (see Pierce \cite[p. 95]{pierce_types_2002}) of a type system when assessing the correctness of LiquidRust:
+
+\begin{enumerate}
+  \item progress: 
+    \todo{need to show for program or term?}
+    If $t$ is closed and well-typed, then $t$ is a value or $t \leadsto t'$, where $t'$ is a value.
+  \item preservation: If $\Gamma \vdash e : \tau \Rightarrow \Gamma$ and $e \leadsto e'$, then $\Gamma \vdash e' : \tau \Rightarrow \Gamma$
+\end{enumerate}
+
+\subsection{Progress}
+
+By induction over the typing derivations $\Gamma \vdash t : \tau \Rightarrow \Gamma'$.
+
+\mtext{LIT} is trivial, \mtext{Var} and \mtext{VAR-REF} cannot occur because $t$ is closed.
+
+\paragraph*{Case LIT} 
+
+\section{Evaluation}
+
+\subsection{Maximum using Path Conditions}
+
+
+
+\subsection{Rephrasing builtins in terms of Refinement Types}
+
+\paragraph*{panic}
+\paragraph*{assert}
+
+\subsection{Proof of the Gauss Summation Formula}
+
+\section{Related Work}
 
 \end{document}

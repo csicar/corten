@@ -1670,12 +1670,6 @@ mod evaluation {
                         //}
                         i = (i + 1);
                         sum = (sum + i);
-                        relax_ctx!{
-                            true;
-                            n |-> nv | nv > 0,
-                            i |-> iv | iv <= nv,
-                            sum |-> sv | 2 * sv == iv * (iv + 1)
-                        }
                         ()
                     }
                     sum

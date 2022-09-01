@@ -24,7 +24,6 @@ pub trait SolverExt {
 impl<P> SolverExt for Solver<P> {
     fn add_prelude(&mut self) -> SmtRes<()> {
         self.write_all(b"(declare-datatypes () ((Unit unit)))\n\n")?;
-        self.declare_fun("ref", &["String"], "Int")?;
-        self.declare_fun("anon_loc_ref_by", &["String"], "Int")
+        self.declare_fun("ref", &["String"], "Int")
     }
 }

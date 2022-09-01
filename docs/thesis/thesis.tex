@@ -262,7 +262,7 @@ We write:
 
 \begin{prooftree}
   \AxiomC{$\Gamma_I, c \vdash s \Rightarrow \Gamma_I' $}
-  \AxiomC{$\Gamma_I' \preceq \Gamma_I$}
+  \AxiomC{$\Gamma_I',c \preceq \Gamma_I$}
   \LeftLabel{$\text{WHILE}$}
   \BinaryInfC{$\Gamma_I \vdash \texttt{while}(c) s \Rightarrow \Gamma_I,\neg c$}
 \end{prooftree}

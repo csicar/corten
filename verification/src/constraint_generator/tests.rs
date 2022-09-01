@@ -1430,7 +1430,7 @@ mod loops {
     }
 
     #[test]
-    fn test_loop_complex() {
+    fn test_loop_complex_pos() {
         init_tracing();
         with_item_and_rt_lib(
             &quote! {
@@ -1451,12 +1451,43 @@ mod loops {
                         //}
                         i = (i + 1);
                         sum = (sum + n);
-                        relax_ctx!{
-                            iv <= nv;
-                            n |-> nv | nv > 0,
-                            i |-> iv | iv <= nv,
-                            sum |-> sv | sv == iv * nv
-                        }
+                        ()
+                    }
+                    sum
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == nv * nv }");
+            },
+        )
+        .unwrap();
+    }
+
+    #[should_panic]
+    #[test]
+    fn test_loop_complex_neg() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn bad_square(n: ty!{ nv : i32 | nv > 0 }) -> ty!{ v : i32 | v == nv * nv } {
+                    let mut i = 0 as ty!{ iv : i32 | iv == 0 };
+
+                    let mut sum = 0 as ty!{ sv : i32 | sv == iv * nv };
+                    relax_ctx!{
+                        ;
+                        n |-> nv | nv > 0,
+                        i |-> iv | iv <= nv,
+                        sum |-> sv | sv == iv * nv
+                    }
+                    while i < n {
+                        // Gamma! = {
+                            // i : {i1 | true} => {i2 | i2 == i1 + 1}
+                            // sum : {s1 | i1 * nv} => {s2 | s2 == i2 * nv}
+                        //}
+                        i = (i + 1);
+                        sum = (sum + n + 1);
                         ()
                     }
                     sum
@@ -1481,7 +1512,7 @@ mod mut_ty_annotation {
         init_tracing();
         with_item_and_rt_lib(
             &quote! {
-                fn bad_square(n: &mut ty!{ nv : i32 | true => na | na > 0 }) -> ty!{ v : i32 | true } {
+                fn mutate(n: &mut ty!{ nv : i32 | true => na | na > 0 }) -> ty!{ v : i32 | true } {
                     *n = 2;
                     0
                 }
@@ -1501,7 +1532,7 @@ mod mut_ty_annotation {
         init_tracing();
         with_item_and_rt_lib(
             &quote! {
-                fn bad_square(n: &mut ty!{ nv : i32 | true => na | na > 0 }) -> ty!{ v : i32 | true } {
+                fn mutate(n: &mut ty!{ nv : i32 | true => na | na > 0 }) -> ty!{ v : i32 | true } {
                     *n = 0;
                     0
                 }

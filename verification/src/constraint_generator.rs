@@ -209,7 +209,8 @@ where
     'a: 'c,
 {
     let mut curr_ctx = ctx.clone();
-    for stmt in stmts {
+    for (stmt_no, stmt) in stmts.iter().enumerate() {
+        trace!("statement {stmt_no}");
         curr_ctx = match stmt.kind {
             hir::StmtKind::Local(local) => {
                 let initializer = local.init.ok_or_else(|| {
@@ -671,7 +672,8 @@ where
             LoopSource::While,
             _,
         ) => {
-            let (ctx_bang, while_cond) = match &expr.kind {
+            let _span = span!(Level::INFO, "type_of_loop").entered();
+            let while_cond = match &expr.kind {
                 ExprKind::If(cond, then_expr, Some(else_expr)) => {
                     match &else_expr.kind {
                         ExprKind::Block(
@@ -689,15 +691,16 @@ where
                     }
 
                     let mut then_ctx_before = ctx.clone();
-                    let then_cond: syn::Expr = symbolic_execute(&cond, tcx, ctx, local_ctx)?;
+                    let then_cond: syn::Expr = symbolic_execute(cond, tcx, ctx, local_ctx)?;
                     then_ctx_before.push_formula(then_cond.clone());
 
                     let (_ty, ctx_after) =
                         type_of(then_expr, tcx, &then_ctx_before, local_ctx, solver, fresh)?;
-                    // pop `then_cond` off the path stack
-                    let ctx_bang_tick = ctx_after.pop_formula();
+
+                    // \Gamma_I',c \preceq \Gamma_I
+                    let ctx_bang_tick = ctx_after;
                     is_sub_context(ctx, &ctx_bang_tick, tcx, solver)?;
-                    (ctx_bang_tick, then_cond)
+                    then_cond
                 }
                 _other => todo!(),
             };
@@ -707,7 +710,7 @@ where
 
             let exit_path_formula = negate_predicate(while_cond)?;
 
-            let mut ctx_after = ctx_bang.clone();
+            let mut ctx_after = ctx.clone();
             ctx_after.push_formula(exit_path_formula);
             Ok((refined_unit_type, ctx_after))
         }

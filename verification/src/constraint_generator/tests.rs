@@ -1601,7 +1601,7 @@ mod evaluation {
 
                 fn client(a : ty!{ av: i32 }) -> ty!{ v: i32 | v > 0 } {
                     let arg = a > 0;
-                    let r = native_assert(arg);
+                    let _witness = native_assert(arg);
                     a
                 }
             }

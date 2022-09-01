@@ -242,7 +242,7 @@ where
             .comment(&format!("decl for {}", ident))
             .into_anyhow()?;
 
-        fn encode_type<'tcx>(ty: &rustc_middle::ty::Ty<'tcx>) -> String {
+        fn encode_type(ty: &rustc_middle::ty::Ty) -> String {
             match ty.kind() {
                 rustc_middle::ty::TyKind::Bool => "Bool".to_string(),
                 rustc_middle::ty::TyKind::Char => todo!(),
@@ -252,6 +252,7 @@ where
                 rustc_middle::ty::TyKind::Slice(inner_ty) => {
                     format!("(Array Int {})", encode_type(inner_ty))
                 }
+                rustc_middle::ty::TyKind::Tuple(fields) if fields.len() == 0 => "Unit".to_string(), // todo: respect size
                 other => todo!("don't know how to encode ty {:?} in smt", other),
             }
         }

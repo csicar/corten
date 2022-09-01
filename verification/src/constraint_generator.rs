@@ -366,13 +366,6 @@ where
             let path_hir_id = func.try_into_path_hir_id(tcx, local_ctx)?;
             let func_decl = tcx.hir().get(path_hir_id);
 
-            enum FnCallType<'tcx> {
-                AssertCtx(RContext<'tcx, hir::HirId>),
-                UpdateCtx(RContext<'tcx, hir::HirId>),
-                AssertFormula(syn::Expr),
-                NormalCall,
-            }
-
             let fn_type = CtxSpecFunctions::from_name(
                 func_decl
                     .ident()
@@ -455,10 +448,25 @@ where
                     for ((hir_ty, middle_ty), arg) in
                         inputs.iter().zip(fn_sig.inputs()).zip(args.iter())
                     {
+                        let arg_hir_id = if let ExprKind::AddrOf(_kind, _mut, inner) = arg.kind {
+                            inner
+                        } else {
+                            arg
+                        }
+                        .try_into_path_hir_id(tcx, local_ctx)
+                        .context("Argument of a function call must be in a-normal-form")?;
+
+                        let arg_binder = ctx
+                            .lookup_hir(&arg_hir_id)
+                            .expect("ctx must contain arg_hir_id")
+                            .binder;
+                        let arg_ident = format_ident!("{}", arg_binder);
+
                         let (start_refinement_in_param, end_refinement) =
-                            match (RefinementType::from_type_alias(hir_ty, tcx, *middle_ty),MutRefinementType::from_type_alias(
-                                hir_ty, tcx, *middle_ty,
-                            ))  {
+                            match (
+                                RefinementType::from_type_alias(hir_ty, tcx, *middle_ty),
+                                MutRefinementType::from_type_alias(hir_ty, tcx, *middle_ty)
+                            )  {
                                 // both mut and immut type
                                 (Ok(_), Ok(_)) => panic!("apparently {arg:?} can be parsed as mut refinement as well as immut refinement -> bug"),
                                 // immut type
@@ -468,7 +476,16 @@ where
                                     // Because immut types cannot chnge their predicates, the end state will need
                                     // to have the same predicate as before.
                                     // We could also use `ty!{ _ | true }}` here
-                                    (refinement.clone(), refinement)
+                                    let start_refinement = refinement.clone();
+
+                                    // For immutable parameters, all predicates of the argument 
+                                    // should be copied to the end_refinement.
+                                    let param_ident = format_ident!("{}", start_refinement.binder);
+                                    let end_refinement = refinement.with_additional_predicate(parse_quote!{
+                                        #arg_ident == #param_ident
+                                    });
+
+                                    (start_refinement, end_refinement)
                                 }
                                 // mut type
                                 (Err(_), Ok(mut_refinement)) => {
@@ -479,22 +496,9 @@ where
                                 }
                             };
 
-                        let arg_hir_id = if let ExprKind::AddrOf(_kind, _mut, inner) = arg.kind {
-                            inner
-                        } else {
-                            arg
-                        }
-                        .try_into_path_hir_id(tcx, local_ctx)
-                        .context("Argument of a function call must be in ??? normal form")?;
-
                         let start_refinement = {
                             let param_binder = &start_refinement_in_param.binder;
-                            let arg_binder = ctx
-                                .lookup_hir(&arg_hir_id)
-                                .expect("ctx must contain arg_hir_id")
-                                .binder;
                             let param_ident = format_ident!("{}", param_binder);
-                            let arg_ident = format_ident!("{}", arg_binder);
 
                             start_refinement_in_param.with_additional_predicate(parse_quote! {
                                 #param_ident == #arg_ident

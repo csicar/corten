@@ -1566,6 +1566,12 @@ mod evaluation {
                         native_panic()
                     }
                 }
+
+                fn client(a : ty!{ av: i32 }) -> ty!{ v: i32 | v > 0 } {
+                    let arg = a > 0;
+                    let r = native_assert(arg);
+                    a
+                }
             }
             .to_string(),
             |item, tcx| {
@@ -1573,6 +1579,7 @@ mod evaluation {
                 match item.ident.name.as_str() {
                     "native_panic" => pretty::assert_eq!(ty.to_string(), "ty!{ v : () | false }"),
                     "native_assert" => pretty::assert_eq!(ty.to_string(), "ty!{ v : () | c }"),
+                    "client" => pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 0 }"),
                     _ => panic!(),
                 }
             },

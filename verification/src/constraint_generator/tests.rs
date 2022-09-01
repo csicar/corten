@@ -1470,48 +1470,6 @@ mod loops {
         )
         .unwrap();
     }
-
-    #[test]
-    fn test_loop_gauss() {
-        init_tracing();
-        with_item_and_rt_lib(
-            &quote! {
-                fn gauss(n: ty!{ nv : i32 | nv > 0 }) -> ty!{ v : i32 | 2 * v == nv * (nv + 1) } {
-                    let mut i = 0 as ty!{ iv : i32 | iv == 0 };
-
-                    let mut sum = 0 as ty!{ sv : i32 | sv == iv * nv };
-                    relax_ctx!{
-                        ;
-                        n |-> nv | nv > 0,
-                        i |-> iv | iv <= nv,
-                        sum |-> sv | 2 * sv == iv * (iv + 1)
-                    }
-                    while i < n {
-                        // Gamma! = {
-                            // i : {i1 | true} => {i2 | i2 == i1 + 1}
-                            // sum : {s1 | i1 * nv} => {s2 | s2 == i2 * nv}
-                        //}
-                        i = (i + 1);
-                        sum = (sum + i);
-                        relax_ctx!{
-                            true;
-                            n |-> nv | nv > 0,
-                            i |-> iv | iv <= nv,
-                            sum |-> sv | 2 * sv == iv * (iv + 1)
-                        }
-                        ()
-                    }
-                    sum
-                }
-            }
-            .to_string(),
-            |item, tcx| {
-                let ty = type_check_function(item, &tcx).unwrap();
-                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | 2 * v == nv * (nv + 1) }");
-            },
-        )
-        .unwrap();
-    }
 }
 
 /// Mutable Type Annotations
@@ -1552,6 +1510,108 @@ mod mut_ty_annotation {
             |item, tcx| {
                 let ty = type_check_function(item, &tcx).unwrap();
                 pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | true }");
+            },
+        )
+        .unwrap();
+    }
+}
+
+/// Evaluation with examples used in thesis
+mod evaluation {
+    use super::*;
+    #[test]
+    fn native_panic_and_assert() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn native_panic() -> ty!{ v : () | false } {
+                    while(true) { () }
+                }
+
+                fn native_assert(cond: ty!{ c : bool }) -> ty!{ v: () | c } {
+                    if cond {
+                        () as ty!{ v: () | c }
+                    } else {
+                        native_panic()
+                    }
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                match item.ident.name.as_str() {
+                    "native_panic" => pretty::assert_eq!(ty.to_string(), "ty!{ v : () | false }"),
+                    "native_assert" => pretty::assert_eq!(ty.to_string(), "ty!{ v : () | c }"),
+                    _ => panic!(),
+                }
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn fibonacci() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn fib(n: ty!{ nv: i32 | nv >= 0}) -> ty!{ v: i32 | v >= nv * nv } {
+                    if n >= 2 {
+                        let n1 = n - 1;
+                        let nm2 = n - 2;
+                        let f1 = fib(n1); // f1 > (n-1)²
+                        let f2 = fib(nm2); // f2 > (n-2)²
+                        (f1 + f2) as ty!{ r : i32 | r >= nv * nv  }
+                    } else {
+                        1 as ty!{ s : i32 | s >= nv * nv  }
+                    }
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= nv * nv }");
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_loop_gauss() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn gauss(n: ty!{ nv : i32 | nv > 0 }) -> ty!{ v : i32 | 2 * v == nv * (nv + 1) } {
+                    let mut i = 0 as ty!{ iv : i32 | iv == 0 };
+
+                    let mut sum = 0 as ty!{ sv : i32 | sv == iv * nv };
+                    relax_ctx!{
+                        ;
+                        n |-> nv | nv > 0,
+                        i |-> iv | iv <= nv,
+                        sum |-> sv | 2 * sv == iv * (iv + 1)
+                    }
+                    while i < n {
+                        // Gamma! = {
+                            // i : {i1 | true} => {i2 | i2 == i1 + 1}
+                            // sum : {s1 | i1 * nv} => {s2 | s2 == i2 * nv}
+                        //}
+                        i = (i + 1);
+                        sum = (sum + i);
+                        relax_ctx!{
+                            true;
+                            n |-> nv | nv > 0,
+                            i |-> iv | iv <= nv,
+                            sum |-> sv | 2 * sv == iv * (iv + 1)
+                        }
+                        ()
+                    }
+                    sum
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | 2 * v == nv * (nv + 1) }");
             },
         )
         .unwrap();

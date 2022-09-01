@@ -254,11 +254,11 @@ We write:
 \end{prooftree}
 
 \begin{prooftree}
-  \AxiomC{$\Gamma \vdash c : \text{bool} \Rightarrow \Gamma_c$}
-  \AxiomC{$\Gamma_c, c \vdash c_t : \tau \Rightarrow \Gamma'$}
-  \AxiomC{$\Gamma_c, \neg c \vdash c_e : \tau \Rightarrow \Gamma'$}
+  \AxiomC{$\Gamma \vdash x : \text{bool} \Rightarrow \Gamma$}
+  \AxiomC{$\Gamma, \mu(x) \doteq \code{true} \vdash e_t : \tau \Rightarrow \Gamma'$}
+  \AxiomC{$\Gamma, \mu(x) \doteq \code{false} \vdash e_e : \tau \Rightarrow \Gamma'$}
   \LeftLabel{$\text{IF}$}
-  \TrinaryInfC{$\Gamma \vdash \text{if } c \text{ then }c_t\text{ else } c_e : \tau \Rightarrow \Gamma'$}
+  \TrinaryInfC{$\Gamma \vdash \text{if } x \text{ then }e_t\text{ else } e_e : \tau \Rightarrow \Gamma'$}
 \end{prooftree}
 
 \begin{prooftree}

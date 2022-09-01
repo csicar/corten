@@ -1631,9 +1631,9 @@ mod evaluation {
                         let n2 = n - 2;
 
                         let f1 = fib(n1);
-                        let f2 = fib(nm2);
+                        let f2 = fib(n2);
                         // f1, f2 needed for Symbolic Execution
-                        (f1 + f2) as ty!{ r : i32 | r >= nv * nv  }
+                        (f1 + f2) as ty!{ r : i32 | r >= nv * nv }
                     } else {
                         1 as ty!{ s : i32 | s >= nv * nv  }
                     }

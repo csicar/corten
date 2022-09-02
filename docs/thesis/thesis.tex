@@ -8,6 +8,7 @@
 \usepackage{simplebnf}
 \usepackage{xcolor}
 \usepackage{ amsmath }
+\usepackage{mathpartir}
 \usepackage{amsthm}
 \usepackage{csquotes}
 \usepackage[british]{babel}
@@ -173,39 +174,29 @@ In terms of the formal description, the rules are similar to Pierce's \cite[p. 1
 \end{definition}
 
 \begin{definition}[Small-Step Semantics of MiniCorten: $t \mid \mu \leadsto t' \mid \mu'$]
-  
-
-  \begin{prooftree}
-    \AxiomC{$\star$}
-    \LeftLabel{\mtext{SS-Assign}}
-    \UnaryInfC{$x = v \mid \mu \leadsto \code{unit} \mid \mu[x \mapsto v]$}
-  \end{prooftree}
 
 
-  \begin{prooftree}
-    \AxiomC{$\mu(x) = v$}
-    \LeftLabel{\mtext{SS-Deref}}
-    \UnaryInfC{$* \code{ref } x \mid \mu \leadsto v \mid \mu$}
-  \end{prooftree}
-
-
-  \begin{prooftree}
-    \AxiomC{$t \mid \mu \leadsto t' \mid \mu'$}
-    \LeftLabel{\mtext{SS-Deref-Inner}}
-    \UnaryInfC{$* t \mid \mu \leadsto * t' \mid \mu'$}
-  \end{prooftree}
-
-  \begin{prooftree}
-    \AxiomC{$t \mid \mu \leadsto t' \mid \mu'$}
-    \LeftLabel{\mtext{SS-Ref-Inner}}
-    \UnaryInfC{$\code{ref } t \mid \mu \leadsto \code{ref } t' \mid \mu'$}
-  \end{prooftree}
-
-  \begin{prooftree}
-    \AxiomC{$t \mid \mu \leadsto t' \mid \mu'$}
-    \LeftLabel{\mtext{SS-Assign-Inner}}
-    \UnaryInfC{$x = t \mid \mu \leadsto x = t' \mid \mu'$}
-  \end{prooftree}
+\begin{gather*}
+  \inferrule*[left=SS-Assign]
+    {\star}
+    {x = v \mid \mu \leadsto \code{unit} \mid \mu[x \mapsto v]}
+  \\
+  \inferrule*[left=SS-Deref]
+    {\mu(x) = v}
+    {* \code{ref } x \mid \mu \leadsto v \mid \mu}
+  \\
+  \inferrule*[left=SS-Deref-Inner]
+    {t \mid \mu \leadsto t' \mid \mu'}
+    {* t \mid \mu \leadsto * t' \mid \mu'}
+  \\
+  \inferrule*[left=SS-Ref-Inner]
+      {t \mid \mu \leadsto t' \mid \mu'}
+      {\code{ref } t \mid \mu \leadsto \code{ref } t' \mid \mu'}
+  \\
+  \inferrule*[left=SS-Assign-Inner]
+      {t \mid \mu \leadsto t' \mid \mu'}
+      {x = t \mid \mu \leadsto x = t' \mid \mu'}
+\end{gather*}
 
 \end{definition}
 
@@ -230,128 +221,124 @@ We write:
 
 \subsection{Expression Typing: $\Gamma \vdash e : \tau$}
 
-\begin{prooftree}
-  \AxiomC{$l \text{ fresh}$}
-  \AxiomC{$\text{base\_ty}(v) = b$}
-  \LeftLabel{$\text{LIT}$}
-  \BinaryInfC{$\Gamma \vdash v: \{ l : b \mid l \doteq v\} \Rightarrow \Gamma$}
-\end{prooftree}
-
-\begin{prooftree}
-  \AxiomC{$\beta \text{ fresh}$}
-  \AxiomC{$\mu(x) = \beta$}
-  \LeftLabel{$\text{VAR}$}
-  \BinaryInfC{$\Gamma = (\mu, \sigma)\vdash x : \{ \alpha : b \mid \beta \doteq \alpha \} \Rightarrow \Gamma$}
-\end{prooftree}
-
-
-
-\begin{prooftree}
-  \AxiomC{$\Gamma \vdash y : \tau $}
-  \AxiomC{$\Gamma \vdash x : \{ \beta : \&b \mid \beta \doteq \&y \}$}
-  \LeftLabel{$\text{VAR-REF}$}
-  \BinaryInfC{$\Gamma \vdash *x : \tau \Rightarrow \Gamma$}
-\end{prooftree}
-
-\begin{prooftree}
-  \AxiomC{$\Gamma \vdash x : \text{bool} \Rightarrow \Gamma$}
-  \AxiomC{$\Gamma, \mu(x) \doteq \code{true} \vdash e_t : \tau \Rightarrow \Gamma'$}
-  \AxiomC{$\Gamma, \mu(x) \doteq \code{false} \vdash e_e : \tau \Rightarrow \Gamma'$}
-  \LeftLabel{$\text{IF}$}
-  \TrinaryInfC{$\Gamma \vdash \text{if } x \text{ then }e_t\text{ else } e_e : \tau \Rightarrow \Gamma'$}
-\end{prooftree}
-
-\begin{prooftree}
-  \AxiomC{$\Gamma_I, [c \doteq \code{true}] \vdash s \Rightarrow \Gamma_I' $}
-  \AxiomC{$\Gamma_I',c \preceq \Gamma_I$}
-  \LeftLabel{$\text{WHILE}$}
-  \BinaryInfC{$\Gamma_I \vdash \texttt{while}(c) s \Rightarrow \Gamma_I,\neg c$}
-\end{prooftree}
-
-
-\begin{prooftree}
-  \AxiomC{$\Gamma \vdash s_1 : \tau_1 \Rightarrow \Gamma'$}
-  \AxiomC{$\Gamma' \vdash \bar s : \tau \Rightarrow \Gamma''$}
-  \LeftLabel{$\text{SEQ}$}
-  \BinaryInfC{$\Gamma \vdash s_1 ; \bar s : \tau \Rightarrow \Gamma''$}
-\end{prooftree}
-
-
-
-\begin{prooftree}
-  \AxiomC{$\Gamma \vdash e_1 : \{v_1:b \mid \varphi_1\} \Rightarrow \Gamma'$}
-  \AxiomC{$\Gamma' \vdash e_2 : \{v_2:b \mid \varphi_2\} \Rightarrow \Gamma''$}
-  \LeftLabel{$\text{ADD}$}
-  \BinaryInfC{$\Gamma \vdash e_1 + e_2 : \{ v: b \mid v \doteq [e_1] + [e_2]\} \Rightarrow \Gamma'', \varphi_1, \varphi_2$}
-\end{prooftree}
-
-
-\begin{prooftree}
-  \AxiomC{$\Gamma \vdash e : \{ \beta \mid \varphi \} \Rightarrow \Gamma'$}
-  \LeftLabel{$\text{ASSIGN}$}
-  \UnaryInfC{$\Gamma \vdash x = e : \tau \Rightarrow \Gamma' [x \mapsto \beta], \varphi$}
-\end{prooftree}
-
-
-\begin{prooftree}
-  \AxiomC{$\Gamma \vdash e : \{ \beta \mid \varphi \} \Rightarrow \Gamma'$}
-  \AxiomC{$\Gamma \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y\}$}
-  \LeftLabel{$\text{ASSIGN-STRONG}$}
-  \BinaryInfC{$\Gamma \vdash *x = e : \tau \Rightarrow \Gamma' [y \mapsto \beta], \varphi$}
-\end{prooftree}
-
-
-\begin{prooftree}
-  \AxiomC{$\Gamma \vdash e : \tau \Rightarrow \Gamma'$}
-  \AxiomC{$\Gamma \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y \vee \alpha \doteq \&z \vee \dots\}$}
-  \AxiomC{$\Gamma \vdash \tau \preceq \tau_y$}
-  \AxiomC{$\Gamma \vdash y : \tau_y$}
-  \LeftLabel{$\text{ASSIGN-WEAK}$}
-  \QuaternaryInfC{$\Gamma \vdash *x = e : \tau \Rightarrow \Gamma'$}
-\end{prooftree}
-
-
-\begin{prooftree}
-  \AxiomC{$ (\{a \mapsto \tau_a, \dots\}, \{\alpha \doteq \mu(a), \dots, \varphi_{\alpha}, \dots\}) \preceq \Gamma$}
-  \AxiomC{$f : (\{ \alpha \mid \varphi_{\alpha} \} \Rightarrow \{ \alpha' \mid \varphi'_{\alpha} \}, \dots)$}
-  \LeftLabel{$\text{FN-CALL}$}
-  \BinaryInfC{$\Gamma \vdash f(a, \dots)  \Rightarrow (\mu[a \mapsto \alpha', \dots], \sigma \wedge \varphi'_{\alpha} \wedge \dots)$}
-\end{prooftree}
-
-\begin{prooftree}
-  \AxiomC{$\Gamma \vdash e : \tau$}
-  \AxiomC{$\Gamma \vdash \tau \preceq \tau'$}
-  \LeftLabel{$\text{INTRO-SUB}$}
-  \BinaryInfC{$\Gamma \vdash e \texttt{ as } \tau': \tau'$}
-\end{prooftree}
+\begin{gather*}
+  \inferrule*[left=Lit]
+    {l \text{ fresh} \\ \text{base\_ty}(v) = b}
+    {\Gamma \vdash v: \{ l : b \mid l \doteq v\} \Rightarrow \Gamma}
+  %
+  \\
+  \inferrule*[left=VAR]
+    {\beta \text{ fresh} \\ \mu(x) = \beta}
+    {\Gamma = (\mu, \sigma)\vdash x : \{ \alpha : b \mid \beta \doteq \alpha \} \Rightarrow \Gamma}
+  %
+  \\
+  \inferrule*[left=Var-Ref]
+    {\Gamma \vdash y : \tau \\ \Gamma \vdash x : \{ \beta : \&b \mid \beta \doteq \&y \}}
+    {\Gamma \vdash *x : \tau \Rightarrow \Gamma}
+  %  
+  \\
+  \inferrule*[left=If]
+    {
+      \Gamma \vdash x : \text{bool} \Rightarrow \Gamma
+      \\ \Gamma, \mu(x) \doteq \code{true} \vdash e_t : \tau \Rightarrow \Gamma'
+      \\ \Gamma, \mu(x) \doteq \code{false} \vdash e_e : \tau \Rightarrow \Gamma'
+    }
+    {\Gamma \vdash \text{if } x \text{ then }e_t\text{ else } e_e : \tau \Rightarrow \Gamma'}
+  %
+  \\
+  \inferrule*[left=While]
+    {
+      \Gamma_I, [c \doteq \code{true}] \vdash s \Rightarrow \Gamma_I' 
+      \\ \Gamma_I',c \preceq \Gamma_I
+    }
+    {\Gamma_I \vdash \texttt{while}(c) s \Rightarrow \Gamma_I,\neg c}
+  %
+  \\
+  \inferrule*[left=Seq]
+    {
+      \Gamma \vdash s_1 : \tau_1 \Rightarrow \Gamma'
+      \\ \Gamma' \vdash \bar s : \tau \Rightarrow \Gamma''
+    }
+    {\Gamma \vdash s_1 ; \bar s : \tau \Rightarrow \Gamma''}
+  %
+  \\
+  \inferrule*[left=Add]
+    {
+      \Gamma \vdash e_1 : \{v_1:b \mid \varphi_1\} \Rightarrow \Gamma' 
+      \\ \Gamma' \vdash e_2 : \{v_2:b \mid \varphi_2\} \Rightarrow \Gamma''
+    }
+    {\Gamma \vdash e_1 + e_2 : \{ v: b \mid v \doteq [e_1] + [e_2]\} \Rightarrow \Gamma'', \varphi_1, \varphi_2}
+  %
+  \\
+  \inferrule*[left=Assign]
+    {\Gamma \vdash e : \{ \beta \mid \varphi \} \Rightarrow \Gamma'}
+    {\Gamma \vdash x = e : \tau \Rightarrow \Gamma' [x \mapsto \beta], \varphi}
+  %
+  \\
+  \inferrule*[left=Assign-Strong]
+    {
+      \Gamma \vdash e : \{ \beta \mid \varphi \} \Rightarrow \Gamma'
+      \\ \Gamma \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y\}
+    }
+    {\Gamma \vdash *x = e : \tau \Rightarrow \Gamma' [y \mapsto \beta], \varphi}
+  %
+  \\
+  \inferrule*[left=Assign-Weak]
+    {
+      \Gamma \vdash e : \tau \Rightarrow \Gamma'
+      \\ \Gamma \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y \vee \alpha \doteq \&z \vee \dots\}
+      \\ \Gamma \vdash \tau \preceq \tau_y
+      \\ \Gamma \vdash y : \tau_y
+    }
+    {\Gamma \vdash *x = e : \tau \Rightarrow \Gamma'}
+  %
+  \\
+  \inferrule*[left=Fn-Call]
+    { 
+      (\{a \mapsto \tau_a, \dots\}, \{\alpha \doteq \mu(a), \dots, \varphi_{\alpha}, \dots\}) \preceq \Gamma
+      \\ f : (\{ \alpha \mid \varphi_{\alpha} \} \Rightarrow \{ \alpha' \mid \varphi'_{\alpha} \}, \dots)
+    }
+    {\Gamma \vdash f(a, \dots)  \Rightarrow (\mu[a \mapsto \alpha', \dots], \sigma \wedge \varphi'_{\alpha} \wedge \dots)}
+  %
+  \\
+  \inferrule*[left=Intro-Sub]
+    {
+      \Gamma \vdash e : \tau 
+      \\ \Gamma \vdash \tau \preceq \tau'
+    }
+    {\Gamma \vdash e \texttt{ as } \tau': \tau'}
+\end{gather*}
 
 \subsection{Sub-Typing Rules: $\Gamma \vdash \tau \preceq \tau'$}
 
-\begin{prooftree}
-  \AxiomC{$\sigma \wedge \varphi'[\beta \triangleright \alpha ] \vDash \varphi$}
-  \LeftLabel{$\text{$\preceq$-TY}$}
-  \UnaryInfC{$\Gamma = (\mu, \sigma) \vdash \{ \alpha \mid \varphi\} \preceq \{ \beta \mid \varphi' \}$}
-\end{prooftree}
+\[
+  \inferrule*[left=$\preceq$-Ty]
+    {\sigma \wedge \varphi'[\beta \triangleright \alpha ] \vDash \varphi}
+    {\Gamma = (\mu, \sigma) \vdash \{ \alpha \mid \varphi\} \preceq \{ \beta \mid \varphi' \}}
+\]
 
 alternative (should be equivalent):
 
-\begin{prooftree}
-  \AxiomC{$\Gamma[f \mapsto \alpha], \varphi \preceq \Gamma[f \mapsto \beta], \varphi'$}
-  \AxiomC{$f \text{ fresh}$}
-  \LeftLabel{$\text{$\preceq$-TY-ALT}$}
-  \BinaryInfC{$\Gamma \vdash \{ \alpha \mid \varphi\} \preceq \{ \beta \mid \varphi' \}$}
-\end{prooftree}
+\[
+  \inferrule*[left=$\preceq$-Ty-Alt]
+    {
+      \Gamma[f \mapsto \alpha], \varphi \preceq \Gamma[f \mapsto \beta], \varphi'
+      \\ f \text{ fresh}
+    }
+    {\Gamma \vdash \{ \alpha \mid \varphi\} \preceq \{ \beta \mid \varphi' \}}
+\]
 
 
 \subsection{Sub-Context Rules: $\Gamma \preceq \Gamma'$}
 
-
-\begin{prooftree}
-  \AxiomC{$\sigma'[\mu(\alpha) \triangleright \mu'(\alpha)\ \mid \alpha \in dom(\mu)] \vDash \sigma$}
-  \AxiomC{$dom(\mu) \subseteq dom(\mu')$}
-  \LeftLabel{$\text{$\preceq$-CTX}$}
-  \BinaryInfC{$(\sigma, \mu) \preceq (\sigma', \mu')$}
-\end{prooftree}
+\[
+  \inferrule*[left=$\preceq$-Ctx]
+    {
+      \sigma'[\mu(\alpha) \triangleright \mu'(\alpha)\ \mid \alpha \in dom(\mu)] \vDash \sigma 
+      \\ dom(\mu) \subseteq dom(\mu')
+    }
+    {(\sigma, \mu) \preceq (\sigma', \mu')}
+\]
 
 \subsection{Soundness of the Type System}
 

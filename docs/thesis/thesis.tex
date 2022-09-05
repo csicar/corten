@@ -157,6 +157,7 @@ The goal is to remove as much incidental complexity as possible without compromi
 
 \todo{Call it CortenRust (after Weathering Steel)}
 This subsection will introduce the syntax of MiniCorten, a language modelled after a simplified version of Rust, with the addition of refinement types.
+To simplify the formal definitions and proofs, the language is restricted to ANF\todo{What does the abbrev stand for? XXX Normal Form}, meaning arguments of expressions must be variables. Note that the implementation does not have this restriction.
 
 \begin{bnfgrammar}
   $program$ ::=
@@ -227,7 +228,7 @@ Another difference between Rust and MiniCorten is of course the addition of refi
 In terms of the formal description, the rules are similar to Pierce's \cite[p. 166f]{pierce_types_2002-3} Reference language. The main difference is, that in Rust, every piece of data has a unique, known owner. This fact makes the concept of locations redundant. Instead we treat $\code{ref } x$ as a value itself. The following definitions show the new execution rules.
 
 \begin{definition}[Execution-State]
-  The state of execution is given by $\mu : \text{PVar} \to \text{Value}$. The set of function declarations is constant and given by $\Sigma : \text{Fn-Name} \to ((\text{Arg}_1, \dots, \text{Arg}_n), \text(ReturnValue))$
+  The state of execution is given by $\sigma : \text{PVar} \to \text{Value}$. The set of function declarations is constant and given by $\Sigma : \text{Fn-Name} \to ((\text{Arg}_1, \dots, \text{Arg}_n), \text(ReturnValue))$
 \end{definition}
 
 \begin{definition}[Small-Step Semantics of MiniCorten: $t \mid \mu \leadsto t' \mid \mu'$]
@@ -264,19 +265,19 @@ In terms of the formal description, the rules are similar to Pierce's \cite[p. 1
 \paragraph*{$P$} is the set of program variables used in rust program. Common names $a, b, c$
 \paragraph*{$L$} is the set of logic variables used in refinement types. Common names: $\alpha, \beta$
 
-\paragraph*{$\Gamma = (\mu, \sigma)$} is a tuple containing a function $\mu: P \to L$ mapping all program variables to their (current) logic variable and a set of formulas $\sigma$ over $L$. During execution of statements, the set increases monotonically
+\paragraph*{$\Gamma = (\mu, \Phi)$} is a tuple containing a function $\mu: P \to L$ mapping all program variables to their (current) logic variable and a set of formulas $\Phi$ over $L$. During execution of statements, the set increases monotonically
 
 \paragraph*{$\tau$} is a user defined type $\{ \alpha : b \mid \varphi\}$. Where $\alpha$ is a logic variable from $L$, $b$ is a base type from Rust (like \texttt{i32}) and $\varphi$ is a formula over variables in $L$.
 
 \paragraph*{Abbreviations}
 We write:
 \begin{itemize}
-  \item  $\Gamma, c$ for $(\mu, \sigma \wedge c)$
-  \item $\Gamma[a \mapsto \alpha]$ for $(\mu[a \mapsto \alpha], \sigma)$
+  \item  $\Gamma, c$ for $(\mu, \Phi \wedge c)$
+  \item $\Gamma[a \mapsto \alpha]$ for $(\mu[a \mapsto \alpha], \Phi)$
 \end{itemize}
 
 
-\subsection{Expression Typing: $\Gamma \vdash e : \tau$}
+\subsection{Expression Typing: $\Gamma \vdash e : \tau \Rightarrow \Gamma'$}
 
 \begin{gather*}
   \inferrule*[left=Lit]
@@ -284,9 +285,9 @@ We write:
     {\Gamma \vdash v: \{ l : b \mid l \doteq v\} \Rightarrow \Gamma}
   %
   \\
-  \inferrule*[left=VAR]
-    {\beta \text{ fresh} \\ \mu(x) = \beta}
-    {\Gamma = (\mu, \sigma)\vdash x : \{ \alpha : b \mid \beta \doteq \alpha \} \Rightarrow \Gamma}
+  \inferrule*[left=Var]
+    {\alpha \text{ fresh} \\ \mu(x) = \beta}
+    {\Gamma = (\mu, \Phi)\vdash x : \{ \alpha : b \mid \beta \doteq \alpha \} \Rightarrow \Gamma}
   %
   \\
   \inferrule*[left=Var-Ref]
@@ -296,7 +297,7 @@ We write:
   \\
   \inferrule*[left=If]
     {
-      \Gamma \vdash x : \text{bool} \Rightarrow \Gamma
+      \Gamma \vdash \mu(x) : \text{bool} \Rightarrow \Gamma
       \\ \Gamma, \mu(x) \doteq \code{true} \vdash e_t : \tau \Rightarrow \Gamma'
       \\ \Gamma, \mu(x) \doteq \code{false} \vdash e_e : \tau \Rightarrow \Gamma'
     }
@@ -305,10 +306,10 @@ We write:
   \\
   \inferrule*[left=While]
     {
-      \Gamma_I, [c \doteq \code{true}] \vdash s \Rightarrow \Gamma_I' 
-      \\ \Gamma_I',c \preceq \Gamma_I
+      \Gamma_I, \mu(x) \doteq \code{true} \vdash s \Rightarrow \Gamma_I' 
+      \\ \Gamma_I', \mu(x) \doteq \code{true} \preceq \Gamma_I
     }
-    {\Gamma_I \vdash \texttt{while}(c) s \Rightarrow \Gamma_I,\neg c}
+    {\Gamma_I \vdash \texttt{while } x \{ s \} \Rightarrow \Gamma_I,\mu(x) \doteq \code{false}}
   %
   \\
   \inferrule*[left=Seq]
@@ -321,10 +322,18 @@ We write:
   \\
   \inferrule*[left=Add]
     {
-      \Gamma \vdash e_1 : \{v_1:b \mid \varphi_1\} \Rightarrow \Gamma' 
-      \\ \Gamma' \vdash e_2 : \{v_2:b \mid \varphi_2\} \Rightarrow \Gamma''
+      \gamma \text{ fresh} 
+      \\ \mu(x_1) = \alpha
+      \\ \mu(x_2) = \beta
     }
-    {\Gamma \vdash e_1 + e_2 : \{ v: b \mid v \doteq [e_1] + [e_2]\} \Rightarrow \Gamma'', \varphi_1, \varphi_2}
+    {\Gamma \vdash x_1 + x_2 : \{ \gamma: b \mid \gamma \doteq \alpha + \beta \} \Rightarrow \Gamma}
+  %
+  \\
+  \inferrule*[left=Decl]
+    {
+      \Gamma \vdash e :  \{ \beta \mid \varphi \} \Rightarrow \Gamma'
+    }
+    {\Gamma \vdash \code{let } x = e : \code{()} \Rightarrow \Gamma'[ x \mapsto \beta], \varphi}
   %
   \\
   \inferrule*[left=Assign]
@@ -343,19 +352,23 @@ We write:
   \inferrule*[left=Assign-Weak]
     {
       \Gamma \vdash e : \tau \Rightarrow \Gamma'
-      \\ \Gamma \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y \vee \alpha \doteq \&z \vee \dots\}
-      \\ \Gamma \vdash \tau \preceq \tau_y
-      \\ \Gamma \vdash y : \tau_y
-    }
+      \\ \Gamma' \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y_1 \vee \dots \vee \alpha \doteq \&y_n \} \Rightarrow \Gamma'
+      \\ \Gamma' \vdash \tau \preceq \{ \beta_1 \mid \varphi_1 \}
+      \\ \Gamma'[x \mapsto \beta_1], \varphi_1 \preceq \Gamma'
+      \\\\ \dots
+      \\\\
+      \\ \Gamma' \vdash \tau \preceq \{ \beta_n \mid \varphi_n \}
+      \\ \Gamma'[x \mapsto \beta_n], \varphi_n \preceq \Gamma'
+      }
     {\Gamma \vdash *x = e : \tau \Rightarrow \Gamma'}
   %
   \\
   \inferrule*[left=Fn-Call]
     { 
-      (\{a \mapsto \tau_a, \dots\}, \{\alpha \doteq \mu(a), \dots, \varphi_{\alpha}, \dots\}) \preceq \Gamma
+      (\mu, \alpha \doteq \mu(a) \wedge \dots \wedge \varphi_{\alpha} \wedge\dots) \preceq (\mu, \Phi)
       \\ f : (\{ \alpha \mid \varphi_{\alpha} \} \Rightarrow \{ \alpha' \mid \varphi'_{\alpha} \}, \dots)
     }
-    {\Gamma \vdash f(a, \dots)  \Rightarrow (\mu[a \mapsto \alpha', \dots], \sigma \wedge \varphi'_{\alpha} \wedge \dots)}
+    {(\mu, \Phi) \vdash f(a, \dots)  \Rightarrow (\mu[a \mapsto \alpha', \dots], \Phi \wedge \varphi'_{\alpha} \wedge \dots)}
   %
   \\
   \inferrule*[left=Intro-Sub]
@@ -370,8 +383,8 @@ We write:
 
 \[
   \inferrule*[left=$\preceq$-Ty]
-    {\sigma \wedge \varphi'[\beta \triangleright \alpha ] \vDash \varphi}
-    {\Gamma = (\mu, \sigma) \vdash \{ \alpha \mid \varphi\} \preceq \{ \beta \mid \varphi' \}}
+    {\Phi \wedge \varphi'[\beta \triangleright \alpha ] \vDash \varphi}
+    {\Gamma = (\mu, \Phi) \vdash \{ \alpha \mid \varphi\} \preceq \{ \beta \mid \varphi' \}}
 \]
 
 alternative (should be equivalent):
@@ -391,24 +404,30 @@ alternative (should be equivalent):
 \[
   \inferrule*[left=$\preceq$-Ctx]
     {
-      \sigma'[\mu(\alpha) \triangleright \mu'(\alpha)\ \mid \alpha \in dom(\mu)] \vDash \sigma 
+      \Phi'[\mu(\alpha) \triangleright \mu'(\alpha)\ \mid \alpha \in dom(\mu)] \vDash \Phi 
       \\ dom(\mu) \subseteq dom(\mu')
     }
-    {(\sigma, \mu) \preceq (\sigma', \mu')}
+    {(\Phi, \mu) \preceq (\Phi', \mu')}
 \]
 
 \subsection{Soundness of the Type System}
 
-As usual, we consider the two properties (see Pierce \cite[p. 95]{pierce_types_2002}) of a type system when assessing the correctness of LiquidRust:
+As usual, we consider the three properties (see Pierce \cite[p. 95, p.167]{pierce_types_2002}) of a type system when assessing the correctness of MiniCorten:
 
 \begin{enumerate}
-  \item progress: 
+  \item Progress: 
     \todo{need to show for program or term?}
     If $t$ is closed and well-typed, then $t$ is a value or $t \leadsto t'$, where $t'$ is a value.
-  \item preservation: If $\Gamma \vdash e : \tau \Rightarrow \Gamma$ and $e \leadsto e'$, then $\Gamma \vdash e' : \tau \Rightarrow \Gamma$
+  \item Preservation: If $\Gamma \vdash e : \tau \Rightarrow \Gamma$ and $e \leadsto e'$, then $\Gamma \vdash e' : \tau \Rightarrow \Gamma$
+  \item State Conformance: A state $\sigma$ is conformant with respect to a typing context $\Gamma$ (written as $\sigma : \Gamma$), iff $\bigwedge_{x \in \text{Var}} \mu(x) \doteq \sigma(x) \vDash \Gamma$
 \end{enumerate}
 
-\subsection{Progress}
+The state conformance rule differs from the usual rule in two ways. Firstly we consider the runtime value instead of the runtime type. Secondly there needs to be one set of variable assignments that satisfies all predicates in $\Gamma$. 
+
+Because MiniCorten is based on Rust, we will assume, that progress, as well as preservation for the base-types. This includes preservation of type- and ownership-safety. Thus it is sufficient to prove, that assuming these properties hold, preservation of the refinement types is holds.
+
+\subsection{Preservation}
+
 
 By induction over the typing derivations $\Gamma \vdash t : \tau \Rightarrow \Gamma'$.
 

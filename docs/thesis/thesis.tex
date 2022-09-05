@@ -6,6 +6,7 @@
 \usepackage{listings}
 \usepackage{xargs}
 \usepackage{simplebnf}
+\usepackage{float}
 \usepackage{xcolor}
 \usepackage{ amsmath }
 \usepackage{mathpartir}
@@ -45,7 +46,63 @@
 
 \tableofcontents
 
+\begin{abstract}
+  
+Software correctness is a central goal for software development.
+One way to improve correctness is using strong and descriptive types and verifying them with type systems.
+In particular Refinement Types demonstrated, that even with a verification system that is restricted to a decidable logic, intricate properties can be expressed and verified in a lightweight and gradual way.
+However existing approaches for adapting Refinement Types from functional to imperative languages proved hard without compromising on at least one of core features of Refinement Types.
+% I argue that a base language restricted to unique mutable references will make
+This thesis aims to design a Refinement Type system without such compromises by taking advantage of Rust's restriction to unique mutable references. 
+I will define a Refinement Type language and typing rules and argue for their soundness. Additionally I will implement a prototype verifier to evaluate the effectiveness of the approach on selected examples.
+
+\end{abstract}
+
+
+
+
 \section{Introduction}
+
+% With increasing reliance on increasingly complex software, ensuring correctness of programs is a vital concern to software development.
+With increasing amount and reliance of software, ensuring the correctness of programs is a vital concern for the future of software development.
+Although research in this area has made good progress, most approaches are not accessible enough for general adoption by the developers. Especially in light of a predicted shortage of developers\cite{breaux_2021_2021-1}, it is not sufficient to require developers to undergo year-long training in specialized and complex verification methods to ensure the correctness of their software. It is therefore crucial to integrate with their existing tooling and workflows to ensure the future high quality of software.
+One avenue for improving accessability for functional verification is extending the expressiveness of the type system to cover more of the correctness properties.
+Using type systems for correctness was traditionally prevalent in purely functional languages where evolving states are often represented by evolving types, offering approachable and gradual adoption of verification methods. Tracing evolving states in the type system would be especially useful for languages with mutability, since substantial parts of the behaviour of the program is expressed as mutation of state. In particular Rust seems like a promising target language, because mutability is already tracked precisely and thus promising functional verification for relatively minimal effort on the programmer's part.
+
+
+\section{Use Case Analysis}
+
+To gain some understanding of how relevant mutability is in Rust, all published Rust crates (Rusts version packages) published on crates.io with at least 10 versions were analysed\footnote{The limit of 10 versions is used to eliminate inactive and placeholder packages}. The analysis uses the syntactical structure to infer mutability information about the following various AST items:
+\begin{itemize}
+	\item Local Variable Definitions. These can be tracked with high confidence
+	\item Parameters, which are considered immutable if they are passed as immutable references or owned.
+	\item Function Definitions, which are considered immutable, iff all parameters considered immutable.
+	\item Arguments. Hard to track
+	\item Function Calls, which are considered immutable, iff all arguments are considered immutable.
+\end{itemize}
+A total of around 52 million items were found in 228263 files in a combined code-base size of over 64 million lines of Rust code (without comments and white space lines)\footnote{Calculated with \texttt{cloc}}
+
+% from cloc
+% ----------------------------------------------------------------------------------------
+% Language                              files          blank        comment           code
+% ----------------------------------------------------------------------------------------
+% Rust                                 228263        5664979       10317162       64193670
+% C                                     32945        1539542        1979846       13468919
+% C++                                   18084        1263696        1093652        7956897
+% JSON                                  15838           1897              0        6424252
+% C/C++ Header                          31619        1152322        2015896        6284146
+% XML                                    5142          25277          25773        4807556
+% Assembly                               4146         534785         582345        2631991
+
+
+Figure~\ref{fig:mutabillity_by_category} shows the ratio of mutable to immutable items. Note that about 30\% of local variables are defined mutable while just 10\% to 20\% of parameters are mutable and less than 10\% of functions have mutable parameters at all.
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=0.9\linewidth, clip, trim={0.5cm 6cm 0.5cm 6cm}]{../mutability_by_category.pdf}
+	\caption{Ratio of Immutable to Mutable Versions of Different AST Items. Items are Counted by Unique Occurrences}
+	\label{fig:mutabillity_by_category}
+\end{figure}
 
 \section{The Case for Rust as a Target Language}
 
@@ -373,5 +430,24 @@ By induction over the typing derivations $\Gamma \vdash t : \tau \Rightarrow \Ga
 \subsection{Proof of the Gauss Summation Formula}
 
 \section{Related Work}
+
+There currently does not exist an implementation of refinement types for Rust.
+
+Relevant papers originate from two lines of work. Firstly additions to refinement types for mutability, asynchronous execution etc. and secondly other verification frameworks for Rust.
+
+For example, Lanzinger \cite{lanzinger_property_2021} successfully adapted refinement types to Java, which allows the user to check, that property types described by java annotations hold true throughout the program. At this point in time, specification and verification is limited to immutable (\code{final}) data.
+
+Kloos et al. \cite{kloos_asynchronous_2015} extended refinement types to mutable and asynchronous programs. The paper explores how changes to possibly aliased memory cells can be tracked throughout a OCaml program. For that purpose the types are extended by a set of requirements on memory objects, which track distinctness and refined types of these memory cells. In contrast to OCaml, Rust already guarantees that mutable memory is not aliased and in particular \textit{all mutable memory locations must be accessible by a variable name in the current context}, which offers substantial advantages in terms of simplicity to specification and verification of Rust programs.
+
+Refinement types are also used in other applications. For example Graf et al. \cite{graf_lower_2020} use refinement types to check the exhaustiveness of pattern matching rules over complex (G)ADT types in Haskell. To check the exhaustiveness of patterns in Liquid Rust with ADTs may require similar approaches.
+
+In terms of alternative verification approaches, Prusti\cite{astrauskas_leveraging_2019} is notable, because of their work on formalizing the full Rust semantics, including \code{unsafe}. Prusti is a heavy-weight functional verification framework for Rust; based on separation logic.
+
+Alternative verification approaches also exists: For example RustHorn\cite{matsushita_rusthorn_2020} employs constrained horn clauses based verification to Rust. Particularity relevant for this thesis is the novel formalization for mutable references used in the paper. The authors stipulate that mutable references should be specified by a pre- and post-state from before a reference is borrowed to after it is returned.
+
+The notion of Abstract Refinement Types that this thesis is based on is defined by Vazou et al. \cite{vazou_abstract_2013}. The basic idea is to allow the programmer to "refine" language types with predicates from a decidable logic. The type system has a notion of subtyping for refined types, where one type is a subtype of another if one predicate implies the other.
+
+
+\printbibliography
 
 \end{document}

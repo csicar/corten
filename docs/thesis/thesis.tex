@@ -30,6 +30,7 @@
 \newcommand{\code}[1]{\texttt{#1}}
 
 \newcommand{\mtext}[1]{$\text{#1}$}
+\newcommand{\tuple}[2]{\langle #1 \mid #2 \rangle}
 
 
 \newcommand{\ccolon}[0]{: }
@@ -126,7 +127,7 @@ Astrauskas et al. also found, that "However, with 21.3'\% of crates containing s
 
 I makes sense to further distinguish between libraries and executables crates: Libraries are intendet to be used by other Rust programs. Usage of unsafe in libraries may not be as problematic as in executables, because libraries are written once but used by many applications, justifying higher verification effort.
 
-In our analysis, we found, that firstly crates.io contains significantly more libraries than binaries (see Figure \ref{fig:crate_types}). And secondly libraries are much more likely to use \code{unsafe} Rust. Table shows the result of my own analysis. Where uses of \code{unsafe} are counted and grouped by crate type (see Table \ref{tab:unsafe-uses-by-crate}). 
+In our analysis, we found, that firstly crates.io contains significantly more libraries than binaries\footnote{Libraries and Executables are distinguished by checking if they contain \code{bin} or \code{lib} target or one of the corresponing files according to the cargo naming convention.} (see Figure \ref{fig:crate_types}). And secondly libraries are much more likely to use \code{unsafe} Rust. Table shows the result of my own analysis. Where uses of \code{unsafe} are counted and grouped by crate type (see Table \ref{tab:unsafe-uses-by-crate}). 
 The data in the table includes all crates except \code{windows-0.32.0}, which alone contains \numprint{233608} uses of \code{unsafe}. Nearly $2 / 3$ of all other library \code{unsafe} combined.
 Looking at the distribution of unsafe uses in Figure \ref{fig:unsafe-hist}, we can see, that this is an exception: Most other libraries do not use that much unsafe statements. We can also see, that even if a executable crate uses \code{unsafe}, it uses few 
 
@@ -218,6 +219,10 @@ Rust's main disadvantage as a target language it its size: There is a lot of syn
 
 The goal is to remove as much incidental complexity as possible without compromising to the central topic of research: How to extend LiquidTypes to mutability under the presence of Rust's ownership model.
 
+\subsection{Features}
+
+\label{subsubsec:mutable-references}\subsubsection{Mutable References}
+
 \subsection{Syntax}
 
 \todo{Call it CortenRust (after Weathering Steel)}
@@ -290,35 +295,60 @@ The semantics loosely based on Jung's MiniRust.
 
 Another difference between Rust and MiniCorten is of course the addition of refinement types. 
 
-In terms of the formal description, the rules are similar to Pierce's \cite[p. 166f]{pierce_types_2002-3} Reference language. The main difference is, that in Rust, every piece of data has a unique, known owner. This fact makes the concept of locations redundant. Instead we treat $\code{ref } x$ as a value itself. The following definitions show the new execution rules.
+In terms of the formal description, the rules are similar to Pierce's \cite[p. 166f]{pierce_types_2002-3} Reference language. % Also: Semantik von progrmmiersprachen WhileT p.45
+The main difference is, that in Rust, every piece of data has a unique, known owner. This fact makes the concept of locations redundant. Instead we treat $\code{ref } x$ as a value itself. The following definitions show the new execution rules.
 
 \begin{definition}[Execution-State]
   The state of execution is given by $\sigma : \text{PVar} \to \text{Value}$. The set of function declarations is constant and given by $\Sigma : \text{Fn-Name} \to ((\text{Arg}_1, \dots, \text{Arg}_n), \text(ReturnValue))$
 \end{definition}
 
-\begin{definition}[Small-Step Semantics of MiniCorten: $t \mid \mu \leadsto t' \mid \mu'$]
+\begin{definition}[Small-Step Semantics of MiniCorten: $\tuple{e}{\sigma} \leadsto \tuple{e'}{\sigma'}$]
 
 
 \begin{gather*}
   \inferrule*[left=SS-Assign]
     {\star}
-    {x = v \mid \mu \leadsto \code{unit} \mid \mu[x \mapsto v]}
+    {x = v \mid \sigma \leadsto \code{unit} \mid \sigma[x \mapsto v]}
+  \inferrule*[left=SS-Assign-Inner]
+    {t \mid \sigma \leadsto t' \mid \sigma'}
+    {x = t \mid \sigma \leadsto x = t' \mid \sigma'}
+  \\
+  \inferrule*[left=SS-Decl]
+    {\star}
+    {\tuple{\code{let } x = v}{\sigma} \leadsto \tuple{unit}{\sigma[ x \mapsto v]}}
   \\
   \inferrule*[left=SS-Deref]
-    {\mu(x) = v}
-    {* \code{ref } x \mid \mu \leadsto v \mid \mu}
-  \\
+    {\sigma(x) = v}
+    {* \code{ref } x \mid \sigma \leadsto v \mid \sigma}
   \inferrule*[left=SS-Deref-Inner]
-    {t \mid \mu \leadsto t' \mid \mu'}
-    {* t \mid \mu \leadsto * t' \mid \mu'}
+    {t \mid \sigma \leadsto t' \mid \sigma'}
+    {* t \mid \sigma \leadsto * t' \mid \sigma'}
   \\
   \inferrule*[left=SS-Ref-Inner]
-      {t \mid \mu \leadsto t' \mid \mu'}
-      {\code{ref } t \mid \mu \leadsto \code{ref } t' \mid \mu'}
+      {t \mid \sigma \leadsto t' \mid \sigma'}
+      {\code{ref } t \mid \sigma \leadsto \code{ref } t' \mid \sigma'}
   \\
-  \inferrule*[left=SS-Assign-Inner]
-      {t \mid \mu \leadsto t' \mid \mu'}
-      {x = t \mid \mu \leadsto x = t' \mid \mu'}
+  \inferrule*[left=SS-Seq-Inner]
+      {e_1 \mid \sigma \leadsto e_1' \mid \sigma'}
+      {e_1; e_2 \mid \sigma \leadsto e_1', e_2 \mid \sigma'}
+  \inferrule*[left=SS-Seq-N]
+    {\star}
+    {\code{unit}; e_2 \mid \sigma \leadsto e_2 \mid \sigma'}
+  \\
+  \inferrule*[left=SS-IF-T]
+    {\sigma(x) = \code{true}}
+    {\tuple{\code{if } x\ \{ e_t \} \code { else } \{ e_e \} }{\sigma} \leadsto \tuple{e_t}{\sigma}}
+  \inferrule*[left=SS-IF-F]
+    {\sigma(x) = \code{false}}
+    {\tuple{\code{if } x\ \{ e_t \} \code { else } \{ e_e \} }{\sigma} \leadsto \tuple{e_e}{\sigma}}
+  \\
+  \inferrule*[left=SS-While]
+    {\star}
+    { 
+      \tuple{ \code{while } e_c\ \{\ e_b \}}{\sigma} 
+      \leadsto 
+      \tuple{ \code{if } e_c \{ e_b;  \code{while } e_c \{ e_b \} \} { \code{ else } } \{ \code{unit} \} }{\sigma} 
+    }
 \end{gather*}
 
 \end{definition}
@@ -403,7 +433,7 @@ We write:
   \\
   \inferrule*[left=Assign]
     {\Gamma \vdash e : \{ \beta \mid \varphi \} \Rightarrow \Gamma'}
-    {\Gamma \vdash x = e : \tau \Rightarrow \Gamma' [x \mapsto \beta], \varphi}
+    {\Gamma \vdash x = e : \code{unit} \Rightarrow \Gamma' [x \mapsto \beta], \varphi}
   %
   \\
   \inferrule*[left=Assign-Strong]
@@ -430,10 +460,12 @@ We write:
   \\
   \inferrule*[left=Fn-Call]
     { 
-      (\mu, \alpha \doteq \mu(a) \wedge \dots \wedge \varphi_{\alpha} \wedge\dots) \preceq (\mu, \Phi)
-      \\ f : (\{ \alpha \mid \varphi_{\alpha} \} \Rightarrow \{ \alpha' \mid \varphi'_{\alpha} \}, \dots)
+      \text{subst} = ... 
+      \\
+      \\ (\mu[subst], \alpha \doteq \mu(a) \wedge \dots \wedge \varphi_{\alpha} \wedge\dots) \preceq (\mu, \Phi)
+      \\ f : (\{ \alpha \mid \varphi_{\alpha} \} \Rightarrow \{ \alpha' \mid \varphi'_{\alpha} \}, \dots) \to \tau
     }
-    {(\mu, \Phi) \vdash f(a, \dots)  \Rightarrow (\mu[a \mapsto \alpha', \dots], \Phi \wedge \varphi'_{\alpha} \wedge \dots)}
+    {(\mu, \Phi) \vdash f(a, \dots, \&mut b, \dots) : \tau \Rightarrow (\mu[a \mapsto \alpha', \dots, subst^{-1}], \Phi \wedge \varphi'_{\alpha} \wedge \dots)}
   %
   \\
   \inferrule*[left=Intro-Sub]
@@ -442,6 +474,131 @@ We write:
       \\ \Gamma \vdash \tau \preceq \tau'
     }
     {\Gamma \vdash e \texttt{ as } \tau': \tau'}
+\end{gather*}
+
+\subsection{Try: Statements $\Gamma \vdash s \Rightarrow \Gamma'$}
+
+\begin{gather*}
+  \inferrule*[left=If]
+    {
+      \Gamma \vdash \mu(x) : \text{bool} \Rightarrow \Gamma
+      \\ \Gamma, \mu(x) \doteq \code{true} \vdash s_t \Rightarrow \Gamma'
+      \\ \Gamma, \mu(x) \doteq \code{false} \vdash s_e \Rightarrow \Gamma'
+    }
+    {\Gamma \vdash \text{if } x \text{ then }s_t\text{ else } s_e \Rightarrow \Gamma'}
+  %
+  \\
+  \inferrule*[left=While]
+    {
+      \Gamma_I, \mu(x) \doteq \code{true} \vdash s \Rightarrow \Gamma_I' 
+      \\ \Gamma_I', \mu(x) \doteq \code{true} \preceq \Gamma_I
+    }
+    {\Gamma_I \vdash \texttt{while } x \{ s \} \Rightarrow \Gamma_I,\mu(x) \doteq \code{false}}
+  %
+  \\
+  \inferrule*[left=Seq]
+    {
+      \Gamma \vdash s_1 \Rightarrow \Gamma'
+      \\ \Gamma' \vdash s_2 \Rightarrow \Gamma''
+    }
+    {\Gamma \vdash s_1 ; s_2 \Rightarrow \Gamma''}
+  %
+  \\
+  \inferrule*[left=Decl]
+    {
+      \Gamma \vdash e :  \{ \beta \mid \varphi \}
+    }
+    {\Gamma \vdash \code{let } x = e  \Rightarrow \Gamma'[ x \mapsto \beta], \varphi}
+  %
+  \\
+  \inferrule*[left=Assign]
+    {\Gamma \vdash e : \{ \beta \mid \varphi \}}
+    {\Gamma \vdash x = e \Rightarrow \Gamma' [x \mapsto \beta], \varphi}
+  %
+  \\
+  \inferrule*[left=Assign-Strong]
+    {
+      \Gamma \vdash e : \{ \beta \mid \varphi \}
+      \\ \Gamma \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y\}
+    }
+    {\Gamma \vdash *x = e \Rightarrow \Gamma [y \mapsto \beta], \varphi}
+  %
+  \\
+  \inferrule*[left=Assign-Weak]
+    {
+      \Gamma \vdash e : \tau
+      \\ \Gamma' \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y_1 \vee \dots \vee \alpha \doteq \&y_n \}
+      \\ \Gamma \vdash \tau \preceq \{ \beta_1 \mid \varphi_1 \}
+      \\ \Gamma[x \mapsto \beta_1], \varphi_1 \preceq \Gamma
+      \\\\ \dots
+      \\\\
+      \\ \Gamma \vdash \tau \preceq \{ \beta_n \mid \varphi_n \}
+      \\ \Gamma[x \mapsto \beta_n], \varphi_n \preceq \Gamma'
+      }
+    {\Gamma \vdash *x = e \Rightarrow \Gamma'}
+  %
+  \\
+  \inferrule*[left=Fn-Call]
+    { 
+      \text{subst} = ... 
+      \\
+      \\ (\mu[subst], \alpha \doteq \mu(a) \wedge \dots \wedge \varphi_{\alpha} \wedge\dots) \preceq (\mu, \Phi)
+      \\ f : (\{ \alpha \mid \varphi_{\alpha} \} \Rightarrow \{ \alpha' \mid \varphi'_{\alpha} \}, \dots) \to \tau
+    }
+    {(\mu, \Phi) \vdash \code{let res} = f(a, \dots, \code{\&mut} b, \dots) \Rightarrow (\mu[a \mapsto \alpha', \dots, subst^{-1}], \Phi \wedge \varphi'_{\alpha} \wedge \dots)}
+\end{gather*}
+
+\paragraph*{Expressions: $\Gamma \vdash e : \tau$}
+
+\begin{gather*}
+  \inferrule*[left=Lit]
+    {l \text{ fresh} \\ \text{base\_ty}(v) = b}
+    {\Gamma \vdash v: \{ l : b \mid l \doteq v\} }
+  %
+  \\
+  \inferrule*[left=Var]
+    {\alpha \text{ fresh} \\ \mu(x) = \beta}
+    {\Gamma = (\mu, \Phi)\vdash x : \{ \alpha : b \mid \beta \doteq \alpha \} }
+  %
+  \\
+  \inferrule*[left=Var-Ref]
+    {\Gamma \vdash y : \tau \\ \Gamma \vdash x : \{ \beta : \&b \mid \beta \doteq \&y \}}
+    {\Gamma \vdash *x : \tau }
+  %  
+  \\
+  \inferrule*[left=Add]
+    {
+      \gamma \text{ fresh} 
+      \\ \mu(x_1) = \alpha
+      \\ \mu(x_2) = \beta
+    }
+    {\Gamma \vdash x_1 + x_2 : \{ \gamma: b \mid \gamma \doteq \alpha + \beta \} }
+  %
+  \\
+  \inferrule*[left=Intro-Sub]
+    {
+      \Gamma \vdash e : \tau 
+      \\ \Gamma \vdash \tau \preceq \tau'
+    }
+    {\Gamma \vdash e \texttt{ as } \tau': \tau'}
+\end{gather*}
+
+
+\subsection{Function Declaration Type Checking}
+
+Without loss of generality, we assume arguments are ordered by their type: First immutable / owner arguments and then mutable arguments.
+
+When handling mutable references in parameters some sublteties need to be considered. The function can change both the referenced \textit{value} as well as the reference \textit{location}. To describe the referenced value is normally done using the $\{ \alpha \mid \alpha \doteq \&b\}$ syntax. The question arrises: If $\alpha$ was the logic variable for a parameter, what should be the analog for $b$? In contrast to local variables, there is no variable representing the referenced value for parameters. As seen in section \ref{subsubsec:mutable-references}, using the dereference operator would come with a lot of complications. 
+Instead we introduce $arg^i_n$, a special variable denoting the intial abstract value (i.e. stack location), that the mutable reference of argument $n$ points to. $i$ denotes the level of nesting: For the $n$th parameter with the Rust type \code{\&mut \&mut i32} we would generate $arg^1_n$ and $arg^2_n$.
+
+\begin{gather*}
+  \inferrule*[left=Fn-Decl]
+    { (\{ a_1 \mapsto \alpha_1, b_1 \mapsto \delta_1 \}, \varphi^\alpha_1 \wedge \dots \wedge \delta_1 = arg^1_1 \wedge \varphi^\beta_1 \wedge \dots ) \vdash \bar s \Rightarrow \Gamma'
+      \\ \Gamma' \vdash s_{res} : \tau_{res} \Rightarrow \Gamma''
+      \\ \Gamma'' \vdash \tau_{res} \preceq \tau
+      \\ \Gamma'' \preceq (\{\beta_1 \mapsto \gamma_1\}, \varphi^\gamma_1 )
+    }
+    {\code{fn } f(a_1 : \{ \alpha_1 \mid \varphi^\alpha_1 \}, \dots, b_1 : \{ \beta_1 \mid \varphi^\beta_1 \Rightarrow \gamma_1 \mid \varphi^\gamma_1\}) \to \tau \{ \bar s; s_{res} \}}
 \end{gather*}
 
 \subsection{Sub-Typing Rules: $\Gamma \vdash \tau \preceq \tau'$}
@@ -484,26 +641,51 @@ This means that types may need to be changed atomically.
 
 As usual, we consider the three properties (see Pierce \cite[p. 95, p.167]{pierce_types_2002}) of a type system when assessing the correctness of MiniCorten:
 
+\begin{definition}
+  State Conformance: A state $\sigma$ is conformant with respect to a typing context $\Gamma = (\mu, \varphi)$ (written as $\sigma : \Gamma$), iff:
+  $$\vDash \left(\bigwedge_{x \in \text{Var}} \mu(x) \doteq \sigma(x)\right) \to \varphi$$
+   I.e. the a execution's value assignments imply the type refinements
+\end{definition}
+
 \begin{enumerate}
   \item Progress: 
     \todo{need to show for program or term?}
     If $t$ is closed and well-typed, then $t$ is a value or $t \leadsto t'$, where $t'$ is a value.
   \item Preservation: If $\Gamma \vdash e : \tau \Rightarrow \Gamma$ and $e \leadsto e'$, then $\Gamma \vdash e' : \tau \Rightarrow \Gamma$
-  \item State Conformance: A state $\sigma$ is conformant with respect to a typing context $\Gamma$ (written as $\sigma : \Gamma$), iff $\bigwedge_{x \in \text{Var}} \mu(x) \doteq \sigma(x) \vDash \Gamma$
+  \item Preservation of State Conformance
 \end{enumerate}
 
 The state conformance rule differs from the usual rule in two ways. Firstly we consider the runtime value instead of the runtime type. Secondly there needs to be one set of variable assignments that satisfies all predicates in $\Gamma$. 
 
 Because MiniCorten is based on Rust, we will assume, that progress, as well as preservation for the base-types. This includes preservation of type- and ownership-safety. Thus it is sufficient to prove, that assuming these properties hold, preservation of the refinement types is holds.
 
-\subsection{Preservation}
+
+\begin{lemma}
+  Preservation of State Conformance: If $\Gamma \vdash e : \tau \Rightarrow \Gamma'$, $\sigma : \Gamma$ and $\tuple{t}{\sigma} \leadsto \tuple{t'}{\sigma'}$, then  $\sigma' : \Gamma$
+\end{lemma}
 
 
-By induction over the typing derivations $\Gamma \vdash t : \tau \Rightarrow \Gamma'$.
+\begin{proof} Rule Induction over $\tuple{t}{\sigma} \leadsto \tuple{t'}{\sigma'}$
+\begin{itemize}
+  \item \textsc{Case SS-Assign}
+    $\sigma' = \sigma[x \mapsto v]$. With rule inversion \textsc{Assign}: \code{unit} and post state: $\Gamma'[x \mapsto \beta], \varphi$ with $\Gamma \vdash e : \{ \beta \mid \varphi \}$.
+    
+    $e$ is a value, because of the requirement in \textsc{SS-Assign}. By rule inversion \textsc{Lit} over assumption $\Gamma \vdash v: \{ \beta \mid \varphi \} \Rightarrow \Gamma$: $\varphi = (\beta \doteq v)$
 
-\mtext{LIT} is trivial, \mtext{Var} and \mtext{VAR-REF} cannot occur because $t$ is closed.
+    $\mu'(x) = \beta$, $\sigma'(x) = v$ and induction hypothesis $\sigma : \Gamma$. Since $\mu'(x) \doteq \varphi(x) \to \varphi$ is trivially valid. XXXBanane gives us the goal.
+  \item \textsc{Case Var} 
+\end{itemize}
+\end{proof}
 
-\paragraph*{Case SEQ} 
+\begin{lemma}
+  State Conformance is XXXBanane: If $\sigma : \Gamma$, $(\beta = v) \to \varphi$ then
+    $\sigma[x \mapsto v] : \Gamma[x \mapsto \beta] \wedge \varphi$
+\end{lemma}
+
+\begin{proof}
+  $$\vDash \left(\bigwedge_{x \in \text{Var}} \mu(x) \doteq \sigma(x)\right) \to \varphi$$
+  ...?
+\end{proof}
 
 \section{Implementation}
 

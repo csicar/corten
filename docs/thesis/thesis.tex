@@ -11,6 +11,8 @@
 \usepackage{numprint}
 \usepackage{ amsmath }
 \usepackage{mathpartir}
+\usepackage{minted}
+\usemintedstyle{monokai}
 \usepackage{amsthm}
 \usepackage{csquotes}
 \usepackage[british]{babel}
@@ -49,13 +51,13 @@
 \tableofcontents
 
 \begin{abstract}
-  
+
 Software correctness is a central goal for software development.
 One way to improve correctness is using strong and descriptive types and verifying them with type systems.
 In particular Refinement Types demonstrated, that even with a verification system that is restricted to a decidable logic, intricate properties can be expressed and verified in a lightweight and gradual way.
 However existing approaches for adapting Refinement Types from functional to imperative languages proved hard without compromising on at least one of core features of Refinement Types.
 % I argue that a base language restricted to unique mutable references will make
-This thesis aims to design a Refinement Type system without such compromises by taking advantage of Rust's restriction to unique mutable references. 
+This thesis aims to design a Refinement Type system without such compromises by taking advantage of Rust's restriction to unique mutable references.
 I will define a Refinement Type language and typing rules and argue for their soundness. Additionally I will implement a prototype verifier to evaluate the effectiveness of the approach on selected examples.
 
 \end{abstract}
@@ -80,13 +82,13 @@ In this thesis, we will only consider safe Rust, which is the subset of Rust mos
 
 Rust features a few unusual design decisions that profoundly influence the design of verification systems for it. The following paragraphs will elaborate on this.
 
-\paragraph{Aliasing XOR Mutabillity} The key behind Rusts type system is, that for every variable at every point during the execution, that variable is either aliased or mutable, but never both at the same time. 
+\paragraph{Aliasing XOR Mutabillity} The key behind Rusts type system is, that for every variable at every point during the execution, that variable is either aliased or mutable, but never both at the same time.
 
 Rust accomplished this by introducing three types of access permissions for a variable, which are associated with every scope\footnote{In modern Rust, this model was generalized to cover more cases, but the idea is still valid}:
 \begin{enumerate}
-  \item The scope \textit{owns} the variable. This guarantees, that no other scope has access to any part of the variable and allows the scope to create references to (part of) the variable. 
+  \item The scope \textit{owns} the variable. This guarantees, that no other scope has access to any part of the variable and allows the scope to create references to (part of) the variable.
   \item The scope (immutably) \textit{borrows} the variable. This guarantees, that as long as the variable is used, its \textit{value will not change} and allows the scope to further lend the variable to other scoped.
-  \item The scope \textit{mutably borrows} the variable. This guarantees, that there are no other active references to any part of the memory of the variable. 
+  \item The scope \textit{mutably borrows} the variable. This guarantees, that there are no other active references to any part of the memory of the variable.
 \end{enumerate}
 
 A consequence of these rules it, that at any time, every piece of memory has a unique and compile-time known owner. There are no reference cycles.
@@ -113,23 +115,23 @@ assert(cell, 2)
 
 \section{Usage Of Rust}
 
-Before designing a system for Rust, it makes sense to gain some understanding of how Rust is used. For this purpose we will look at two key features of Rust, that influence how an approchable verification should look like. 
+Before designing a system for Rust, it makes sense to gain some understanding of how Rust is used. For this purpose we will look at two key features of Rust, that influence how an approchable verification should look like.
 Firstly \code{unsafe} Rust with similar guarantees to C would make verification and specification significantly harder. But if the use of \code{unsafe} is limited, like intended by the language designers, it would allow us to focus on the save part of Rust and leave the verification of \code{unsafe} Rust to more complex verification systems.
 Secondly with mutability being the main difference to the traditional domain fof Refinement Types, showing the need for covering this area and to what degree of approachability it interesting.
 
 
 \label{ss:unsafe-rust}\subsection{Unsafe Rust}
 
-There is already some research on how \code{unsafe} is used in Rust. For example Astrauskas et al. \cite[]{astrauskas_how_2020} found, that about 76\% of crates did not use any unsafe. On top of that, unsafe signatures are only exposed by 
+There is already some research on how \code{unsafe} is used in Rust. For example Astrauskas et al. \cite[]{astrauskas_how_2020} found, that about 76\% of crates did not use any unsafe. On top of that, unsafe signatures are only exposed by
 
 "The majority of crates (76.4\%) contain no unsafe features at all. Even in most crates that do contain unsafe blocks or functions, only a small fraction of the code is unsafe: for 92.3\% of all crates, the unsafe statement ratio is at most 10\%, i.e., up to 10\% of the codebase consists of unsafe blocks and unsafe functions." \cite[p. 13]{astrauskas_how_2020}
 Astrauskas et al. also found, that "However, with 21.3'\% of crates containing some unsafe statements and – out of those crates – 24.6\% having an unsafe statement ratio of at least 20\%, we cannot claim that developers use unsafe Rust sparingly, i.e., they do not always follow the first principle of the Rust hypothesis." \cite[p. 14]{astrauskas_how_2020}
 
 I makes sense to further distinguish between libraries and executables crates: Libraries are intendet to be used by other Rust programs. Usage of unsafe in libraries may not be as problematic as in executables, because libraries are written once but used by many applications, justifying higher verification effort.
 
-In our analysis, we found, that firstly crates.io contains significantly more libraries than binaries\footnote{Libraries and Executables are distinguished by checking if they contain \code{bin} or \code{lib} target or one of the corresponing files according to the cargo naming convention.} (see Figure \ref{fig:crate_types}). And secondly libraries are much more likely to use \code{unsafe} Rust. Table shows the result of my own analysis. Where uses of \code{unsafe} are counted and grouped by crate type (see Table \ref{tab:unsafe-uses-by-crate}). 
+In our analysis, we found, that firstly crates.io contains significantly more libraries than binaries\footnote{Libraries and Executables are distinguished by checking if they contain \code{bin} or \code{lib} target or one of the corresponing files according to the cargo naming convention.} (see Figure \ref{fig:crate_types}). And secondly libraries are much more likely to use \code{unsafe} Rust. Table shows the result of my own analysis. Where uses of \code{unsafe} are counted and grouped by crate type (see Table \ref{tab:unsafe-uses-by-crate}).
 The data in the table includes all crates except \code{windows-0.32.0}, which alone contains \numprint{233608} uses of \code{unsafe}. Nearly $2 / 3$ of all other library \code{unsafe} combined.
-Looking at the distribution of unsafe uses in Figure \ref{fig:unsafe-hist}, we can see, that this is an exception: Most other libraries do not use that much unsafe statements. We can also see, that even if a executable crate uses \code{unsafe}, it uses few 
+Looking at the distribution of unsafe uses in Figure \ref{fig:unsafe-hist}, we can see, that this is an exception: Most other libraries do not use that much unsafe statements. We can also see, that even if a executable crate uses \code{unsafe}, it uses few
 
 
 \begin{figure}[h]
@@ -189,11 +191,11 @@ A total of around 52 million items were found in 228263 files in a combined code
 % Assembly                               4146         534785         582345        2631991
 
 
-Figure~\ref{fig:mutabillity_by_category} shows the ratio of mutable to immutable items. For each syntactical category, the percentages are given relative to different objects: 
+Figure~\ref{fig:mutabillity_by_category} shows the ratio of mutable to immutable items. For each syntactical category, the percentages are given relative to different objects:
 
 \begin{enumerate}
   \item Total: number of unique occurrences
-  \item Function: number of unique functions. I.e. 76.54\% of functions have a immutable parameter. 
+  \item Function: number of unique functions. I.e. 76.54\% of functions have a immutable parameter.
   \item File: number of unique files
 \end{enumerate}
 
@@ -205,9 +207,9 @@ Figure~\ref{fig:mutabillity_by_category} shows the ratio of mutable to immutable
 	\label{fig:mutabillity_by_category}
 \end{figure}
 
-Unfortunately not there are some areas, where the syntactic analysis is not sufficient. Namely the analysis of function calls and arguments, which is mainly caused by the uncertainty of mutabillity of complex arguments. 
+Unfortunately not there are some areas, where the syntactic analysis is not sufficient. Namely the analysis of function calls and arguments, which is mainly caused by the uncertainty of mutabillity of complex arguments.
 Luckily the data from function definitions and parameters can complete the picture: About 80\% of parameters are immutable and between about 10 and 20\% of parameters are mutable. And less than 10\% of functions have mutable parameters at all.
-When it comes to local variables, Rust users are more liberal in their use of mutability: 
+When it comes to local variables, Rust users are more liberal in their use of mutability:
 About 30\% of local variables are defined mutable.
 
 For verification this means, that the use of mutabillity is wide spread. Especially local variables are often mutable and should therefore a verification system should try to minimize the effort for the user. Mutable parameters are less common, but still need to be accounted for in verification.
@@ -221,7 +223,117 @@ The goal is to remove as much incidental complexity as possible without compromi
 
 \subsection{Features}
 
+This subsection will explain some of the key features of the Corten type system.
+Corten is directly embedded in Rust using two macros. Firstly the macro \code{ty!} can be used in place of a Rust type and adds a predicate to the Rust type, that any inhabitant of that type must satisfy. For example, the type \code{ty!\{ v : i32 | v >= 0\}} stipulates, that a value of Rust type \code{i32} is positive. The second macro is \code{relax\_ctx!\{ ... \}} which will be explained in subsection \ref{subsec:atomic-updates}.
+
 \label{subsubsec:mutable-references}\subsubsection{Mutable References}
+
+The key difference to Refinement Type Systems for functional languages to Rust it the pervasive use of mutation. Therefore the most important feature of Corten it the support for mutation and also mutable references.
+
+The problem with references is the possibility of interdependencies: If one variable is changed, it might effect wether another variable is typed correctly. In listing \ref{lst:mutation} the return value \code{a} is effected by changes done to a different variable \code{a}. Conservative approximation requires, that all possible effects must be tracked.
+
+Corten can accurately track references by phrasing them as predicates. For example the expression \code{\&mut a} will be typed as \code{ty!\{ \_1 : \&mut b | \_1 == \&a \}} (where \code{b} is the Rust type of \code{a}). This is sensible, because in Rust's ownership system, \code{a} must be the unique owner of the memory belonging to \code{a}. 
+A more involved example is given in the evaluation \ref{subsec:evaluation-complex-mutable-ref}
+
+Corten has two ways of dealing with assignment to mutable references: If the reference destination is known, the destination's type will be updated with the assigned values type (i.e. strong update). If there are multiple possible reference destinations, Corten will require the assigned value to satisfy the predicates of all possible destinations (i.e. weak updates). This is a standard approach (For example \cite{kloos_asynchronous_2015}), but more precise in Rust: The set of possible destinations only grows, when it depends on the execution of an optional control flow path. This means most of the time, strong updates are possible and weak updates are only needed if the reference destination is actually dynamic (i.e. dependent on the execution) \footnote{It would also be possible to encode the path condition in the reference type, but this was decided against for the stated goal of simplicity for the user}
+
+
+- importance of tracing return of mutable references
+
+\begin{listing}[h]
+  \begin{minted}{rust}
+    fn client() -> ty!{ v: i32 | v == 4 } {
+        let a = 2; let b = &mut a;
+        *b = 0; // changes a's value
+        let c = &mut b;
+        **c = 4; // changes a's value
+        a
+    }
+  \end{minted}
+  \caption{Example demonstrating interdependencies between mutable references}
+  \label{lst:mutation}
+\end{listing}
+
+\label{subsec:path-sensitivify}\subsection{Path Sensitivify}
+
+Firstly, the type system is path sensitive, meaning that the type system is aware of necessary XXX that need to be passed for an expression to be evaluated. For example listing \ref{lst:max-path-sensitive} shows a function computing the maximum of its inputs. In the then branch, $a$ is only a maximum of $a$ and $b$, because the condition $a > b$ implies it. Corten will symbolically evaluate the condition and store it in its typing context.
+
+\begin{listing}[h]
+  \begin{minted}{rust}
+    fn max(a : ty!{ av: i32 }, b: ty!{ bv: i32 })
+        -> ty!{ v: i32 | v >= av && v >= bv} {
+        if a > b {
+          a as ty!{ x : i32 | x >= av && x >= bv }
+        } else {
+          b
+        }
+    }
+  \end{minted}
+  \caption{Function computing the maximum of its inputs; guaraneeing that the returned value is larger than its inputs}
+  \label{lst:max-path-sensitive}
+\end{listing}
+
+- inference
+- also with mutations
+
+
+\label{subsec:strong-type-updates}\subsection{Strong Type Updates}
+
+\begin{listing}[h]
+  \begin{minted}{rust}
+    fn strong_updates(b: ty!{ bv: i32 | bv > 0}) -> ty!{ v: i32 | v > 2} {
+        let mut a = 2;
+        a = a + b;
+        a
+    }
+  \end{minted}
+  \caption{Example of changes to \code{a}'s value effecting its type}
+  \label{lst:strong-updates}
+\end{listing}
+
+
+
+\label{subsubsec:modularity}\subsubsection{Modularity}
+
+For a verification system to be scalable, it needs to be able modularize a proof. Corten can propagate type information across function calls and by taking advantage of Rust's ownership system, it can do so very accurately. Listing \ref{lst:modular-calls} shows, how an incrementing function \code{inc} can be specified. Only the signature of \code{inc} is necessary for the type checking of \code{client}. Notice, that all of the type information about \code{y} is preserved when \code{inc(x)} is called. There are no further annotations needed to type check this program.
+
+\begin{listing}[h]
+  \begin{minted}{rust}
+    fn inc(a: &mut ty!{ a1: i32 => a2 | a2 == a1 + 1 }) {
+      *a = *a + 1;
+    }
+    fn client(mut x: ty!{ xv: i32 | xv > 2 }) -> ty!{ v: i32 | v > 7 } {
+      let mut y = 2;
+      inc(&mut x); inc(&mut x);
+      inc(&mut y)
+      x + y
+    }
+  \end{minted}
+  \caption{Example showing how Corten allows for accurate type checking in the presence of function calls }
+  \label{lst:modular-calls}
+\end{listing}
+
+
+
+\label{subsec:mutual-reference}\subsection{Mutual Reference}
+
+Complex mutation patterns often result in complex interdependencies. We deem it necessary to allow different types to refer to each other.\todo{why?}
+
+\begin{listing}[h]
+  \begin{minted}{rust}
+      let sum = 0;
+      let i = 0;
+      
+  \end{minted}
+  \caption{Function computing the maximum of its inputs; guaraneeing that the returned value is larger than its inputs}
+  \label{lst:mutual-reference}
+\end{listing}
+
+\label{subsec:atomic-updates}\subsection{Atomic Updates}
+
+- relax ctx
+- non-atomic might not be sufficient
+
 
 \subsection{Syntax}
 
@@ -238,7 +350,7 @@ To simplify the formal definitions and proofs, the language is restricted to ANF
   ;;
   $param$ ::= $ident$ \ccolon  $ty$
   ;;
-  $stmt$ ::= 
+  $stmt$ ::=
     $expr$                                                : expression
     | let mut? $ident$ = $expr$                           : declaration
     | $ident$ = $expr$                                    : assignment
@@ -260,12 +372,12 @@ To simplify the formal definitions and proofs, the language is restricted to ANF
   $ty$ ::= ty!\{ $logic\_ident$ \ccolon $base\_ty$ \cmid $pred$ \} : refinement type
   ;;
   $pred$ ::=
-    $ref\_pred$                                     : predicate for a reference type 
+    $ref\_pred$                                     : predicate for a reference type
     | $value\_pred$                                 : predicate for a value type
   ;;
   $ref\_pred$ ::=
     $logic\_ident$ = \& $ident$
-    | $ref\_pred$ \cdisj $ref\_pred$         : mutable reference 
+    | $ref\_pred$ \cdisj $ref\_pred$         : mutable reference
   ;;
   $value\_pred$ ::=
     $logic\_ident$                : variable
@@ -293,7 +405,7 @@ The semantics are mostly standard. The main difference being that Rust and our s
 
 The semantics loosely based on Jung's MiniRust.
 
-Another difference between Rust and MiniCorten is of course the addition of refinement types. 
+Another difference between Rust and MiniCorten is of course the addition of refinement types.
 
 In terms of the formal description, the rules are similar to Pierce's \cite[p. 166f]{pierce_types_2002-3} Reference language. % Also: Semantik von progrmmiersprachen WhileT p.45
 The main difference is, that in Rust, every piece of data has a unique, known owner. This fact makes the concept of locations redundant. Instead we treat $\code{ref } x$ as a value itself. The following definitions show the new execution rules.
@@ -344,10 +456,10 @@ The main difference is, that in Rust, every piece of data has a unique, known ow
   \\
   \inferrule*[left=SS-While]
     {\star}
-    { 
-      \tuple{ \code{while } e_c\ \{\ e_b \}}{\sigma} 
-      \leadsto 
-      \tuple{ \code{if } e_c \{ e_b;  \code{while } e_c \{ e_b \} \} { \code{ else } } \{ \code{unit} \} }{\sigma} 
+    {
+      \tuple{ \code{while } e_c\ \{\ e_b \}}{\sigma}
+      \leadsto
+      \tuple{ \code{if } e_c \{ e_b;  \code{while } e_c \{ e_b \} \} { \code{ else } } \{ \code{unit} \} }{\sigma}
     }
 \end{gather*}
 
@@ -388,7 +500,7 @@ We write:
   \inferrule*[left=Var-Ref]
     {\Gamma \vdash y : \tau \\ \Gamma \vdash x : \{ \beta : \&b \mid \beta \doteq \&y \}}
     {\Gamma \vdash *x : \tau \Rightarrow \Gamma}
-  %  
+  %
   \\
   \inferrule*[left=If]
     {
@@ -401,7 +513,7 @@ We write:
   \\
   \inferrule*[left=While]
     {
-      \Gamma_I, \mu(x) \doteq \code{true} \vdash s \Rightarrow \Gamma_I' 
+      \Gamma_I, \mu(x) \doteq \code{true} \vdash s \Rightarrow \Gamma_I'
       \\ \Gamma_I', \mu(x) \doteq \code{true} \preceq \Gamma_I
     }
     {\Gamma_I \vdash \texttt{while } x \{ s \} \Rightarrow \Gamma_I,\mu(x) \doteq \code{false}}
@@ -417,7 +529,7 @@ We write:
   \\
   \inferrule*[left=Add]
     {
-      \gamma \text{ fresh} 
+      \gamma \text{ fresh}
       \\ \mu(x_1) = \alpha
       \\ \mu(x_2) = \beta
     }
@@ -459,8 +571,8 @@ We write:
   %
   \\
   \inferrule*[left=Fn-Call]
-    { 
-      \text{subst} = ... 
+    {
+      \text{subst} = ...
       \\
       \\ (\mu[subst], \alpha \doteq \mu(a) \wedge \dots \wedge \varphi_{\alpha} \wedge\dots) \preceq (\mu, \Phi)
       \\ f : (\{ \alpha \mid \varphi_{\alpha} \} \Rightarrow \{ \alpha' \mid \varphi'_{\alpha} \}, \dots) \to \tau
@@ -470,7 +582,7 @@ We write:
   \\
   \inferrule*[left=Intro-Sub]
     {
-      \Gamma \vdash e : \tau 
+      \Gamma \vdash e : \tau
       \\ \Gamma \vdash \tau \preceq \tau'
     }
     {\Gamma \vdash e \texttt{ as } \tau': \tau'}
@@ -490,7 +602,7 @@ We write:
   \\
   \inferrule*[left=While]
     {
-      \Gamma_I, \mu(x) \doteq \code{true} \vdash s \Rightarrow \Gamma_I' 
+      \Gamma_I, \mu(x) \doteq \code{true} \vdash s \Rightarrow \Gamma_I'
       \\ \Gamma_I', \mu(x) \doteq \code{true} \preceq \Gamma_I
     }
     {\Gamma_I \vdash \texttt{while } x \{ s \} \Rightarrow \Gamma_I,\mu(x) \doteq \code{false}}
@@ -539,8 +651,8 @@ We write:
   %
   \\
   \inferrule*[left=Fn-Call]
-    { 
-      \text{subst} = ... 
+    {
+      \text{subst} = ...
       \\
       \\ (\mu[subst], \alpha \doteq \mu(a) \wedge \dots \wedge \varphi_{\alpha} \wedge\dots) \preceq (\mu, \Phi)
       \\ f : (\{ \alpha \mid \varphi_{\alpha} \} \Rightarrow \{ \alpha' \mid \varphi'_{\alpha} \}, \dots) \to \tau
@@ -564,11 +676,11 @@ We write:
   \inferrule*[left=Var-Ref]
     {\Gamma \vdash y : \tau \\ \Gamma \vdash x : \{ \beta : \&b \mid \beta \doteq \&y \}}
     {\Gamma \vdash *x : \tau }
-  %  
+  %
   \\
   \inferrule*[left=Add]
     {
-      \gamma \text{ fresh} 
+      \gamma \text{ fresh}
       \\ \mu(x_1) = \alpha
       \\ \mu(x_2) = \beta
     }
@@ -577,7 +689,7 @@ We write:
   \\
   \inferrule*[left=Intro-Sub]
     {
-      \Gamma \vdash e : \tau 
+      \Gamma \vdash e : \tau
       \\ \Gamma \vdash \tau \preceq \tau'
     }
     {\Gamma \vdash e \texttt{ as } \tau': \tau'}
@@ -588,7 +700,7 @@ We write:
 
 Without loss of generality, we assume arguments are ordered by their type: First immutable / owner arguments and then mutable arguments.
 
-When handling mutable references in parameters some sublteties need to be considered. The function can change both the referenced \textit{value} as well as the reference \textit{location}. To describe the referenced value is normally done using the $\{ \alpha \mid \alpha \doteq \&b\}$ syntax. The question arrises: If $\alpha$ was the logic variable for a parameter, what should be the analog for $b$? In contrast to local variables, there is no variable representing the referenced value for parameters. As seen in section \ref{subsubsec:mutable-references}, using the dereference operator would come with a lot of complications. 
+When handling mutable references in parameters some sublteties need to be considered. The function can change both the referenced \textit{value} as well as the reference \textit{location}. To describe the referenced value is normally done using the $\{ \alpha \mid \alpha \doteq \&b\}$ syntax. The question arrises: If $\alpha$ was the logic variable for a parameter, what should be the analog for $b$? In contrast to local variables, there is no variable representing the referenced value for parameters. As seen in section \ref{subsubsec:mutable-references}, using the dereference operator would come with a lot of complications.
 Instead we introduce $arg^i_n$, a special variable denoting the intial abstract value (i.e. stack location), that the mutable reference of argument $n$ points to. $i$ denotes the level of nesting: For the $n$th parameter with the Rust type \code{\&mut \&mut i32} we would generate $arg^1_n$ and $arg^2_n$.
 
 \begin{gather*}
@@ -626,13 +738,13 @@ alternative (should be equivalent):
 \[
   \inferrule*[left=$\preceq$-Ctx]
     {
-      \Phi'[\mu(\alpha) \triangleright \mu'(\alpha)\ \mid \alpha \in dom(\mu)] \vDash \Phi 
+      \Phi'[\mu(\alpha) \triangleright \mu'(\alpha)\ \mid \alpha \in dom(\mu)] \vDash \Phi
       \\ dom(\mu) \subseteq dom(\mu')
     }
     {(\Phi, \mu) \preceq (\Phi', \mu')}
 \]
 
-In constrast to other refinement type systems, Corten allows types in the context to refer to one another. 
+In constrast to other refinement type systems, Corten allows types in the context to refer to one another.
 For example a type specifications \code{a : \{ $\alpha$ : i32 | $\alpha$ > $\beta$\}, b:  \{ $\beta$: i32 | $\beta$ != $\alpha$\}} would be valid and result in the context $\Gamma = (\emptyset, \alpha \neq \beta \wedge \beta \geq \alpha)$. In the example $0$ is a subtype of \code{a}'s type as long as $\code{b} \geq 1$.
 
 This means that types may need to be changed atomically.
@@ -648,14 +760,14 @@ As usual, we consider the three properties (see Pierce \cite[p. 95, p.167]{pierc
 \end{definition}
 
 \begin{enumerate}
-  \item Progress: 
+  \item Progress:
     \todo{need to show for program or term?}
     If $t$ is closed and well-typed, then $t$ is a value or $t \leadsto t'$, where $t'$ is a value.
   \item Preservation: If $\Gamma \vdash e : \tau \Rightarrow \Gamma$ and $e \leadsto e'$, then $\Gamma \vdash e' : \tau \Rightarrow \Gamma$
   \item Preservation of State Conformance
 \end{enumerate}
 
-The state conformance rule differs from the usual rule in two ways. Firstly we consider the runtime value instead of the runtime type. Secondly there needs to be one set of variable assignments that satisfies all predicates in $\Gamma$. 
+The state conformance rule differs from the usual rule in two ways. Firstly we consider the runtime value instead of the runtime type. Secondly there needs to be one set of variable assignments that satisfies all predicates in $\Gamma$.
 
 Because MiniCorten is based on Rust, we will assume, that progress, as well as preservation for the base-types. This includes preservation of type- and ownership-safety. Thus it is sufficient to prove, that assuming these properties hold, preservation of the refinement types is holds.
 
@@ -669,11 +781,11 @@ Because MiniCorten is based on Rust, we will assume, that progress, as well as p
 \begin{itemize}
   \item \textsc{Case SS-Assign}
     $\sigma' = \sigma[x \mapsto v]$. With rule inversion \textsc{Assign}: \code{unit} and post state: $\Gamma'[x \mapsto \beta], \varphi$ with $\Gamma \vdash e : \{ \beta \mid \varphi \}$.
-    
+
     $e$ is a value, because of the requirement in \textsc{SS-Assign}. By rule inversion \textsc{Lit} over assumption $\Gamma \vdash v: \{ \beta \mid \varphi \} \Rightarrow \Gamma$: $\varphi = (\beta \doteq v)$
 
     $\mu'(x) = \beta$, $\sigma'(x) = v$ and induction hypothesis $\sigma : \Gamma$. Since $\mu'(x) \doteq \varphi(x) \to \varphi$ is trivially valid. XXXBanane gives us the goal.
-  \item \textsc{Case Var} 
+  \item \textsc{Case Var}
 \end{itemize}
 \end{proof}
 
@@ -710,6 +822,8 @@ Because MiniCorten is based on Rust, we will assume, that progress, as well as p
 
 \paragraph*{panic}
 \paragraph*{assert}
+
+\label{subsec:evaluation-complex-mutable-ref}\subsection{Complex Mutable References}
 
 \subsection{Proof of the Gauss Summation Formula}
 

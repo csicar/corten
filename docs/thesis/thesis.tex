@@ -16,9 +16,10 @@
 \usepackage[hashEnumerators,smartEllipses, hybrid]{markdown}
 \usepackage{amsthm}
 \usepackage{csquotes}
+\usepackage{ stmaryrd }
 \usepackage[british]{babel}
 
-\usepackage[bibstyle=numeric, backend=bibtex, sorting=none]{biblatex}
+\usepackage[bibstyle=numeric, backend=bibtex]{biblatex}
 \addbibresource{../Meine Bibliothek.bib}
 
 % \usemintedstyle{monokai}
@@ -255,7 +256,7 @@ This makes both aliasing as well as mutability quite tame:
 If a variable is aliased, it must be immutable and as a result, represents just a value (like in pure functional languages).
 If a variable is mutable, it can not be aliased and as a result, any effect of the mutation is well known and locally visible.
 
-\paragraph{The Case for Rust as a Target Language}
+\subsection{The Case for Rust as a Target Language}
 
 
 Rust justifies a new approach to mutable verification, because it is possible to take advantage of guarantees provided by (safe) Rust's ownership system. 
@@ -276,14 +277,33 @@ In contrast, languages with instance-of-checks allow an implementation of a poly
 
 \paragraph*{What Rust does not solve} Even though Rust simplifies reasoning about mutability and aliasing of mutable data, Rust does not eliminate the need to reason about multiple references to mutable data. For example, Listing \ref{lst:alias-mut} shows how \code{cell}'s type is influenced by changes to \code{r}. This does not mean, that the ownership rule  \textit{mutability XOR aliasing} are broken: Even though both \code{cell} and \code{r} are mutable, but only one is active.
 
-\label{lst:alias-mut}\begin{lstlisting}
-let mut cell = 2;
-let r = &mut cell;
-r+= 1;
-assert(cell, 2)
-\end{lstlisting}
+\begin{listing}[h]
+  \begin{minted}{rust}
+    let mut cell = 2;
+    let r = &mut cell;
+    r+= 1;
+    cell += 1;
+    assert!(cell, 3)
+  \end{minted}
+  \caption{Example of an apparent violation of ownership rules}
+  \label{lst:alias-mut}
+\end{listing}
 
 \section{Refinement Types}
+
+The type system, that this thesis will adapt, is based on the Refinement Type system described in \cite{vazou_abstract_2013} and \cite{rondon_liquid_2008}. 
+The central idea of Refinement Types is adding predicates to a language's type: For example, a type \code{i32} might be refined with the predicate $v > 0$. In terms of semantics this means, that any inhabitant of that type must also satisfy the predicate. 
+
+- Dependent Type but automatic
+- limited expressiveness
+
+The notion of refinements in embedded into the base language using subtyping: A refined type $\tau$ is a subtype of $\tau'$ if $\tau$'s predicate implies the predicate of $\tau'$ (in the current typing context $\Gamma$)
+\begin{equation*}
+  \inferrule*
+    {\text{SMT-Valid}(\llbracket \Gamma \rrbracket)}
+    {}
+\end{equation*}
+
 
 \chapter{The MiniCorten Language}
 
@@ -324,7 +344,7 @@ Corten has two ways of dealing with assignment to mutable references: If the ref
   \label{lst:mutation}
 \end{listing}
 
-\label{subsec:path-sensitivify}\section{Path Sensitivity}
+\label{subsec:path-sensitivify}\subsection{Path Sensitivity}
 
 Firstly, the type system is path sensitive, meaning that the type system is aware of necessary XXX that need to be passed for an expression to be evaluated. For example listing \ref{lst:max-path-sensitive} shows a function computing the maximum of its inputs. In the then branch, $a$ is only a maximum of $a$ and $b$, because the condition $a > b$ implies it. Corten will symbolically evaluate the condition and store it in its typing context.
 
@@ -348,7 +368,7 @@ Firstly, the type system is path sensitive, meaning that the type system is awar
 - also with mutations
 
 
-\label{subsec:strong-type-updates}\section{Strong Type Updates}
+\label{subsec:strong-type-updates}\subsection{Strong Type Updates}
 
 \begin{listing}[h]
   \begin{minted}{rust}
@@ -364,7 +384,7 @@ Firstly, the type system is path sensitive, meaning that the type system is awar
 
 
 
-\label{sec:modularity}\section{Modularity}
+\label{sec:modularity}\subsection{Modularity}
 
 For a verification system to be scalable, it needs to be able modularize a proof. Corten can propagate type information across function calls and by taking advantage of Rust's ownership system, it can do so very accurately. Listing \ref{lst:modular-calls} shows, how an incrementing function \code{inc} can be specified: \code{inc} signature stipulates, that it can be called with any \code{i32} (given the name \code{a1}) and will return a value \code{a2}, which equals \code{a1 + 1}. Only the signature of \code{inc} is necessary for the type checking of \code{client}. 
 
@@ -388,7 +408,7 @@ Notice, that all of the type information about \code{y} is preserved when \code{
 
 
 
-\label{subsec:mutual-reference}\section{Mutual Reference}
+\label{subsec:mutual-reference}\subsection{Mutual Reference}
 
 Complex mutation patterns often result in complex interdependencies. We deem it necessary to allow different types to refer to each other.\todo{why?}
 
@@ -402,7 +422,7 @@ Complex mutation patterns often result in complex interdependencies. We deem it 
   \label{lst:mutual-reference}
 \end{listing}
 
-\label{subsec:atomic-updates}\section{Atomic Updates}
+\label{subsec:atomic-updates}\subsection{Atomic Updates}
 
 - relax ctx
 - non-atomic might not be sufficient

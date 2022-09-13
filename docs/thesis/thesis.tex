@@ -364,7 +364,7 @@ Firstly, the type system is path sensitive, meaning that the type system is awar
 
 
 
-\label{subsubsec:modularity}\subsection{Modularity}
+\label{sec:modularity}\section{Modularity}
 
 For a verification system to be scalable, it needs to be able modularize a proof. Corten can propagate type information across function calls and by taking advantage of Rust's ownership system, it can do so very accurately. Listing \ref{lst:modular-calls} shows, how an incrementing function \code{inc} can be specified: \code{inc} signature stipulates, that it can be called with any \code{i32} (given the name \code{a1}) and will return a value \code{a2}, which equals \code{a1 + 1}. Only the signature of \code{inc} is necessary for the type checking of \code{client}. 
 
@@ -398,7 +398,7 @@ Complex mutation patterns often result in complex interdependencies. We deem it 
       let i = 0;
       
   \end{minted}
-  \caption{Function computing the maximum of its inputs; guaraneeing that the returned value is larger than its inputs}
+  \caption{Function computing the maximum of its inputs; guaranteeing that the returned value is larger than its inputs}
   \label{lst:mutual-reference}
 \end{listing}
 
@@ -480,7 +480,7 @@ The semantics loosely based on Jung's MiniRust.
 
 Another difference between Rust and MiniCorten is of course the addition of refinement types.
 
-In terms of the formal description, the rules are similar to Pierce's \cite[p. 166f]{pierce_types_2002-3} Reference language. % Also: Semantik von progrmmiersprachen WhileT p.45
+In terms of the formal description, the rules are similar to Pierce's \cite[p. 166f]{pierce_types_2002-3} Reference language. % Also: Semantik von programmiersprachen WhileT p.45
 The main difference is, that in Rust, every piece of data has a unique, known owner. This fact makes the concept of locations redundant. Instead we treat $\code{ref } x$ as a value itself. The following definitions show the new execution rules.
 
 \begin{definition}[Execution-State]
@@ -773,8 +773,8 @@ We write:
 
 Without loss of generality, we assume arguments are ordered by their type: First immutable / owner arguments and then mutable arguments.
 
-When handling mutable references in parameters some sublteties need to be considered. The function can change both the referenced \textit{value} as well as the reference \textit{location}. To describe the referenced value is normally done using the $\{ \alpha \mid \alpha \doteq \&b\}$ syntax. The question arrises: If $\alpha$ was the logic variable for a parameter, what should be the analog for $b$? In contrast to local variables, there is no variable representing the referenced value for parameters. As seen in section \ref{subsec:mutable-references}, using the dereference operator would come with a lot of complications.
-Instead we introduce $arg^i_n$, a special variable denoting the intial abstract value (i.e. stack location), that the mutable reference of argument $n$ points to. $i$ denotes the level of nesting: For the $n$th parameter with the Rust type \code{\&mut \&mut i32} we would generate $arg^1_n$ and $arg^2_n$.
+When handling mutable references in parameters some subtleties need to be considered. The function can change both the referenced \textit{value} as well as the reference \textit{location}. To describe the referenced value is normally done using the $\{ \alpha \mid \alpha \doteq \&b\}$ syntax. The question arises: If $\alpha$ was the logic variable for a parameter, what should be the analog for $b$? In contrast to local variables, there is no variable representing the referenced value for parameters. As seen in section \ref{subsec:mutable-references}, using the dereference operator would come with a lot of complications.
+Instead we introduce $arg^i_n$, a special variable denoting the initial abstract value (i.e. stack location), that the mutable reference of argument $n$ points to. $i$ denotes the level of nesting: For the $n$th parameter with the Rust type \code{\&mut \&mut i32} we would generate $arg^1_n$ and $arg^2_n$.
 
 \begin{gather*}
   \inferrule*[left=Fn-Decl]
@@ -817,7 +817,7 @@ alternative (should be equivalent):
     {(\Phi, \mu) \preceq (\Phi', \mu')}
 \]
 
-In constrast to other refinement type systems, Corten allows types in the context to refer to one another.
+In contrast to other refinement type systems, Corten allows types in the context to refer to one another.
 For example a type specifications \code{a : \{ $\alpha$ : i32 | $\alpha$ > $\beta$\}, b:  \{ $\beta$: i32 | $\beta$ != $\alpha$\}} would be valid and result in the context $\Gamma = (\emptyset, \alpha \neq \beta \wedge \beta \geq \alpha)$. In the example $0$ is a subtype of \code{a}'s type as long as $\code{b} \geq 1$.
 
 This means that types may need to be changed atomically.

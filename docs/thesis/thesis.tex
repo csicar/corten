@@ -1,4 +1,4 @@
-\documentclass{article}
+\documentclass{book}
 \usepackage[utf8]{inputenc}
 \usepackage{ bussproofs }
 \usepackage{ amssymb }
@@ -12,6 +12,7 @@
 \usepackage{ amsmath }
 \usepackage{mathpartir}
 \usepackage{minted}
+\usepackage[hashEnumerators,smartEllipses, hybrid]{markdown}
 \usemintedstyle{monokai}
 \usepackage{amsthm}
 \usepackage{csquotes}
@@ -50,7 +51,6 @@
 
 \tableofcontents
 
-\begin{abstract}
 
 Software correctness is a central goal for software development.
 One way to improve correctness is using strong and descriptive types and verifying them with type systems.
@@ -60,12 +60,11 @@ However existing approaches for adapting Refinement Types from functional to imp
 This thesis aims to design a Refinement Type system without such compromises by taking advantage of Rust's restriction to unique mutable references.
 I will define a Refinement Type language and typing rules and argue for their soundness. Additionally I will implement a prototype verifier to evaluate the effectiveness of the approach on selected examples.
 
-\end{abstract}
 
 
 
 
-\section{Introduction}
+\chapter{Introduction}
 
 % With increasing reliance on increasingly complex software, ensuring correctness of programs is a vital concern to software development.
 With increasing amount and reliance of software, ensuring the correctness of programs is a vital concern for the future of software development.
@@ -73,65 +72,56 @@ Although research in this area has made good progress, most approaches are not a
 One avenue for improving accessability for functional verification is extending the expressiveness of the type system to cover more of the correctness properties.
 Using type systems for correctness was traditionally prevalent in purely functional languages where evolving states are often represented by evolving types, offering approachable and gradual adoption of verification methods. Tracing evolving states in the type system would be especially useful for languages with mutability, since substantial parts of the behaviour of the program is expressed as mutation of state. In particular Rust seems like a promising target language, because mutability is already tracked precisely and thus promising functional verification for relatively minimal effort on the programmer's part.
 
+The goal of the thesis is to show that Refinement Types can be idiomatically adapted to languages with unique mutable references. The type system presented in this thesis enables gradual adoption of lightweight verification methods in mutable languages.
 
-\section{The Case for Rust as a Target Language}
+%In case implementing these translations could not be completed, the use cases will be transformed manually.
+The type system is sound and effective in the identified use-cases.
+%In addition, a description of the syntax and semantics of the constructs, that will extend Rust's type system, will be provided as well as justification for their soundness. 
+A feasibility study on minimal examples of challenging use cases shows how useful the proposed verification system is. 
+%For use cases that could not be covered by the proposed additions, the reason will be investigated.
 
-Rust is split into two languages: safe and unsafe Rust. Like most type systems, Rust's type and ownership system is conservative, meaning any (safe) Rust program that type checks, will not crash due to memory safety or type errors. Unsafe Rust gives the programmer the ability to expand the programs accepted by Rust outside that known-safe subset.
+Specifying or verifying complete Rust modules or the entire Rust language is not the goal of the thesis. In particular \code{unsafe} Rust will not be taken into account in specification nor implementation. Implementing Liquid Type inference in also not a goal of the thesis.
 
-In this thesis, we will only consider safe Rust, which is the subset of Rust most programmers interact with (see section \ref{ss:unsafe-rust}).
+The accompanying implementation extends the Rust compiler, enables automatic parsing of the refinement type language and automated type checking of a subset of Rust, as well as limited inference and error reporting. 
+The thesis also gives a description of the syntax and semantics of the subset of Rust as well as the refinement type system.
 
-Rust features a few unusual design decisions that profoundly influence the design of verification systems for it. The following paragraphs will elaborate on this.
-
-\paragraph{Aliasing XOR Mutabillity} The key behind Rusts type system is, that for every variable at every point during the execution, that variable is either aliased or mutable, but never both at the same time.
-
-Rust accomplished this by introducing three types of access permissions for a variable, which are associated with every scope\footnote{In modern Rust, this model was generalized to cover more cases, but the idea is still valid}:
+The contributions of this thesis are:
 \begin{enumerate}
-  \item The scope \textit{owns} the variable. This guarantees, that no other scope has access to any part of the variable and allows the scope to create references to (part of) the variable.
-  \item The scope (immutably) \textit{borrows} the variable. This guarantees, that as long as the variable is used, its \textit{value will not change} and allows the scope to further lend the variable to other scoped.
-  \item The scope \textit{mutably borrows} the variable. This guarantees, that there are no other active references to any part of the memory of the variable.
+  \item Automatic empirical analysis of the usage of mutability and unsafe in Rust using syntactic information
+  \item Extension to the Rust type system to allow for refinement type specifications
+  \item Description and implementation of a type checker for the introduced type system
+  \item Evaluation of the type system on minimal benchmarks
 \end{enumerate}
 
-A consequence of these rules it, that at any time, every piece of memory has a unique and compile-time known owner. There are no reference cycles.
+The thesis if structured as follows: 
+In chapter XXX an empirical analysis of \code{unsafe} and mutability uses is performed. 
+Then chapter XXX will give an overview of the foundation the thesis build upon. 
+Chapter XXX defines the subset of Rust, that will be the basis for the type system.
+Next chapter XXX explains the actual type system and verification, as well as justifying its correctness, followed by chapter XXX, which will provide more information about the implementation.
+The type system will then be tested in minimal benchmarks in chapter XXX.
+Chapter XXX reports on related work and alternative approaches.
+Finally chapter XXX concludes the thesis and gives an overview over possible future work.
 
-This makes both aliasing as well as mutability quite tame:
-If a variable is aliased, it must be immutable and as a result, represents just a value (like in pure functional languages).
-If a variable is mutable, it can not be aliased and as a result, any effect of the mutation is well known and locally visible.
 
-\paragraph*{Opaque Generics} Rust does not provide a way to check a generic parameter for its instantiation. This means that we cannot extract any additional information from a generic parameter \code{T}. A function from \code{T} to \code{T} can therefor only be the identity function.
-Wadler \cite{wadler_theorems_1989} shows, that it is possible to derive facts about the behaviour of such polymorphic functions.
+\chapter{Empirical Analysis of Use-Cases}
 
-In contrast, languages with instance-of-checks allow an implementation of a polymorphic function to distinguish between different instances of the generic parameter, precluding this extensive reasoning.
-
-\paragraph*{Explicit Mutable Access} A consequence of the ownership rules is, that a function can only mutate (part of) the state, that is passed to it as a parameter. There is no global state and there is no implicit access to an object instance. Thus any intention of mutating state must already be expressed in the function signature, which makes the specification of this mutation quite natural.
-
-\paragraph*{What Rust does not solve} Eventhough Rust siplifies reasoning about mutability and aliasing of mutable data, Rust does not eliminate the need to reason about multiple references to mutable data. For example, Listing \ref{lst:alias-mut} shows how \code{cell}'s type is influenced by changes to \code{r}. This does not mean, that the ownership rule  \textit{mutability XOR aliasing} are broken: Eventhough both \code{cell} and \code{r} are mutable, but only one is active.
-
-\label{lst:alias-mut}\begin{lstlisting}
-let mut cell = 2;
-let r = &mut cell;
-r+= 1;
-assert(cell, 2)
-\end{lstlisting}
-
-\section{Usage Of Rust}
-
-Before designing a system for Rust, it makes sense to gain some understanding of how Rust is used. For this purpose we will look at two key features of Rust, that influence how an approchable verification should look like.
+Before designing a system for Rust, it makes sense to gain some understanding of how Rust is used. For this purpose we will look at two key features of Rust, that influence how an approachable verification should look like.
 Firstly \code{unsafe} Rust with similar guarantees to C would make verification and specification significantly harder. But if the use of \code{unsafe} is limited, like intended by the language designers, it would allow us to focus on the save part of Rust and leave the verification of \code{unsafe} Rust to more complex verification systems.
 Secondly with mutability being the main difference to the traditional domain fof Refinement Types, showing the need for covering this area and to what degree of approachability it interesting.
 
-
-\label{ss:unsafe-rust}\subsection{Unsafe Rust}
+\label{ss:unsafe-rust}\section{Unsafe Rust}
 
 There is already some research on how \code{unsafe} is used in Rust. For example Astrauskas et al. \cite[]{astrauskas_how_2020} found, that about 76\% of crates did not use any unsafe. On top of that, unsafe signatures are only exposed by
 
 "The majority of crates (76.4\%) contain no unsafe features at all. Even in most crates that do contain unsafe blocks or functions, only a small fraction of the code is unsafe: for 92.3\% of all crates, the unsafe statement ratio is at most 10\%, i.e., up to 10\% of the codebase consists of unsafe blocks and unsafe functions." \cite[p. 13]{astrauskas_how_2020}
 Astrauskas et al. also found, that "However, with 21.3'\% of crates containing some unsafe statements and – out of those crates – 24.6\% having an unsafe statement ratio of at least 20\%, we cannot claim that developers use unsafe Rust sparingly, i.e., they do not always follow the first principle of the Rust hypothesis." \cite[p. 14]{astrauskas_how_2020}
 
-I makes sense to further distinguish between libraries and executables crates: Libraries are intendet to be used by other Rust programs. Usage of unsafe in libraries may not be as problematic as in executables, because libraries are written once but used by many applications, justifying higher verification effort.
+I makes sense to further distinguish between libraries and executables crates: Libraries are intended to be used by other Rust programs. Usage of unsafe in libraries may not be as problematic as in executables, because libraries are written once but used by many applications, justifying higher verification effort.
 
-In our analysis, we found, that firstly crates.io contains significantly more libraries than binaries\footnote{Libraries and Executables are distinguished by checking if they contain \code{bin} or \code{lib} target or one of the corresponing files according to the cargo naming convention.} (see Figure \ref{fig:crate_types}). And secondly libraries are much more likely to use \code{unsafe} Rust. Table shows the result of my own analysis. Where uses of \code{unsafe} are counted and grouped by crate type (see Table \ref{tab:unsafe-uses-by-crate}).
+In our analysis, we found, that firstly crates.io contains significantly more libraries than binaries\footnote{Libraries and Executables are distinguished by checking if they contain \code{bin} or \code{lib} target or one of the corresponding files according to the cargo naming convention.} (see Figure \ref{fig:crate_types}). And secondly libraries are much more likely to use \code{unsafe} Rust. Table shows the result of my own analysis. Where uses of \code{unsafe} are counted and grouped by crate type (see Table \ref{tab:unsafe-uses-by-crate}).
 The data in the table includes all crates except \code{windows-0.32.0}, which alone contains \numprint{233608} uses of \code{unsafe}. Nearly $2 / 3$ of all other library \code{unsafe} combined.
-Looking at the distribution of unsafe uses in Figure \ref{fig:unsafe-hist}, we can see, that this is an exception: Most other libraries do not use that much unsafe statements. We can also see, that even if a executable crate uses \code{unsafe}, it uses few
+Looking at the distribution of unsafe uses in Figure \ref{fig:unsafe-hist}, we can see, that this is an exception: Most other libraries do not use that much unsafe statements. We can also see, that even if a executable crate uses \code{unsafe}, it uses few.
+
 
 
 \begin{figure}[h]
@@ -166,7 +156,7 @@ Looking at the distribution of unsafe uses in Figure \ref{fig:unsafe-hist}, we c
 \end{figure}
 
 
-\subsection{Mutability}
+\section{Mutability}
 
 This was done by analysing all published Rust crates (Rust's version packages) published on crates.io with at least 10 versions were analysed\footnote{The limit of 10 versions is used to eliminate inactive and placeholder packages}. The analysis uses the syntactical structure to infer mutability information about the following various AST items:
 \begin{itemize}
@@ -177,6 +167,8 @@ This was done by analysing all published Rust crates (Rust's version packages) p
 	\item Function Calls, which are considered immutable, iff all arguments are considered immutable.
 \end{itemize}
 A total of around 52 million items were found in 228263 files in a combined code-base size of over 64 million lines of Rust code (without comments and white space lines)\footnote{Calculated with \texttt{cloc}}
+
+The analysis is quite extensible: Thanks to using the tree-sitter parsing framework, it can be extended to other queries and languages.
 
 % from cloc
 % ----------------------------------------------------------------------------------------
@@ -207,26 +199,75 @@ Figure~\ref{fig:mutabillity_by_category} shows the ratio of mutable to immutable
 	\label{fig:mutabillity_by_category}
 \end{figure}
 
-Unfortunately not there are some areas, where the syntactic analysis is not sufficient. Namely the analysis of function calls and arguments, which is mainly caused by the uncertainty of mutabillity of complex arguments.
+Unfortunately not there are some areas, where the syntactic analysis is not sufficient. Namely the analysis of function calls and arguments, which is mainly caused by the uncertainty of mutability of complex arguments.
 Luckily the data from function definitions and parameters can complete the picture: About 80\% of parameters are immutable and between about 10 and 20\% of parameters are mutable. And less than 10\% of functions have mutable parameters at all.
 When it comes to local variables, Rust users are more liberal in their use of mutability:
 About 30\% of local variables are defined mutable.
 
-For verification this means, that the use of mutabillity is wide spread. Especially local variables are often mutable and should therefore a verification system should try to minimize the effort for the user. Mutable parameters are less common, but still need to be accounted for in verification.
+For verification this means, that the use of mutability is wide spread. Especially local variables are often mutable and should therefore a verification system should try to minimize the effort for the user. Mutable parameters are less common, but still need to be accounted for in verification.
+
+\section{Conclusions}
+
+\chapter{Foundations}
+
+\section{Rust}
+
+\paragraph{The Case for Rust as a Target Language}
 
 
-\section{The MiniCorten Language}
+Rust justifies a new approach to mutable verification, because it is possible to take advantage of guarantees provided by (safe) Rust's ownership system. 
+
+Rust is split into two languages: safe and unsafe Rust. Like most type systems, Rust's type and ownership system is conservative, meaning any (safe) Rust program that type checks, will not crash due to memory safety or type errors. Unsafe Rust gives the programmer the ability to expand the programs accepted by Rust outside that known-safe subset.
+
+In this thesis, we will only consider safe Rust, which is the subset of Rust most programmers interact with (see section \ref{ss:unsafe-rust}).
+
+Rust features a few unusual design decisions that profoundly influence the design of verification systems for it. The following paragraphs will elaborate on this.
+
+\paragraph{Aliasing XOR Mutabillity} The key behind Rusts type system is, that for every variable at every point during the execution, that variable is either aliased or mutable, but never both at the same time.
+
+Rust accomplished this by introducing three types of access permissions for a variable, which are associated with every scope\footnote{In modern Rust, this model was generalized to cover more cases, but the idea is still valid}:
+\begin{enumerate}
+  \item The scope \textit{owns} the variable. This guarantees, that no other scope has access to any part of the variable and allows the scope to create references to (part of) the variable.
+  \item The scope (immutably) \textit{borrows} the variable. This guarantees, that as long as the variable is used, its \textit{value will not change} and allows the scope to further lend the variable to other scoped.
+  \item The scope \textit{mutably borrows} the variable. This guarantees, that there are no other active references to any part of the memory of the variable.
+\end{enumerate}
+
+A consequence of these rules it, that at any time, every piece of memory has a unique and compile-time known owner. There are no reference cycles.
+
+This makes both aliasing as well as mutability quite tame:
+If a variable is aliased, it must be immutable and as a result, represents just a value (like in pure functional languages).
+If a variable is mutable, it can not be aliased and as a result, any effect of the mutation is well known and locally visible.
+
+\paragraph*{Opaque Generics} Rust does not provide a way to check a generic parameter for its instantiation. This means that we cannot extract any additional information from a generic parameter \code{T}. A function from \code{T} to \code{T} can therefor only be the identity function.
+Wadler \cite{wadler_theorems_1989} shows, that it is possible to derive facts about the behaviour of such polymorphic functions.
+
+In contrast, languages with instance-of-checks allow an implementation of a polymorphic function to distinguish between different instances of the generic parameter, precluding this extensive reasoning.
+
+\paragraph*{Explicit Mutable Access} A consequence of the ownership rules is, that a function can only mutate (part of) the state, that is passed to it as a parameter. There is no global state and there is no implicit access to an object instance. Thus any intention of mutating state must already be expressed in the function signature, which makes the specification of this mutation quite natural.
+
+\paragraph*{What Rust does not solve} Even though Rust simplifies reasoning about mutability and aliasing of mutable data, Rust does not eliminate the need to reason about multiple references to mutable data. For example, Listing \ref{lst:alias-mut} shows how \code{cell}'s type is influenced by changes to \code{r}. This does not mean, that the ownership rule  \textit{mutability XOR aliasing} are broken: Even though both \code{cell} and \code{r} are mutable, but only one is active.
+
+\label{lst:alias-mut}\begin{lstlisting}
+let mut cell = 2;
+let r = &mut cell;
+r+= 1;
+assert(cell, 2)
+\end{lstlisting}
+
+\section{Refinement Types}
+
+\chapter{The MiniCorten Language}
 
 Rust's main disadvantage as a target language it its size: There is a lot of syntax and semantics that would need to be accounted. A lot of it even incidental to the verification. To reduce the complexity and amount of work, that needs to be done, we will focus on a subset of Rust described in this section.
 
 The goal is to remove as much incidental complexity as possible without compromising to the central topic of research: How to extend LiquidTypes to mutability under the presence of Rust's ownership model.
 
-\subsection{Features}
+\section{Features}
 
 This subsection will explain some of the key features of the Corten type system.
 Corten is directly embedded in Rust using two macros. Firstly the macro \code{ty!} can be used in place of a Rust type and adds a predicate to the Rust type, that any inhabitant of that type must satisfy. For example, the type \code{ty!\{ v : i32 | v >= 0\}} stipulates, that a value of Rust type \code{i32} is positive. The second macro is \code{relax\_ctx!\{ ... \}} which will be explained in subsection \ref{subsec:atomic-updates}.
 
-\label{subsubsec:mutable-references}\subsubsection{Mutable References}
+\label{subsec:mutable-references}\subsection{Mutable References}
 
 The key difference to Refinement Type Systems for functional languages to Rust it the pervasive use of mutation. Therefore the most important feature of Corten it the support for mutation and also mutable references.
 
@@ -254,7 +295,7 @@ Corten has two ways of dealing with assignment to mutable references: If the ref
   \label{lst:mutation}
 \end{listing}
 
-\label{subsec:path-sensitivify}\subsection{Path Sensitivify}
+\label{subsec:path-sensitivify}\section{Path Sensitivity}
 
 Firstly, the type system is path sensitive, meaning that the type system is aware of necessary XXX that need to be passed for an expression to be evaluated. For example listing \ref{lst:max-path-sensitive} shows a function computing the maximum of its inputs. In the then branch, $a$ is only a maximum of $a$ and $b$, because the condition $a > b$ implies it. Corten will symbolically evaluate the condition and store it in its typing context.
 
@@ -269,15 +310,16 @@ Firstly, the type system is path sensitive, meaning that the type system is awar
         }
     }
   \end{minted}
-  \caption{Function computing the maximum of its inputs; guaraneeing that the returned value is larger than its inputs}
+  \caption{Function computing the maximum of its inputs; guaranteeing that the returned value is larger than its inputs}
   \label{lst:max-path-sensitive}
 \end{listing}
+
 
 - inference
 - also with mutations
 
 
-\label{subsec:strong-type-updates}\subsection{Strong Type Updates}
+\label{subsec:strong-type-updates}\section{Strong Type Updates}
 
 \begin{listing}[h]
   \begin{minted}{rust}
@@ -293,9 +335,11 @@ Firstly, the type system is path sensitive, meaning that the type system is awar
 
 
 
-\label{subsubsec:modularity}\subsubsection{Modularity}
+\label{subsubsec:modularity}\subsection{Modularity}
 
-For a verification system to be scalable, it needs to be able modularize a proof. Corten can propagate type information across function calls and by taking advantage of Rust's ownership system, it can do so very accurately. Listing \ref{lst:modular-calls} shows, how an incrementing function \code{inc} can be specified. Only the signature of \code{inc} is necessary for the type checking of \code{client}. Notice, that all of the type information about \code{y} is preserved when \code{inc(x)} is called. There are no further annotations needed to type check this program.
+For a verification system to be scalable, it needs to be able modularize a proof. Corten can propagate type information across function calls and by taking advantage of Rust's ownership system, it can do so very accurately. Listing \ref{lst:modular-calls} shows, how an incrementing function \code{inc} can be specified: \code{inc} signature stipulates, that it can be called with any \code{i32} (given the name \code{a1}) and will return a value \code{a2}, which equals \code{a1 + 1}. Only the signature of \code{inc} is necessary for the type checking of \code{client}. 
+
+Notice, that all of the type information about \code{y} is preserved when \code{inc(x)} is called. There are no further annotations needed to type check this program. This is possible, because in safe Rust, any (externally observable) mutation done by a function must be part of the function signature. Corten expands on this, by enabling the user specify exactly how a referenced value is mutated.
 
 \begin{listing}[h]
   \begin{minted}{rust}
@@ -315,7 +359,7 @@ For a verification system to be scalable, it needs to be able modularize a proof
 
 
 
-\label{subsec:mutual-reference}\subsection{Mutual Reference}
+\label{subsec:mutual-reference}\section{Mutual Reference}
 
 Complex mutation patterns often result in complex interdependencies. We deem it necessary to allow different types to refer to each other.\todo{why?}
 
@@ -329,13 +373,13 @@ Complex mutation patterns often result in complex interdependencies. We deem it 
   \label{lst:mutual-reference}
 \end{listing}
 
-\label{subsec:atomic-updates}\subsection{Atomic Updates}
+\label{subsec:atomic-updates}\section{Atomic Updates}
 
 - relax ctx
 - non-atomic might not be sufficient
 
 
-\subsection{Syntax}
+\section{Syntax}
 
 \todo{Call it CortenRust (after Weathering Steel)}
 This subsection will introduce the syntax of MiniCorten, a language modelled after a simplified version of Rust, with the addition of refinement types.
@@ -399,7 +443,7 @@ To simplify the formal definitions and proofs, the language is restricted to ANF
     | ()                    : unit value
 \end{bnfgrammar}
 
-\subsection{Semantics}
+\section{Semantics}
 
 The semantics are mostly standard. The main difference being that Rust and our simplified language enable most statements to be used in place of an expression. The value is determined by the last statement in the sequence. For example If-Expressions, sequences of statements and function all follow this rule: Their (return) value is determined by the last statement or expression in the sequence.
 
@@ -465,9 +509,9 @@ The main difference is, that in Rust, every piece of data has a unique, known ow
 
 \end{definition}
 
-\section{The Refinement Type System}
+\chapter{The Refinement Type System}
 
-\subsection{Definitions}
+\section{Definitions}
 
 \paragraph*{$P$} is the set of program variables used in rust program. Common names $a, b, c$
 \paragraph*{$L$} is the set of logic variables used in refinement types. Common names: $\alpha, \beta$
@@ -484,7 +528,7 @@ We write:
 \end{itemize}
 
 
-\subsection{Expression Typing: $\Gamma \vdash e : \tau \Rightarrow \Gamma'$}
+\section{Expression Typing: $\Gamma \vdash e : \tau \Rightarrow \Gamma'$}
 
 \begin{gather*}
   \inferrule*[left=Lit]
@@ -588,7 +632,7 @@ We write:
     {\Gamma \vdash e \texttt{ as } \tau': \tau'}
 \end{gather*}
 
-\subsection{Try: Statements $\Gamma \vdash s \Rightarrow \Gamma'$}
+\section{Try: Statements $\Gamma \vdash s \Rightarrow \Gamma'$}
 
 \begin{gather*}
   \inferrule*[left=If]
@@ -696,11 +740,11 @@ We write:
 \end{gather*}
 
 
-\subsection{Function Declaration Type Checking}
+\section{Function Declaration Type Checking}
 
 Without loss of generality, we assume arguments are ordered by their type: First immutable / owner arguments and then mutable arguments.
 
-When handling mutable references in parameters some sublteties need to be considered. The function can change both the referenced \textit{value} as well as the reference \textit{location}. To describe the referenced value is normally done using the $\{ \alpha \mid \alpha \doteq \&b\}$ syntax. The question arrises: If $\alpha$ was the logic variable for a parameter, what should be the analog for $b$? In contrast to local variables, there is no variable representing the referenced value for parameters. As seen in section \ref{subsubsec:mutable-references}, using the dereference operator would come with a lot of complications.
+When handling mutable references in parameters some sublteties need to be considered. The function can change both the referenced \textit{value} as well as the reference \textit{location}. To describe the referenced value is normally done using the $\{ \alpha \mid \alpha \doteq \&b\}$ syntax. The question arrises: If $\alpha$ was the logic variable for a parameter, what should be the analog for $b$? In contrast to local variables, there is no variable representing the referenced value for parameters. As seen in section \ref{subsec:mutable-references}, using the dereference operator would come with a lot of complications.
 Instead we introduce $arg^i_n$, a special variable denoting the intial abstract value (i.e. stack location), that the mutable reference of argument $n$ points to. $i$ denotes the level of nesting: For the $n$th parameter with the Rust type \code{\&mut \&mut i32} we would generate $arg^1_n$ and $arg^2_n$.
 
 \begin{gather*}
@@ -713,7 +757,7 @@ Instead we introduce $arg^i_n$, a special variable denoting the intial abstract 
     {\code{fn } f(a_1 : \{ \alpha_1 \mid \varphi^\alpha_1 \}, \dots, b_1 : \{ \beta_1 \mid \varphi^\beta_1 \Rightarrow \gamma_1 \mid \varphi^\gamma_1\}) \to \tau \{ \bar s; s_{res} \}}
 \end{gather*}
 
-\subsection{Sub-Typing Rules: $\Gamma \vdash \tau \preceq \tau'$}
+\section{Sub-Typing Rules: $\Gamma \vdash \tau \preceq \tau'$}
 
 \[
   \inferrule*[left=$\preceq$-Ty]
@@ -733,7 +777,7 @@ alternative (should be equivalent):
 \]
 
 
-\subsection{Sub-Context Rules: $\Gamma \preceq \Gamma'$}
+\section{Sub-Context Rules: $\Gamma \preceq \Gamma'$}
 
 \[
   \inferrule*[left=$\preceq$-Ctx]
@@ -749,7 +793,7 @@ For example a type specifications \code{a : \{ $\alpha$ : i32 | $\alpha$ > $\bet
 
 This means that types may need to be changed atomically.
 
-\subsection{Soundness of the Type System}
+\section{Soundness of the Type System}
 
 As usual, we consider the three properties (see Pierce \cite[p. 95, p.167]{pierce_types_2002}) of a type system when assessing the correctness of MiniCorten:
 
@@ -799,7 +843,12 @@ Because MiniCorten is based on Rust, we will assume, that progress, as well as p
   ...?
 \end{proof}
 
-\section{Implementation}
+\section{Extensions}
+
+\subsection{Records / \code{struct}s}
+\subsection{Predicate Generics}
+
+\chapter{Implementation}
 
 
 - Type Aliases
@@ -807,27 +856,27 @@ Because MiniCorten is based on Rust, we will assume, that progress, as well as p
 - compiler plugin
 - IDE
 - HIR
-- Location data
+- Location data (spans)
 - Additional features
   - basic inference
   - no ANF
 
-\section{Evaluation}
+\chapter{Evaluation}
 
-\subsection{Maximum using Path Conditions}
+\section{Maximum using Path Conditions}
 
 
 
-\subsection{Rephrasing builtins in terms of Refinement Types}
+\section{Rephrasing builtins in terms of Refinement Types}
 
 \paragraph*{panic}
 \paragraph*{assert}
 
-\label{subsec:evaluation-complex-mutable-ref}\subsection{Complex Mutable References}
+\label{subsec:evaluation-complex-mutable-ref}\section{Complex Mutable References}
 
-\subsection{Proof of the Gauss Summation Formula}
+\section{Proof of the Gauss Summation Formula}
 
-\section{Related Work}
+\chapter{Related Work}
 
 There currently does not exist an implementation of refinement types for Rust.
 
@@ -845,7 +894,9 @@ Alternative verification approaches also exists: For example RustHorn\cite{matsu
 
 The notion of Abstract Refinement Types that this thesis is based on is defined by Vazou et al. \cite{vazou_abstract_2013}. The basic idea is to allow the programmer to "refine" language types with predicates from a decidable logic. The type system has a notion of subtyping for refined types, where one type is a subtype of another if one predicate implies the other.
 
-\subsection{Comparison to Flux}
+\section{Comparison to Flux}
+
+\chapter{Conclusion \& Future Work}
 
 \printbibliography
 

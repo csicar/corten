@@ -109,16 +109,46 @@ Before designing a system for Rust, it makes sense to gain some understanding of
 Firstly \code{unsafe} Rust with similar guarantees to C would make verification and specification significantly harder. But if the use of \code{unsafe} is limited, like intended by the language designers, it would allow us to focus on the save part of Rust and leave the verification of \code{unsafe} Rust to more complex verification systems.
 Secondly with mutability being the main difference to the traditional domain fof Refinement Types, showing the need for covering this area and to what degree of approachability it interesting.
 
+There are two fundamental assumptions for the usefulness of the type system: 
+\begin{enumerate}
+  \item \label{enum:hypothesis-unsafe-rare} Uses of \code{unsafe} are rare
+  \item \label{enum:hypothesis-unsafe-lib} In the rare case, that \code{unsafe} is used, is is mostly used internally (not exposed to the callee)
+  \item \label{enum:hypothesis-mut} Mutability is used pervasively in Rust.
+\end{enumerate}
+
+To check these assumptions an analysis of existing Rust code was performed. As a basis for the analysis, the Rust package registry href{https://www.crates.io} was used. It contains the source code for both Rust libraries as well as various applications written in Rust (e.g. ripgrep). 
+
+We analyzed all published Rust crates on February 2nd 2022 (Rust's version packages) on crates.io with at least 10 versions\footnote{The limit of 10 versions is used to eliminate inactive and placeholder packages}, which totals \numprint{11882} crates, containing \numprint{228263} files with a combined code-base size of over 64 million lines of Rust code (without comments and white space lines)\footnote{Calculated with \texttt{cloc}}. 
+
+% from cloc
+% ----------------------------------------------------------------------------------------
+% Language                              files          blank        comment           code
+% ----------------------------------------------------------------------------------------
+% Rust                                 228263        5664979       10317162       64193670
+% C                                     32945        1539542        1979846       13468919
+% C++                                   18084        1263696        1093652        7956897
+% JSON                                  15838           1897              0        6424252
+% C/C++ Header                          31619        1152322        2015896        6284146
+% XML                                    5142          25277          25773        4807556
+% Assembly                               4146         534785         582345        2631991
+
+The analysis parses these files and searches for certain patterns, which are subsequently extracted and saved.
+Thanks to using the tree-sitter parsing framework, the analysis framework can easily be extended to other queries and languages.
+
 \label{ss:unsafe-rust}\section{Unsafe Rust}
 
-There is already some research on how \code{unsafe} is used in Rust. For example Astrauskas et al. \cite[]{astrauskas_how_2020} found, that about 76\% of crates did not use any unsafe. On top of that, unsafe signatures are only exposed by
+Firstly we will be checking the hypothesis \ref{enum:hypothesis-unsafe-rare}.
+There is already some research on how \code{unsafe} is used in Rust. For example Astrauskas et al. \cite{astrauskas_how_2020} found, that about 76\% of crates did not use any unsafe. On top of that, unsafe signatures are only exposed by
 
 "The majority of crates (76.4\%) contain no unsafe features at all. Even in most crates that do contain unsafe blocks or functions, only a small fraction of the code is unsafe: for 92.3\% of all crates, the unsafe statement ratio is at most 10\%, i.e., up to 10\% of the codebase consists of unsafe blocks and unsafe functions." \cite[p. 13]{astrauskas_how_2020}
-Astrauskas et al. also found, that "However, with 21.3'\% of crates containing some unsafe statements and – out of those crates – 24.6\% having an unsafe statement ratio of at least 20\%, we cannot claim that developers use unsafe Rust sparingly, i.e., they do not always follow the first principle of the Rust hypothesis." \cite[p. 14]{astrauskas_how_2020}
+Our data seems to confirm this: \numprint{8044} of the \numprint{11882} crates (67.7\%) did not use any unsafe. 
 
-I makes sense to further distinguish between libraries and executables crates: Libraries are intended to be used by other Rust programs. Usage of unsafe in libraries may not be as problematic as in executables, because libraries are written once but used by many applications, justifying higher verification effort.
+Astrauskas et al. also found, that "however, with 21.3\% of crates containing some unsafe statements and – out of those crates – 24.6\% having an unsafe statement ratio of at least 20\%, we cannot claim that developers use unsafe Rust sparingly, i.e., they do not always follow the first principle of the Rust hypothesis." \cite[p. 14]{astrauskas_how_2020}
+If this is the case for applications, it might disprove hypothesis hypothesis \ref{enum:hypothesis-unsafe-lib}. 
+When checking unsafely for our use case, it makes sense to further distinguish between libraries and executables crates: Libraries are intended to be used by other Rust programs: Usage of unsafe in libraries may not be as problematic as in executables, because libraries are written once but used by many applications, justifying higher verification effort. 
 
-In our analysis, we found, that firstly crates.io contains significantly more libraries than binaries\footnote{Libraries and Executables are distinguished by checking if they contain \code{bin} or \code{lib} target or one of the corresponding files according to the cargo naming convention.} (see Figure \ref{fig:crate_types}). And secondly libraries are much more likely to use \code{unsafe} Rust. Table shows the result of my own analysis. Where uses of \code{unsafe} are counted and grouped by crate type (see Table \ref{tab:unsafe-uses-by-crate}).
+In our analysis we found, that firstly crates.io contains significantly more libraries than binaries\footnote{Libraries and Executables are distinguished by checking if they contain \code{bin} or \code{lib} target or one of the corresponding files according to the cargo naming convention.} (see Figure \ref{fig:crate_types}). 
+And secondly libraries are much more likely to use \code{unsafe} Rust. Table shows the result of our analysis. Where uses of \code{unsafe} are counted and grouped by crate type (see Table \ref{tab:unsafe-uses-by-crate}).
 The data in the table includes all crates except \code{windows-0.32.0}, which alone contains \numprint{233608} uses of \code{unsafe}. Nearly $2 / 3$ of all other library \code{unsafe} combined.
 Looking at the distribution of unsafe uses in Figure \ref{fig:unsafe-hist}, we can see, that this is an exception: Most other libraries do not use that much unsafe statements. We can also see, that even if a executable crate uses \code{unsafe}, it uses few.
 
@@ -151,42 +181,29 @@ Looking at the distribution of unsafe uses in Figure \ref{fig:unsafe-hist}, we c
 \begin{figure}[h]
 	\centering
 	\includegraphics[width=0.99\linewidth, clip, trim={0.2cm 0.2cm 0.2cm 0.2cm}]{../unsafe_counts_by_crate_type.pdf}
-	\caption{Cummulative, logarithmic histogram of the amount of \code{unsafe} uses in each category}
+	\caption{Cumulative, logarithmic histogram of the amount of \code{unsafe} uses in each category}
 	\label{fig:unsafe-hist}
 \end{figure}
 
 
 \section{Mutability}
 
-This was done by analysing all published Rust crates (Rust's version packages) published on crates.io with at least 10 versions were analysed\footnote{The limit of 10 versions is used to eliminate inactive and placeholder packages}. The analysis uses the syntactical structure to infer mutability information about the following various AST items:
+Finally we will check hypothesis \ref{enum:hypothesis-mut}, which asserts, that mutable variables and references are used pervasively in Rust.
+This was checked by analysing the dataset for certain syntactical structures to infer mutability information about the following various AST items:
 \begin{itemize}
-	\item Local Variable Definitions. These can be tracked with high confidence
-	\item Parameters, which are considered immutable if they are passed as immutable references or owned.
-	\item Function Definitions, which are considered immutable, iff all parameters considered immutable.
-	\item Arguments. Hard to track
-	\item Function Calls, which are considered immutable, iff all arguments are considered immutable.
+	\item \textbf{Local Variable Definitions} can be tracked with high confidence. They occur in function bodies and take the form: \code{let mut a = <expr>}
+	\item \textbf{Parameters}, which are considered immutable if they are passed as immutable references or owned. They take the syntactic form: \code{mut a: i32}
+	\item \textbf{Function Definitions}, which are considered immutable, if all parameters considered immutable.
+	\item \textbf{Arguments} are parts of a function call and can be arbitrary expression, which makes the tracking hard.
+	\item \textbf{Function Calls}, which are considered immutable, if all arguments are considered immutable.
 \end{itemize}
-A total of around 52 million items were found in 228263 files in a combined code-base size of over 64 million lines of Rust code (without comments and white space lines)\footnote{Calculated with \texttt{cloc}}
 
-The analysis is quite extensible: Thanks to using the tree-sitter parsing framework, it can be extended to other queries and languages.
-
-% from cloc
-% ----------------------------------------------------------------------------------------
-% Language                              files          blank        comment           code
-% ----------------------------------------------------------------------------------------
-% Rust                                 228263        5664979       10317162       64193670
-% C                                     32945        1539542        1979846       13468919
-% C++                                   18084        1263696        1093652        7956897
-% JSON                                  15838           1897              0        6424252
-% C/C++ Header                          31619        1152322        2015896        6284146
-% XML                                    5142          25277          25773        4807556
-% Assembly                               4146         534785         582345        2631991
-
+A total of around 52 million of these items were found in the dataset.
 
 Figure~\ref{fig:mutabillity_by_category} shows the ratio of mutable to immutable items. For each syntactical category, the percentages are given relative to different objects:
 
 \begin{enumerate}
-  \item Total: number of unique occurrences
+  \item Total: number of occurrences
   \item Function: number of unique functions. I.e. 76.54\% of functions have a immutable parameter.
   \item File: number of unique files
 \end{enumerate}
@@ -208,20 +225,18 @@ For verification this means, that the use of mutability is wide spread. Especial
 
 \section{Conclusions}
 
+For this thesis the following conclusion can be drawn:
+
+\begin{itemize}
+  \item Even though uses of \code{unsafe} are not rare, it is acceptable to ignore in favour of a simpler type system.
+  \item Mutable variables are used very often and should therefore have very little associated specification effort.
+  \item Mutable parameters are used less frequently justifying a higher specification effort, but their specification must still be possible.
+\end{itemize}
+
 \chapter{Foundations}
 
 \section{Rust}
 
-\paragraph{The Case for Rust as a Target Language}
-
-
-Rust justifies a new approach to mutable verification, because it is possible to take advantage of guarantees provided by (safe) Rust's ownership system. 
-
-Rust is split into two languages: safe and unsafe Rust. Like most type systems, Rust's type and ownership system is conservative, meaning any (safe) Rust program that type checks, will not crash due to memory safety or type errors. Unsafe Rust gives the programmer the ability to expand the programs accepted by Rust outside that known-safe subset.
-
-In this thesis, we will only consider safe Rust, which is the subset of Rust most programmers interact with (see section \ref{ss:unsafe-rust}).
-
-Rust features a few unusual design decisions that profoundly influence the design of verification systems for it. The following paragraphs will elaborate on this.
 
 \paragraph{Aliasing XOR Mutabillity} The key behind Rusts type system is, that for every variable at every point during the execution, that variable is either aliased or mutable, but never both at the same time.
 
@@ -237,6 +252,18 @@ A consequence of these rules it, that at any time, every piece of memory has a u
 This makes both aliasing as well as mutability quite tame:
 If a variable is aliased, it must be immutable and as a result, represents just a value (like in pure functional languages).
 If a variable is mutable, it can not be aliased and as a result, any effect of the mutation is well known and locally visible.
+
+\paragraph{The Case for Rust as a Target Language}
+
+
+Rust justifies a new approach to mutable verification, because it is possible to take advantage of guarantees provided by (safe) Rust's ownership system. 
+
+Rust is split into two languages: safe and unsafe Rust. Like most type systems, Rust's type and ownership system is conservative, meaning any (safe) Rust program that type checks, will not crash due to memory safety or type errors. Unsafe Rust gives the programmer the ability to expand the programs accepted by Rust outside that known-safe subset.
+
+In this thesis, we will only consider safe Rust, which is the subset of Rust most programmers interact with (see section \ref{ss:unsafe-rust}).
+
+Rust features a few unusual design decisions that profoundly influence the design of verification systems for it. The following paragraphs will elaborate on this.
+
 
 \paragraph*{Opaque Generics} Rust does not provide a way to check a generic parameter for its instantiation. This means that we cannot extract any additional information from a generic parameter \code{T}. A function from \code{T} to \code{T} can therefor only be the identity function.
 Wadler \cite{wadler_theorems_1989} shows, that it is possible to derive facts about the behaviour of such polymorphic functions.

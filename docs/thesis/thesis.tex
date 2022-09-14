@@ -119,9 +119,9 @@ There are two fundamental assumptions for the usefulness of the type system:
   \item \label{enum:hypothesis-mut} Mutability is used pervasively in Rust.
 \end{enumerate}
 
-To check these assumptions an analysis of existing Rust code was performed. As a basis for the analysis, the Rust package registry href{https://www.crates.io} was used. It contains the source code for both Rust libraries as well as various applications written in Rust (e.g. ripgrep). 
+To check these assumptions an analysis of existing Rust code was performed. As a basis for the analysis, the Rust package registry \href{https://www.crates.io}{crates.io} was used. It contains the source code for both Rust libraries as well as various applications written in Rust (e.g. ripgrep). 
 
-We analyzed all published Rust crates on February 2nd 2022 (Rust's version packages) on crates.io with at least 10 versions\footnote{The limit of 10 versions is used to eliminate inactive and placeholder packages}, which totals \numprint{11882} crates, containing \numprint{228263} files with a combined code-base size of over 64 million lines of Rust code (without comments and white space lines)\footnote{Calculated with \texttt{cloc}}. 
+We analyzed all published Rust crates (Rust's version packages) on February 2nd 2022 on crates.io with at least 10 versions\footnote{The limit of 10 versions is used to eliminate inactive and placeholder packages}, which totals \numprint{11882} crates, containing \numprint{228263} files with a combined code-base size of over 64 million lines of Rust code (without comments and white space lines)\footnote{Calculated with \texttt{cloc}}. 
 
 % from cloc
 % ----------------------------------------------------------------------------------------
@@ -135,13 +135,13 @@ We analyzed all published Rust crates on February 2nd 2022 (Rust's version packa
 % XML                                    5142          25277          25773        4807556
 % Assembly                               4146         534785         582345        2631991
 
-The analysis parses these files and searches for certain patterns, which are subsequently extracted and saved.
+The analysis parses these files and searches for certain AST patterns, which are subsequently extracted and saved.
 Thanks to using the tree-sitter parsing framework, the analysis framework can easily be extended to other queries and languages.
 
 \label{ss:unsafe-rust}\section{Unsafe Rust}
 
 Firstly we will be checking the hypothesis \ref{enum:hypothesis-unsafe-rare}.
-There is already some research on how \code{unsafe} is used in Rust. For example Astrauskas et al. \cite{astrauskas_how_2020} found, that about 76\% of crates did not use any unsafe. On top of that, unsafe signatures are only exposed by
+There is already some research on how \code{unsafe} is used in Rust. For example Astrauskas et al. \cite{astrauskas_how_2020} found, that about 76\% of crates did not use any unsafe. On top of that, unsafe signatures are only exposed by 34.7\% of crates, that use \code{unsafe}.
 
 "The majority of crates (76.4\%) contain no unsafe features at all. Even in most crates that do contain unsafe blocks or functions, only a small fraction of the code is unsafe: for 92.3\% of all crates, the unsafe statement ratio is at most 10\%, i.e., up to 10\% of the codebase consists of unsafe blocks and unsafe functions." \cite[p. 13]{astrauskas_how_2020}
 Our data seems to confirm this: \numprint{8044} of the \numprint{11882} crates (67.7\%) did not use any unsafe. 
@@ -152,7 +152,7 @@ When checking unsafely for our use case, it makes sense to further distinguish b
 
 In our analysis we found, that firstly crates.io contains significantly more libraries than binaries\footnote{Libraries and Executables are distinguished by checking if they contain \code{bin} or \code{lib} target or one of the corresponding files according to the cargo naming convention.} (see Figure \ref{fig:crate_types}). 
 And secondly libraries are much more likely to use \code{unsafe} Rust. Table shows the result of our analysis. Where uses of \code{unsafe} are counted and grouped by crate type (see Table \ref{tab:unsafe-uses-by-crate}).
-The data in the table includes all crates except \code{windows-0.32.0}, which alone contains \numprint{233608} uses of \code{unsafe}. Nearly $2 / 3$ of all other library \code{unsafe} combined.
+The data in the table includes all crates except the outlier \code{windows-0.32.0}, which alone contains \numprint{233608} uses of \code{unsafe}. Nearly $2 / 3$ of all other library uses of \code{unsafe} combined.
 Looking at the distribution of unsafe uses in Figure \ref{fig:unsafe-hist}, we can see, that this is an exception: Most other libraries do not use that much unsafe statements. We can also see, that even if a executable crate uses \code{unsafe}, it uses few.
 
 
@@ -195,8 +195,8 @@ Finally we will check hypothesis \ref{enum:hypothesis-mut}, which asserts, that 
 This was checked by analysing the dataset for certain syntactical structures to infer mutability information about the following various AST items:
 \begin{itemize}
 	\item \textbf{Local Variable Definitions} can be tracked with high confidence. They occur in function bodies and take the form: \code{let mut a = <expr>}
-	\item \textbf{Parameters}, which are considered immutable if they are passed as immutable references or owned. They take the syntactic form: \code{mut a: i32}
-	\item \textbf{Function Definitions}, which are considered immutable, if all parameters considered immutable.
+	\item \textbf{Parameters}, which are considered immutable if they are passed as immutable references or owned. They take the syntactic form: \code{mut a: i32} or \code{b: \&mut i32}
+	\item \textbf{Function Definitions}, which are considered immutable, if all parameters considered immutable. They take the syntactic form: \code{fn f(mut a: i32, b: \&mut i32) \{ ... \}}
 	\item \textbf{Arguments} are parts of a function call and can be arbitrary expression, which makes the tracking hard.
 	\item \textbf{Function Calls}, which are considered immutable, if all arguments are considered immutable.
 \end{itemize}

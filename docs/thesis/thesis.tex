@@ -296,6 +296,7 @@ The central idea of Refinement Types is adding predicates to a language's type: 
 
 - Dependent Type but automatic
 - limited expressiveness
+- SMT solvable decidable logic
 
 The notion of refinements in embedded into the base language using subtyping: A refined type $\tau$ is a subtype of $\tau'$ if $\tau$'s predicate implies the predicate of $\tau'$ (in the current typing context $\Gamma$)
 \begin{equation*}
@@ -500,7 +501,7 @@ The semantics loosely based on Jung's MiniRust.
 
 Another difference between Rust and MiniCorten is of course the addition of refinement types.
 
-In terms of the formal description, the rules are similar to Pierce's \cite[p. 166f]{pierce_types_2002-3} Reference language. % Also: Semantik von programmiersprachen WhileT p.45
+In terms of the formal description, the rules are similar to Pierce's \cite[p. 166f]{pierce_types_2002-3} "Reference" language. % Also: Semantik von programmiersprachen WhileT p.45
 The main difference is, that in Rust, every piece of data has a unique, known owner. This fact makes the concept of locations redundant. Instead we treat $\code{ref } x$ as a value itself. The following definitions show the new execution rules.
 
 \begin{definition}[Execution-State]
@@ -838,7 +839,7 @@ alternative (should be equivalent):
 \]
 
 In contrast to other refinement type systems, Corten allows types in the context to refer to one another.
-For example a type specifications \code{a : \{ $\alpha$ : i32 | $\alpha$ > $\beta$\}, b:  \{ $\beta$: i32 | $\beta$ != $\alpha$\}} would be valid and result in the context $\Gamma = (\emptyset, \alpha \neq \beta \wedge \beta \geq \alpha)$. In the example $0$ is a subtype of \code{a}'s type as long as $\code{b} \geq 1$.
+For example a type specifications \code{a : \{ $\alpha$ : i32 | $\alpha$ > $\beta$\}, b:  \{ $\beta$: i32 | $\beta$ != $\alpha$\}} would be valid and result in the context $\Gamma = (\emptyset, \alpha \neq \beta \wedge \beta \geq \alpha)$. In the example, the value $0$ i a valid inhabitant of \code{a}'s type as long as $\code{b} \geq 1$.
 
 This means that types may need to be changed atomically.
 
@@ -852,13 +853,14 @@ As usual, we consider the three properties (see Pierce \cite[p. 95, p.167]{pierc
    I.e. the a execution's value assignments imply the type refinements
 \end{definition}
 
-\begin{enumerate}
-  \item Progress:
-    \todo{need to show for program or term?}
+\begin{definition}
+  Progress:
     If $t$ is closed and well-typed, then $t$ is a value or $t \leadsto t'$, where $t'$ is a value.
-  \item Preservation: If $\Gamma \vdash e : \tau \Rightarrow \Gamma$ and $e \leadsto e'$, then $\Gamma \vdash e' : \tau \Rightarrow \Gamma$
-  \item Preservation of State Conformance
-\end{enumerate}
+\end{definition}
+
+\begin{definition}
+  Preservation: If $\Gamma \vdash e : \tau \Rightarrow \Gamma$ and $e \leadsto e'$, then $\Gamma \vdash e' : \tau \Rightarrow \Gamma$
+\end{definition}
 
 The state conformance rule differs from the usual rule in two ways. Firstly we consider the runtime value instead of the runtime type. Secondly there needs to be one set of variable assignments that satisfies all predicates in $\Gamma$.
 
@@ -866,24 +868,39 @@ Because MiniCorten is based on Rust, we will assume, that progress, as well as p
 
 
 \begin{lemma}
-  Preservation of State Conformance: If $\Gamma \vdash e : \tau \Rightarrow \Gamma'$, $\sigma : \Gamma$ and $\tuple{t}{\sigma} \leadsto \tuple{t'}{\sigma'}$, then  $\sigma' : \Gamma$
+  Preservation of State Conformance: If $\Gamma \vdash e : \tau \Rightarrow \Gamma''$, $\sigma : \Gamma$ and $\tuple{t}{\sigma} \leadsto \tuple{t'}{\sigma'}$, then  $\sigma' : \Gamma'$ and $\Gamma' \vdash e' : \tau' \Rightarrow \Gamma''$
 \end{lemma}
 
 
 \begin{proof} Rule Induction over $\tuple{t}{\sigma} \leadsto \tuple{t'}{\sigma'}$
 \begin{itemize}
-  \item \textsc{Case SS-Assign}
-    $\sigma' = \sigma[x \mapsto v]$. With rule inversion \textsc{Assign}: \code{unit} and post state: $\Gamma'[x \mapsto \beta], \varphi$ with $\Gamma \vdash e : \{ \beta \mid \varphi \}$.
+  \item \textsc{Case SS-Assign}:
+    $\sigma' = \sigma[x \mapsto v]$. With rule inversion \textsc{Assign}: $e' = \code{unit}$ and post state: $\Gamma'' = \Gamma'[x \mapsto \beta], \varphi$ with $\Gamma \vdash e : \{ \beta \mid \varphi \}$.
 
     $e$ is a value, because of the requirement in \textsc{SS-Assign}. By rule inversion \textsc{Lit} over assumption $\Gamma \vdash v: \{ \beta \mid \varphi \} \Rightarrow \Gamma$: $\varphi = (\beta \doteq v)$
 
-    $\mu'(x) = \beta$, $\sigma'(x) = v$ and induction hypothesis $\sigma : \Gamma$. Since $\mu'(x) \doteq \varphi(x) \to \varphi$ is trivially valid. XXXBanane gives us the goal.
-  \item \textsc{Case Var}
+    $\mu'(x) = \beta$, $\sigma'(x) = v$ and induction hypothesis $\sigma : \Gamma$. Since $\mu'(x) \doteq \varphi(x) \to \varphi$ is trivially valid. Monotonicity of State Conformance gives us the goal.
+
+    Because $e'$ is \code{unit}, the second proof obligation is trivially true, because $\Gamma' = \Gamma''$
+  \item \textsc{Case SS-Assign-Inner}:
+    Induction hypothesis: $\tuple{e}{\sigma} \leadsto \tuple{e'}{\sigma'}$, $\sigma' : \Gamma'$, $\Gamma \vdash e' : \tau' \Rightarrow \Gamma''$
+    
+    Induction hypothesis is equal to proof obligation.
+  \item \textsc{Case SS-Decl}:
+    $\sigma' = \sigma[ x \mapsto v]$, $e' = \code{unit}$.
+    
+    $\sigma' : \Gamma'$ because of monotonicity; $\Gamma' \vdash \code{unit} : \code{Unit} \Rightarrow \Gamma'$ by SS semantics true
+  \item \textsc{Case Deref}
+    $\sigma(x) = v$, $e' = v$, $\sigma' = \sigma$
+
+    For $\Gamma' = \Gamma$, $\sigma : \Gamma'$ true by assumption
+
+    Show: $\Gamma \vdash v : \tau' \Rightarrow \Gamma$. By rule inversion \textsc{Lit}, $\tau' = \{ l \mid l \doteq v \}$
 \end{itemize}
 \end{proof}
 
 \begin{lemma}
-  State Conformance is XXXBanane: If $\sigma : \Gamma$, $(\beta = v) \to \varphi$ then
+  State Conformance is monotone\todo{sensible name?}: If $\sigma : \Gamma$, $(\beta = v) \to \varphi$ then
     $\sigma[x \mapsto v] : \Gamma[x \mapsto \beta] \wedge \varphi$
 \end{lemma}
 
@@ -894,8 +911,51 @@ Because MiniCorten is based on Rust, we will assume, that progress, as well as p
 
 \section{Extensions}
 
+
+To limit the complexity a few features are not defined as part of the Corten or the implementation.
+Even though these extensions are not part of the scope of the thesis, these extensions were taken into consideration when designing the type system. To show, that the type system is capable of handling the additional challenges, we will shortly describe how these extensions are planned to be added to the type system.
+\todo{move to future work?}
+
 \subsection{Records / \code{struct}s}
+
+Firstly, a key part of realistic programs are data structures that comprise multiple basic data types. In Rust these are called \code{struct}s and work similar to records or product types in functional languages. 
+
+Once again, we can take advantage of Rust ownership system: Any part of a struct (even nested fields) can only belong to one variable. This means, that the proposed system for handling mutable references extends seamlessly to structs: 
+The variable mapping in $\Gamma$ is generalized: $\mu : \text{Path} \to \text{LVar}$. The relevant typing rules will work without major changes:
+
+\begin{gather*}
+  \inferrule*[left=Var]
+    {\mu(p.x.y.z) = \alpha}
+    {\Gamma \vdash p.x.y.z : \{ \beta \mid \beta \doteq \alpha \} \Rightarrow \Gamma}
+    \\
+  \inferrule*[left=Assign-Strong]
+    {\Gamma \vdash e : \tau}
+    {\Gamma \vdash p.x.y.z = e : \code{unit} \Rightarrow \Gamma[p.x.z.y \mapsto \tau]}
+\end{gather*}
+
+\subsection{Algebraic Data Types}
+
+With records added, the only thing missing for support of algebraic data types are sum types.
+Sum types allow the programmer to express, that an inhabitant of a type may be one variant of a set of multiple fixed options: For example the result of a fallible computation may either be \code{Ok(V)} meaning a successful computation with the result \code{V} or a failure \code{Err(E)} with a description of the error \code{E}.
+In rust these sum types are called \code{enum}s.
+
+Sum types influence the type system in two key ways: 
+
+Firstly, the specification of its values. Suppose a programmer would like an authentication function signature to state, that the function returns an \code{Err} code "403" if the password was incorrect. This requires the type language to assert what variant is expected as well as access to its fields (if the variant is known).
+
+Secondly, path sensitivity needs to be extended to cover \code{match} expressions (called \code{case} is most functional programming languages). \code{match} expression allow the programmer to branch depending on the variant of a value.
+
+\subsection{Inference}
+
+While the current implementation is able to type expressions without explicit type annotations, solving a set of type constraints is not implemented. 
+Rondon et al. \cite{rondon_liquid_2008} describe a mechanism to infer complex refined types by combining known predicates from the context. This approach should be adaptable to Corten to reduce the amount of needed type annotations even further.
+
+
 \subsection{Predicate Generics}
+
+Vazou et al. \cite{vazou_abstract_2013} found, that the expressiveness of refinement types can still be expanded without leaving a decidable fragment by adding uninterpreted functions to the logic. In the type system, these uninterpreted functions represent "abstract predicates". At the definition site, abstract predicates can not be inspected and restricted, but the caller can instantiate then with a concrete predicate.
+
+
 
 \chapter{Implementation}
 

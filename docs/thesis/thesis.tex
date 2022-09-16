@@ -112,11 +112,11 @@ Before designing a system for Rust, it makes sense to gain some understanding of
 Firstly \code{unsafe} Rust with similar guarantees to C would make verification and specification significantly harder. But if the use of \code{unsafe} is limited, like intended by the language designers, it would allow us to focus on the save part of Rust and leave the verification of \code{unsafe} Rust to more complex verification systems.
 Secondly with mutability being the main difference to the traditional domain fof Refinement Types, showing the need for covering this area and to what degree of approachability it interesting.
 
-There are two fundamental assumptions for the usefulness of the type system: 
+There are two fundamental questions, that analysing existing rust code should answer: 
 \begin{enumerate}
-  \item \label{enum:hypothesis-unsafe-rare} Uses of \code{unsafe} are rare
-  \item \label{enum:hypothesis-unsafe-lib} In the rare case, that \code{unsafe} is used, is is mostly used internally (not exposed to the callee)
-  \item \label{enum:hypothesis-mut} Mutability is used pervasively in Rust.
+  \item \label{enum:hypothesis-unsafe-rare} How rare are uses of \code{unsafe}
+  \item \label{enum:hypothesis-unsafe-lib} How much effort is acceptable when specifying \code{unsafe} code?
+  \item \label{enum:hypothesis-mut} How common are mutable variables and references in Rust?
 \end{enumerate}
 
 To check these assumptions an analysis of existing Rust code was performed. As a basis for the analysis, the Rust package registry \href{https://www.crates.io}{crates.io} was used. It contains the source code for both Rust libraries as well as various applications written in Rust (e.g. ripgrep). 
@@ -140,14 +140,14 @@ Thanks to using the tree-sitter parsing framework, the analysis framework can ea
 
 \label{ss:unsafe-rust}\section{Unsafe Rust}
 
-Firstly we will be checking the hypothesis \ref{enum:hypothesis-unsafe-rare}.
+Firstly we will be answering the question of \code{unsafe} usage in Rust.
 There is already some research on how \code{unsafe} is used in Rust. For example Astrauskas et al. \cite{astrauskas_how_2020} found, that about 76\% of crates did not use any unsafe. On top of that, unsafe signatures are only exposed by 34.7\% of crates, that use \code{unsafe}.
 
 "The majority of crates (76.4\%) contain no unsafe features at all. Even in most crates that do contain unsafe blocks or functions, only a small fraction of the code is unsafe: for 92.3\% of all crates, the unsafe statement ratio is at most 10\%, i.e., up to 10\% of the codebase consists of unsafe blocks and unsafe functions." \cite[p. 13]{astrauskas_how_2020}
 Our data seems to confirm this: \numprint{8044} of the \numprint{11882} crates (67.7\%) did not use any unsafe. 
 
 Astrauskas et al. also found, that "however, with 21.3\% of crates containing some unsafe statements and – out of those crates – 24.6\% having an unsafe statement ratio of at least 20\%, we cannot claim that developers use unsafe Rust sparingly, i.e., they do not always follow the first principle of the Rust hypothesis." \cite[p. 14]{astrauskas_how_2020}
-If this is the case for applications, it might disprove hypothesis hypothesis \ref{enum:hypothesis-unsafe-lib}. 
+
 When checking unsafely for our use case, it makes sense to further distinguish between libraries and executables crates: Libraries are intended to be used by other Rust programs: Usage of unsafe in libraries may not be as problematic as in executables, because libraries are written once but used by many applications, justifying higher verification effort. 
 
 In our analysis we found, that firstly crates.io contains significantly more libraries than binaries\footnote{Libraries and Executables are distinguished by checking if they contain \code{bin} or \code{lib} target or one of the corresponding files according to the cargo naming convention.} (see Figure \ref{fig:crate_types}). 
@@ -191,8 +191,10 @@ Looking at the distribution of unsafe uses in Figure \ref{fig:unsafe-hist}, we c
 
 \section{Mutability}
 
-Finally we will check hypothesis \ref{enum:hypothesis-mut}, which asserts, that mutable variables and references are used pervasively in Rust.
-This was checked by analysing the dataset for certain syntactical structures to infer mutability information about the following various AST items:
+Finally we will analyse how common mutable variables and references are used in Rust. 
+The frequency of usage will inform the acceptable level of specification effort.
+
+To analyse the dataset for usage pattern, we search the dataset for certain syntactical structures to infer mutability information about the following various AST items:
 \begin{itemize}
 	\item \textbf{Local Variable Definitions} can be tracked with high confidence. They occur in function bodies and take the form: \code{let mut a = <expr>}
 	\item \textbf{Parameters}, which are considered immutable if they are passed as immutable references or owned. They take the syntactic form: \code{mut a: i32} or \code{b: \&mut i32}
@@ -311,122 +313,6 @@ The notion of refinements in embedded into the base language using subtyping: A 
 Rust's main disadvantage as a target language it its size: There is a lot of syntax and semantics that would need to be accounted. A lot of it even incidental to the verification. To reduce the complexity and amount of work, that needs to be done, we will focus on a subset of Rust described in this section.
 
 The goal is to remove as much incidental complexity as possible without compromising to the central topic of research: How to extend LiquidTypes to mutability under the presence of Rust's ownership model.
-
-\section{Features}
-
-This subsection will explain some of the key features of the Corten type system.
-Corten is directly embedded in Rust using two macros. Firstly the macro \code{ty!} can be used in place of a Rust type and adds a predicate to the Rust type, that any inhabitant of that type must satisfy. For example, the type \code{ty!\{ v : i32 | v >= 0\}} stipulates, that a value of Rust type \code{i32} is positive. The second macro is \code{relax\_ctx!\{ ... \}} which will be explained in subsection \ref{subsec:atomic-updates}.
-
-\label{subsec:mutable-references}\subsection{Mutable References}
-
-The key difference to Refinement Type Systems for functional languages to Rust it the pervasive use of mutation. Therefore the most important feature of Corten it the support for mutation and also mutable references.
-
-The problem with references is the possibility of interdependencies: If one variable is changed, it might effect wether another variable is typed correctly. In listing \ref{lst:mutation} the return value \code{a} is effected by changes done to a different variable \code{a}. Conservative approximation requires, that all possible effects must be tracked.
-
-Corten can accurately track references by phrasing them as predicates. For example the expression \code{\&mut a} will be typed as \code{ty!\{ \_1 : \&mut b | \_1 == \&a \}} (where \code{b} is the Rust type of \code{a}). This is sensible, because in Rust's ownership system, \code{a} must be the unique owner of the memory belonging to \code{a}. 
-A more involved example is given in the evaluation \ref{subsec:evaluation-complex-mutable-ref}
-
-Corten has two ways of dealing with assignment to mutable references: If the reference destination is known, the destination's type will be updated with the assigned values type (i.e. strong update). If there are multiple possible reference destinations, Corten will require the assigned value to satisfy the predicates of all possible destinations (i.e. weak updates). This is a standard approach (For example \cite{kloos_asynchronous_2015}), but more precise in Rust: The set of possible destinations only grows, when it depends on the execution of an optional control flow path. This means most of the time, strong updates are possible and weak updates are only needed if the reference destination is actually dynamic (i.e. dependent on the execution) \footnote{It would also be possible to encode the path condition in the reference type, but this was decided against for the stated goal of simplicity for the user}
-
-
-- importance of tracing return of mutable references
-
-\begin{listing}[h]
-  \begin{minted}{rust}
-    fn client() -> ty!{ v: i32 | v == 4 } {
-        let a = 2; let b = &mut a;
-        *b = 0; // changes a's value
-        let c = &mut b;
-        **c = 4; // changes a's value
-        a
-    }
-  \end{minted}
-  \caption{Example demonstrating interdependencies between mutable references}
-  \label{lst:mutation}
-\end{listing}
-
-\label{subsec:path-sensitivify}\subsection{Path Sensitivity}
-
-Firstly, the type system is path sensitive, meaning that the type system is aware of necessary XXX that need to be passed for an expression to be evaluated. For example listing \ref{lst:max-path-sensitive} shows a function computing the maximum of its inputs. In the then branch, $a$ is only a maximum of $a$ and $b$, because the condition $a > b$ implies it. Corten will symbolically evaluate the condition and store it in its typing context.
-
-\begin{listing}[h]
-  \begin{minted}{rust}
-    fn max(a : ty!{ av: i32 }, b: ty!{ bv: i32 })
-        -> ty!{ v: i32 | v >= av && v >= bv} {
-        if a > b {
-          a as ty!{ x : i32 | x >= av && x >= bv }
-        } else {
-          b
-        }
-    }
-  \end{minted}
-  \caption{Function computing the maximum of its inputs; guaranteeing that the returned value is larger than its inputs}
-  \label{lst:max-path-sensitive}
-\end{listing}
-
-
-- inference
-- also with mutations
-
-
-\label{subsec:strong-type-updates}\subsection{Strong Type Updates}
-
-\begin{listing}[h]
-  \begin{minted}{rust}
-    fn strong_updates(b: ty!{ bv: i32 | bv > 0}) -> ty!{ v: i32 | v > 2} {
-        let mut a = 2;
-        a = a + b;
-        a
-    }
-  \end{minted}
-  \caption{Example of changes to \code{a}'s value effecting its type}
-  \label{lst:strong-updates}
-\end{listing}
-
-
-
-\label{sec:modularity}\subsection{Modularity}
-
-For a verification system to be scalable, it needs to be able modularize a proof. Corten can propagate type information across function calls and by taking advantage of Rust's ownership system, it can do so very accurately. Listing \ref{lst:modular-calls} shows, how an incrementing function \code{inc} can be specified: \code{inc} signature stipulates, that it can be called with any \code{i32} (given the name \code{a1}) and will return a value \code{a2}, which equals \code{a1 + 1}. Only the signature of \code{inc} is necessary for the type checking of \code{client}. 
-
-Notice, that all of the type information about \code{y} is preserved when \code{inc(x)} is called. There are no further annotations needed to type check this program. This is possible, because in safe Rust, any (externally observable) mutation done by a function must be part of the function signature. Corten expands on this, by enabling the user specify exactly how a referenced value is mutated.
-
-\begin{listing}[h]
-  \begin{minted}{rust}
-    fn inc(a: &mut ty!{ a1: i32 => a2 | a2 == a1 + 1 }) {
-      *a = *a + 1;
-    }
-    fn client(mut x: ty!{ xv: i32 | xv > 2 }) -> ty!{ v: i32 | v > 7 } {
-      let mut y = 2;
-      inc(&mut x); inc(&mut x);
-      inc(&mut y)
-      x + y
-    }
-  \end{minted}
-  \caption{Example showing how Corten allows for accurate type checking in the presence of function calls }
-  \label{lst:modular-calls}
-\end{listing}
-
-
-
-\label{subsec:mutual-reference}\subsection{Mutual Reference}
-
-Complex mutation patterns often result in complex interdependencies. We deem it necessary to allow different types to refer to each other.\todo{why?}
-
-\begin{listing}[h]
-  \begin{minted}{rust}
-      let sum = 0;
-      let i = 0;
-      
-  \end{minted}
-  \caption{Function computing the maximum of its inputs; guaranteeing that the returned value is larger than its inputs}
-  \label{lst:mutual-reference}
-\end{listing}
-
-\label{subsec:atomic-updates}\subsection{Atomic Updates}
-
-- relax ctx
-- non-atomic might not be sufficient
 
 
 \section{Syntax}
@@ -560,6 +446,181 @@ The main difference is, that in Rust, every piece of data has a unique, known ow
 \end{definition}
 
 \chapter{The Refinement Type System}
+
+
+\section{Features}
+
+This subsection will explain some of the key features of the Corten type system.
+Corten is directly embedded in Rust using two macros. Firstly the macro \code{ty!} can be used in place of a Rust type and adds a predicate to the Rust type, that any inhabitant of that type must satisfy. For example, the type \code{ty!\{ v : i32 | v >= 0\}} stipulates, that a value of Rust type \code{i32} is positive. The second macro is \code{relax\_ctx!\{ ... \}} which will be explained in subsection \ref{subsec:atomic-updates}.
+
+\subsection{Mutable Values}
+
+
+Corten elected to  \dots
+Therefore assigning a new value to a variable will give that variable a new type, but \- crucially \- keep the logic variable in the typing context, which means that types of other variables can still refer to it. Logic variables, that are (no longer) associated with a program variable, are called dangling variables.
+Consequenctly,
+
+\begin{listing}[h]
+  \begin{minted}[texcomments]{rust}
+    fn inc() -> ty!{ v: i32 | v == 3 } {
+        let mut i = 2;       // $\{ v_1 : i32 \mid v_1 == 2 \}$
+        i = i + 1;           // $\{ v_2 : i32 \mid v_2 == v_1 + 1 \}$
+        i
+    }
+  \end{minted}
+  \caption{Example demonstrating why predicates and mutable values may cause problems}
+  \label{lst:mutable-values}
+\end{listing}
+
+\label{subsec:mutable-references}\subsection{Mutable References}
+
+The key difference to Refinement Type Systems for functional languages to Rust it the pervasive use of mutation. Therefore the most important feature of Corten it the support for mutation and also mutable references.
+
+Corten has two ways of dealing with assignment to mutable references: If the reference destination is known, the destination's type will be updated with the assigned values type (i.e. strong update). If there are multiple possible reference destinations, Corten will require the assigned value to satisfy the predicates of all possible destinations (i.e. weak updates). This is a standard approach (For example \cite{kloos_asynchronous_2015}), but more precise in Rust: The set of possible destinations only grows, when it depends on the execution of an optional control flow path. This means most of the time, strong updates are possible and weak updates are only needed if the reference destination is actually dynamic (i.e. dependent on the execution) \footnote{It would also be possible to encode the path condition in the reference type, but this was decided against for the stated goal of simplicity for the user}
+
+The problem with mutable references is possibility of aliasing. Aliasing is problematic, because it might create interdependencies between the types of different variables: If one variable is changed, it might effect wether another variable is typed correctly. In listing \ref{lst:mutation-strong} the return value \code{a} is effected by changes done to a different variable \code{a}. Conservative approximation requires, that all possible effects must be tracked.
+
+- <dangling>, monotonically increasing $\varphi$
+
+Corten can accurately track references by phrasing them as predicates.
+In the example, in \code{b = \&mut a}, \code{\&mut a} will have inferred type \code{\{ r : \&mut | r == \& a \}}, meaning any value of this type can at most refer to to the variable called \code{y}.
+When a new value is assigned to \code{*b}, the type system will look at the typing context to find out what \code{b} might refer to. In this case \code{a} is the \textit{only} possible target und we can therefore \textit{update} its type. I.e. in type system, \code{*b = 0} will change the type of \code{a} to \code{\{ s : i32 | s == 0 \}}, but the type of \code{b} stays the same (because it still refers to the same location). We call this kind of assignment a strong assignment, as it can change the type. 
+
+This is sensible, because in Rust's ownership system, \code{a} must be the unique owner of the memory belonging to \code{a}. 
+A more involved example is given in the evaluation \ref{subsec:evaluation-complex-mutable-ref}
+
+Note, that the type can only be changed because we know exactly what \code{b} refers to. If there is ambiguity about the destination of a reference, strong updates are no longer possible.
+
+
+
+\begin{listing}[h]
+  \begin{minted}[texcomments]{rust}
+    fn client() -> ty!{ v: i32 | v == 4 } {
+        let a = 2;       // $\{ v_1 : i32 \mid v_1 == 2 \}$
+        let b = &mut a;  // $\{ v_2 : &i32 \mid v_2 == &a \}$
+        *b = 0; // changes a's value and type
+        let c = &mut b;
+        **c = 4; // changes a's value and type
+        a
+    }
+  \end{minted}
+  \caption{Example demonstrating interdependencies between mutable references}
+  \label{lst:mutation-strong}
+\end{listing}
+
+To support these use cases, Corten also supports weak updates, which can not change types, but allow assigning to ambiguous reference destinations.
+The example \ref{lst:mutation-weak} demonstrates how ambiguity about the reference destination may emerge: Depending on the if condition, \code{res} could refer to either \code{y} or \code{z}.
+Naturally, we can weaken the reference type to \code{ty!\{ r1 : \&mut i32 | r1 == \&y || r1 == \&z \}}, meaning \code{res} could refer to either \code{y} or \code{z}.
+Because the destination is ambiguous, assigning to \code{*res} can not change the type of \code{y} or \code{z}, which is the case if the type of the assigned value is at least as specific as the types of all possible reference destinations.
+
+- importance of tracing return of mutable references
+
+
+
+\begin{listing}[h]
+  \begin{minted}[texcomments]{rust}
+    fn weak_updates(x : ty!{ x1 : i32 }) -> ty!{ v : i32 | v > 2 * x1 + 10 } {
+      let mut y = x as ty!{ y1 : i32 | y1 >= x1 };
+      let mut z = x + 10 as ty!{ z1 : i32 | z1 >= x1 + 10 };
+      let mut res;
+      if x > 0 {
+        res = &mut y as ty!{ r : &mut | r == &y || r == &z };
+                      // branches of if need same type => weaken
+      } else {
+        res = &mut z as ty!{ r : &mut | r == &y || r == &z };
+      }
+      *res = x + 11; // res could refer to b or c 
+                    // -> assigned value must satisfy both types
+      y + z
+    }
+  \end{minted}
+  \caption{Example demonstrating weak updates}
+  \label{lst:mutation-weak}
+\end{listing}
+
+\label{subsec:path-sensitivify}\subsection{Path Sensitivity}
+
+Firstly, the type system is path sensitive, meaning that the type system is aware of necessary XXX that need to be passed for an expression to be evaluated. For example listing \ref{lst:max-path-sensitive} shows a function computing the maximum of its inputs. In the then branch, $a$ is only a maximum of $a$ and $b$, because the condition $a > b$ implies it. Corten will symbolically evaluate the condition and store it in its typing context.
+
+\begin{listing}[h]
+  \begin{minted}{rust}
+    fn max(a : ty!{ av: i32 }, b: ty!{ bv: i32 })
+        -> ty!{ v: i32 | v >= av && v >= bv} {
+        if a > b {
+          a as ty!{ x : i32 | x >= av && x >= bv }
+        } else {
+          b
+        }
+    }
+  \end{minted}
+  \caption{Function computing the maximum of its inputs; guaranteeing that the returned value is larger than its inputs}
+  \label{lst:max-path-sensitive}
+\end{listing}
+
+
+- inference
+- also with mutations
+
+
+\label{subsec:strong-type-updates}\subsection{Strong Type Updates}
+
+\begin{listing}[h]
+  \begin{minted}{rust}
+    fn strong_updates(b: ty!{ bv: i32 | bv > 0}) -> ty!{ v: i32 | v > 2} {
+        let mut a = 2;
+        a = a + b;
+        a
+    }
+  \end{minted}
+  \caption{Example of changes to \code{a}'s value effecting its type}
+  \label{lst:strong-updates}
+\end{listing}
+
+
+
+\label{sec:modularity}\subsection{Modularity}
+
+For a verification system to be scalable, it needs to be able modularize a proof. Corten can propagate type information across function calls and by taking advantage of Rust's ownership system, it can do so very accurately. Listing \ref{lst:modular-calls} shows, how an incrementing function \code{inc} can be specified: \code{inc} signature stipulates, that it can be called with any \code{i32} (given the name \code{a1}) and will return a value \code{a2}, which equals \code{a1 + 1}. Only the signature of \code{inc} is necessary for the type checking of \code{client}. 
+
+Notice, that all of the type information about \code{y} is preserved when \code{inc(x)} is called. There are no further annotations needed to type check this program. This is possible, because in safe Rust, any (externally observable) mutation done by a function must be part of the function signature. Corten expands on this, by enabling the user specify exactly how a referenced value is mutated.
+
+\begin{listing}[h]
+  \begin{minted}{rust}
+    fn inc(a: &mut ty!{ a1: i32 => a2 | a2 == a1 + 1 }) {
+      *a = *a + 1;
+    }
+    fn client(mut x: ty!{ xv: i32 | xv > 2 }) -> ty!{ v: i32 | v > 7 } {
+      let mut y = 2;
+      inc(&mut x); inc(&mut x);
+      inc(&mut y)
+      x + y
+    }
+  \end{minted}
+  \caption{Example showing how Corten allows for accurate type checking in the presence of function calls }
+  \label{lst:modular-calls}
+\end{listing}
+
+
+
+\label{subsec:mutual-reference}\subsection{Mutual Reference}
+
+Complex mutation patterns often result in complex interdependencies. We deem it necessary to allow different types to refer to each other.\todo{why?}
+
+\begin{listing}[h]
+  \begin{minted}{rust}
+      let sum = 0;
+      let i = 0;
+      
+  \end{minted}
+  \caption{Function computing the maximum of its inputs; guaranteeing that the returned value is larger than its inputs}
+  \label{lst:mutual-reference}
+\end{listing}
+
+\label{subsec:atomic-updates}\subsection{Atomic Updates}
+
+- relax ctx
+- non-atomic might not be sufficient
+
 
 \section{Definitions}
 

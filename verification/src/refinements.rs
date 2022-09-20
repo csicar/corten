@@ -363,7 +363,7 @@ pub fn encode_smt(
                 syn::BinOp::Mul(_) => "*",
                 syn::BinOp::Div(_) => "/",
                 syn::BinOp::And(_) => "&&",
-                syn::BinOp::Or(_) => "||",
+                syn::BinOp::Or(_) => "or",
                 syn::BinOp::Eq(_) => "=",
                 syn::BinOp::Lt(_) => "<",
                 syn::BinOp::Le(_) => "<=",

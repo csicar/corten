@@ -240,6 +240,29 @@ For this thesis the following conclusion can be drawn:
 
 \chapter{Foundations}
 
+
+\section{Rustc}
+
+This section summarizes the relevant parts of Rustc mainly based on the rustc dev guide \cite{noauthor_overview_nodate}
+
+Rustc offers an APIs for writing compiler plugins, which can access the intermediate languages of Rust at different stages during the compilation and allows the plugin to emit warnings and errors. 
+At a high level, rustc is built with stages, that incrementally lower the source code to an executable binary. Rustc has multiple stages and associated data structures. 
+Relevant for the thesis are the first few stages: Firstly the AST, which is a representation of the source code after lexing and parsing, 
+
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=0.7\linewidth]{./rustc-stages.pdf}
+	\caption{Diagram providing an overview of the Rustc Compiler Stages}
+	\label{fig:rust-stages}
+\end{figure}
+
+Figure \ref{fig:rust-stages} shows the the main compiler stages of Rustc and the associated data structure. The first data structure, that is extracted from the source code is the AST (short for abstract syntax tree), which is the result of parsing and expanding macros. 
+Based on the AST, the high-level intermediate representation (short HIR) is created by resolving the names and desugaring some language constructs. The HIR contains accurate source labels, which map all nodes in the HIR to their source code locations. 
+The HIR is then used as the basis for type checking returning the typed high-level intermediate representation (short THIR), which annotates every node with its type. THIR also lowers some additional constructs like automatic dereferencing and overloading and more. In contrast to the previous representations, "[t]he THIR only represents bodies, i.e. <<executable code>>; this includes function bodies [..]. Consequently, the THIR has no representation for items like \code{struct}s or \code{trait}s." \cite[p. 1]{noauthor_thir_nodate}
+THIR will then be used to create the mid-level IR by drastically simplifying the language: The tree structure with complex expression of the THIR is turned in to a control-flow graph (short CFG) with basic blocks containing simple (i.e. non-nested) expressions.
+
+Finally Rustc uses external tools \- like llvm \- to generate executable files and link them.
+
 \section{Rust}
 
 
@@ -453,12 +476,19 @@ The main difference is, that in Rust, every piece of data has a unique, known ow
 This subsection will explain some of the key features of the Corten type system.
 Corten is directly embedded in Rust using two macros. Firstly the macro \code{ty!} can be used in place of a Rust type and adds a predicate to the Rust type, that any inhabitant of that type must satisfy. For example, the type \code{ty!\{ v : i32 | v >= 0\}} stipulates, that a value of Rust type \code{i32} is positive. The second macro is \code{relax\_ctx!\{ ... \}} which will be explained in subsection \ref{subsec:atomic-updates}.
 
-\subsection{Mutable Values}
+\subsection{Decidable, Conservative Subtyping}
 
+The idea 
+
+\subsection{Mutable Values}
 
 Corten elected to  \dots
 Therefore assigning a new value to a variable will give that variable a new type, but \- crucially \- keep the logic variable in the typing context, which means that types of other variables can still refer to it. Logic variables, that are (no longer) associated with a program variable, are called dangling variables.
-Consequenctly,
+That means, that the number of predicates in the context increases with every new value assignment.
+In the example, the typing context at the end of the function body contains $v_1$, $v_2$ and their predicates and the association of \code{i} to $v_2$.
+
+There are other approaches for handling changing values in refinement types, which will be described and compared in \ref{subsec:related-work-mutability}.
+
 
 \begin{listing}[h]
   \begin{minted}[texcomments]{rust}
@@ -970,7 +1000,7 @@ Because MiniCorten is based on Rust, we will assume, that progress, as well as p
   ...?
 \end{proof}
 
-\section{Extensions}
+\label{sec:extensions} \section{Extensions}
 
 
 To limit the complexity a few features are not defined as part of the Corten or the implementation.
@@ -1018,18 +1048,204 @@ Vazou et al. \cite{vazou_abstract_2013} found, that the expressiveness of refine
 
 
 
-\chapter{Implementation}
+\chapter{Implementation: CortenC}
+
+The type system described in the previous chapter was implemented to test the practical feasibility of our approach.
+There are a few differences and details between the type system described above and the implementation CortenC (short for Corten Checker) that will be highlighted in this chapter.
+
+In contrast to the MiniCorten and the described type system, CortenC uses actual Rust as its target language. In addition to MiniCorten's features, CortenC also covers expressions with side-effects, non-ANF expressions, statements as well as basic inference.
+These features do not change the expressiveness of the type system, but make it a lot more practical.
+
+\paragraph{Target Selection}
+% Target selection: HIR / MIR?
+The architecture of the rustc compiler makes it possible to implement a refinement type system quite cleanly: Rustc's plugin system allows CortenC to access rustc's intermediate representations and also emit diagnostics with source locations. Since the diagnostics from CortenC use the same interface as Rust's diagnostics, other tools like IDEs can handle them without any adaptation.
+
+CortenC uses the HIR. It is a good candidate for extensions to the type system, because it contains source labels, allowing accurate problem reporting to the user. Secondly, in HIR all names are resolved making and types can be queried for HIR nodes, which means the Rustc plugin can reuse a lot of work done in the Rustc Compiler. Thirdly, non-executable segments of the program, like type declarations, are represented in the HIR.
+
+Using MIR is also a sensible option: The MIR is a drastically simplified representation of just the executable segments of the program as a CFG with non-nested expressions. Because of the simplicity, it would be appealing to use the MIR as the basis for the implementation. 
+An additional advantage of MIR could be, that ownership analysis is done on MIR, which would allow the refinement type system to use that information. Surprisingly, we did not encounter any situation, where ownership information is necessary for typing refined types.
+
+Ultimately, it was decided against using the MIR for the following reasons:
+Firstly a concern for the quality of diagnostics: The MIR code is quite distant from the user-provided code. For example, when trying to explain a error when typing a while-loop, the implementation may need to reconstruct the original source code structure from the CFG, which could be inaccurate and error-prone. 
+In addition, source locations may be less accurate or unavailable. 
+Finally the MIR does not contain type declarations, which could make it hard to extend the implementation for algebraic data type or predicate generics (see section \ref{sec:extensions})
+
+\paragraph{Language Embedding}
+CortenC exposes a minimal interface to the programmer: The interface consists of two macros:
+\code{ty!\{ ... \}} which allows the programmer to specify a refined type for a rust base type and
+\code{relax\_ctx!\{ ... \}} to allow the programmer to relax the typing context (mostly used for introducing a loop-invariant). 
+
+Listing \ref{lst:macro-definition} shows how the \code{ty!} macros is defined: Most important are the first two macro forms, which handle immutable types like \code{ty!\{ v : i32 | v > 0\}} and mutable parameter types like \code{ty!\{ v1: i32 | v1 > 0 => v2 | v2 < 0\}}. 
+There are additional short forms of these macro calls, which where cut from the listing for brevity. Both macro calls are translated into the type alias \code{Refinement} (\code{MutRefinement} respectively). For the examples above, it would be \code{Refinement<i32, "v", "v > 0">} and \code{MutRefinement<i32, "v1", "v1 > 0", "v2", "v2 > 0">} respectively. These type aliases are quite useful for CortenC: They ensure, that CortenC keeps compatibility with Rust. I.e. a program with CortenC type annotations can be compiled in normal Rust without problems and the type aliases also simplify the implementation of CortenC, because the refined type can be extracted directly from the Rust type alias. Consequently, CortenC does not need to perform name resolution, even for external function declarations.
+
+Note that, because the \code{ty!} macro takes the place of a Rust type, normal IDE features, like "Goto Type Definition" still work on the base types without any adaptation.
+
+\begin{listing}[h]
+  \begin{minted}[autogobble]{rust}
+  pub type Refinement<
+    T,                      // Rust type
+    const B: &'static str,  // Logic Variable
+    const R: &'static str   // Predicate
+  > = T;
+
+  pub type MutRefinement<
+      T,                      // Rust type
+      const B1: &'static str, // Logic Variable Before
+      const R1: &'static str, // Predicate Before
+      const B2: &'static str, // Logic Variable After
+      const R2: &'static str, // Predicate After
+  > = T;
+
+  #[macro_export]
+  macro_rules! ty {
+    ($i:ident : $base_ty:ty | $pred:expr) => {
+        $crate::Refinement< $base_ty, {stringify! { $i }}, {stringify! { $pred }}>
+    };
+    ($i:ident : $base_ty:ty | $pred:expr => $i2: ident | $pred2:expr) => {
+        $crate::MutRefinement< $base_ty, {stringify! { $i }}, {stringify! { $pred }}, {stringify! { $i2 }}, {stringify! { $pred2 }}>
+    };
+    // -- snip --
+  }
+  \end{minted}
+  \caption{Definition of CortenC's macros}
+  \label{lst:macro-definition}
+\end{listing}
+
+For the second macro \code{relax\_ctx!} takes the place of a statement. 
+It is translated to a function call, that can then be used to reconstruct the described context.
+
+\paragraph{Architecture}
+CortenC follows the structure implied by the type system: All concepts and type checking rules have a correspondence in CortenC:
+\code{RContext} is the representation of $\Gamma$ in CortenC, with the main difference being, that predicates stay associated with a logic variable (and potentially a program variable). The purpose being, that in the future, CortenC could create better error messages, by associating "blame" to a type checking failure: If the predicate of a logic variable is part of the reason why a subtyping check fails, it would be useful to convey that information to the user. 
+\code{RefinementType} is the representation of $\tau$ in CortenC.
+
+CortenC registers a callback in Rustc to run after HIR construction. The callback calls \code{type\_check\_function} for each function in the HIR, which either returns \code{Result::Ok} indicating, that the function type checks or \code{Result::Err} if type checking failed. In that case, the callback will emit a diagnostic to rustc to inform the user about the refinement type error.
+Listing \ref{lst:architecture-cortenc} shows the core functions signatures involved in type checking. \code{type\_check\_function} corresponds to the \textsc{Fn-Decl} rule by constructing the initial context and delegating checking of the body to \code{type\_expr}. 
+Since Rust expressions can contain statements, \code{type\_expr} will use \code{transition\_stmt} to type check these statements before returning the final type context.
+Both \code{type\_expr} and \code{transition\_stmt} carry a collection of parameters, that contain the Rust type checking data (The global type context \code{TyCtxt} and the local type context \code{TypeckResults}), the refinement type context \code{RContext}, a handle to the SMT solver \code{SmtSolver} and a way to generate fresh logic variable names \code{Fresh}.
+
+These function utilize \code{require\_is\_sub\_context} and \code{require\_is\_subtype\_of} to dispatch the actual SMT solver requests. These functions are also responsible for encoding the predicates and substituting variable names where necessary. 
+The following paragraph will give an example for how these SMT solver requests look like.
+
+\begin{listing}[h]
+  \begin{minted}[autogobble, texcomments]{rust}
+  fn type_check_function(
+    function: &hir::Item,
+    tcx: &TyCtxt,
+  ) -> Result<RefinementType> { .. }
+
+  fn transition_stmt(
+    stmts: &a [hir::Stmt],
+    tcx: & TyCtxt,
+    ctx: & RContext,
+    local_ctx: & TypeckResults,
+    solver: &mut SmtSolver,
+    fresh: &mut Fresh,
+  ) -> Result<RContext> { .. }
+
+  fn type_expr(
+    expr: &a Expr,
+    tcx: & TyCtxt,
+    ctx: & RContext,
+    local_ctx: & TypeckResults,
+    solver: &mut SmtSolver,
+    fresh: &mut Fresh,
+  ) -> Result<(RefinementType, RContext)> { .. }
+
+  fn require_is_sub_context(
+    super_ctx: &RContext,
+    sub_ctx: &RContext,
+    tcx: &TyCtxt,
+    solver: &mut SmtSolver,
+  ) -> anyhow::Result<()> { .. }
+
+  fn require_is_subtype_of(
+      sub_ty: &RefinementType,
+      super_ty: &RefinementType,
+      ctx: &RContext,
+      tcx: &TyCtxt,
+      solver: &mut SmtSolver,
+  ) -> anyhow::Result<()> { .. }
+  \end{minted}
+  \caption{Overview of the central function CortenC is built from. (Lifetimes were removed for clarity)}
+  \label{lst:architecture-cortenc}
+\end{listing}
+
+\paragraph{Simple Example}
+
+\begin{listing}[h]
+  \begin{minted}[autogobble, texcomments]{rust}
+  fn inc(a : ty!{ n : i32 | n > 0}) -> ty!{v : i32 | v > 1} {
+    let b = 1;
+    a + b
+  }
+  \end{minted}
+  \caption{Simple Example Program used for demonstrating the operation of CortenC}
+  \label{lst:simple-example-cortenc}
+\end{listing}
+
+Consider the example program \ref{lst:simple-example-conrtenc}, which returns the increment of the argument.
+Rustc will call the CortenC callback with the item \code{fn inc} once the HIR construction is completed. Next, the callback calls \code{type\_check\_function} where the initial context $\Gamma = ( a \mapsto n, \left\{ n > 0\right\})$ is constructed and calls \code{type\_expr} with the the function body expression. Base the function body is a sequence \code{transition\_stmt} is called for all expect the last expression in the sequence. \code{let b = 1} updates the context to $\Gamma_1 = ( a \mapsto n, b \mapsto v_1, \left\{ n > 0, v_1 = 1\right\})$ ($v_1$ is a name generated by \code{Fresh}). 
+Finally \code{type\_expr} types the expression \code{a + b} according to the typing rules described above resulting in the type $\left\{ v_2 : i32 \mid v_2 = n + v_1\right\}$.
+This type is then returned as the overall type of the body expression to \code{type\_check\_function}, which has the responsibility of checking that in the context $\Gamma_1$, the actual return type is a subtype of the specified type in the signature. 
+Thusly \code{require\_is\_subtype\_of} is called with the two types and subsequently dispatches the SMT shown in listing \ref{smt-sample-output}. 
+Because the SMT call returned \code{unsat}, the subtype relation is valid and the function type checking was successful.
 
 
-- Type Aliases
-- working without special compiler
-- compiler plugin
-- IDE
-- HIR
-- Location data (spans)
-- Additional features
-  - basic inference
-  - no ANF
+\begin{listing}[h]
+  \begin{minted}[autogobble]{lisp}
+    (declare-datatypes () ((Unit unit)))
+
+    ; <Context>
+      ; decl for <fud.rs>:79:73: 79:74 (#0) local b
+      (declare-const _0 Int)
+      
+      ; decl for <fud.rs>:79:9: 79:10 (#0) local a
+      (declare-const n Int)
+      
+      ; predicate for _0: local b
+      ;     ty!{ _0 : i32 | _0 == 1 }
+      (assert
+          (= |_0| 1)
+      )
+      
+      ; predicate for n: local a
+      ;     ty!{ n : i32 | n > 0 }
+      (assert
+          (> |n| 0)
+      )
+    ; </Context>
+
+    (declare-const _1 Int)
+    (assert
+        (= (+ |n| |_0|) |_1|)
+    )
+    
+    (assert
+        (not (> |_1| 1))
+    )
+    
+    ; checking: ty!{ _1 : i32 | n + _0 == _1 } ≼  ty!{ v : i32 | v > 1 }
+    (check-sat)
+    
+    ; done checking is_subtype_of! is sat: false
+  \end{minted}
+  \caption{SMT Requests dispatched by CortenC for checking that the returned type matches the specified type}
+  \label{lst:smt-sample-output}
+\end{listing}
+
+% -[x] Type Aliases
+% -[x] working without special compiler
+% -[x] compiler plugin
+% -[x] IDE
+% -[x] HIR
+% -[x] Location data (spans)
+% -[x] signatures
+% -[x] Additional features
+%   -[x] basic inference
+%   -[x] no ANF
+%   -[x] side-effectful expressions
+% - [x] z3 example prompt
 
 \chapter{Evaluation}
 
@@ -1063,6 +1279,14 @@ In terms of alternative verification approaches, Prusti\cite{astrauskas_leveragi
 Alternative verification approaches also exists: For example RustHorn\cite{matsushita_rusthorn_2020} employs constrained horn clauses based verification to Rust. Particularity relevant for this thesis is the novel formalization for mutable references used in the paper. The authors stipulate that mutable references should be specified by a pre- and post-state from before a reference is borrowed to after it is returned.
 
 The notion of Abstract Refinement Types that this thesis is based on is defined by Vazou et al. \cite{vazou_abstract_2013}. The basic idea is to allow the programmer to "refine" language types with predicates from a decidable logic. The type system has a notion of subtyping for refined types, where one type is a subtype of another if one predicate implies the other.
+
+\label{subsec:related-work-mutability} \subsection{Alternative Approaches for Handling Mutability}
+
+Of course the design space permits choosing other tradeoffs. For example, Rondon et al. \cite{rondon_low-level_2010} chooses 
+  - only interdependence in single record using fold mechanism
+  - 
+
+this is not the only way to deal with mutability: 
 
 \section{Comparison to Flux}
 

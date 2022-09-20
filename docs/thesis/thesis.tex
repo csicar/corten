@@ -1249,18 +1249,110 @@ Because the SMT call returned \code{unsat}, the subtype relation is valid and th
 
 \chapter{Evaluation}
 
+In this chapter Corten will be tested on a selection of examples to test the practicality.
+
 \section{Maximum using Path Conditions}
 
+The first example will show how a the \code{max} function can be implemented and fully verified in CortenC. The mathematical maximum is defined as $r = max(a, b) iff r \geq a \wedge r \geq b \wedge (r == a \vee r == b)$. Listing \ref{lst:eval-max} shows how this can be expressed in CortenC.
 
 
-\section{Rephrasing builtins in terms of Refinement Types}
+\begin{listing}[h]
+  \begin{minted}[autogobble, texcomments]{rust}
+  fn max(a: ty!{ a: i32 }, b: ty!{ b: i32}) 
+    -> ty!{ v: i32 | v >= a && v >= b && (v == a || v == b) } {
+    if a > b {
+        a as ty!{ x: i32 | x >= a && x >= b && (x == a || x == b) }
+    } else {
+        b
+    }
+  }
+  \end{minted}
+  \caption{Example demonstrating a fully specified \code{max} function using Corten's path sensitivity}
+  \label{lst:eval-max}
+\end{listing}
+
+Of course an incorrect implementation will produce a type judgement error. If, for example, the else branch returned \code{a} instead of \code{b}, the system would return the error shown in listing \ref{lst:eval-max-error}. The exact location of where the error occurred is also the current implementation does not expose this data yet.
+
+\begin{listing}[h]
+  \begin{minted}[autogobble]{text}
+  Subtyping judgement failed: 
+  ty!{ _1 : i32 | true && _1 == a } is not a sub_ty of 
+  ty!{ v : i32 | v >= a && v >= b && (v == a || v == b) } 
+
+  in ctx RContext {
+    // formulas
+    // types
+    local a : ty!{ a : i32 | true }
+    local b : ty!{ b : i32 | true }
+  }
+  \end{minted}
+  \caption{Example of an error message created by CortenC}
+  \label{lst:eval-max-error}
+\end{listing}
+
+Path sensitivity is not limited to the return value: Effect on the type context can also be path sensitive as demonstrated by listing \ref{lst:eval-clamp}, which implements a clamping function. The function \code{clamp} ensures, that the reference passed to it will be at most \code{max} or stay the same. \code{client} uses \code{clamp} and can use the facts from \code{clamp}'s mutation specification when proving its own return type specification.
+
+Note, that when typing \code{client}, CortenC needs to match \code{\&mut x} with \code{a} and thusly \code{x} with \code{s} to correctly handle the effects of calling \code{clamp}. Because of this reason, function calls require all arguments to be variables or reference to variables. This is not a restriction of the type system, but a simplification for the implementation.
+
+\begin{listing}[h]
+  \begin{minted}[autogobble, texcomments]{rust}
+  fn clamp(
+      a: &mut ty!{ a1: i32 | true => s | (s <= max) && (s == a1 || s == max) }, 
+      max: ty!{ max: i32 }
+  ) -> ty!{ v:  () } {
+      if *a > max {
+          *a = max as ty!{ r | (r <= max) && (r == a1 || r == max) }; ()
+      } else {};
+      ()
+  }
+
+  fn client() -> ty!{ v : i32 | v == 42 } {
+      let mut x = 1337; let max = 42;
+      clamp(&mut x, max);
+      x
+  }
+  \end{minted}
+  \caption{Example demonstrating optional mutation of an external location}
+  \label{lst:eval-clamp}
+\end{listing}
+
+\section{Recursion: Fibonacci-Numbers}
+
+Thanks to Corten's modular approach, handling recursive functions is strait forward in CortenC. Listing \ref{lst:eval-fib} demonstrates this by implementing a function, that returns the $n$th fibonacci number $F_n$ and asserting that $F_n \geq n^2$. Because $n$ is arbitrary, this is proves that the fibonacci sequence grows faster than the $n^2$.
+
+
+\begin{listing}[h]
+  \begin{minted}[autogobble, texcomments]{rust}
+    fn fib(n: ty!{ nv: i32 | nv >= 0}) -> ty!{ v: i32 | v >= nv * nv } {
+      if n >= 2 {
+          let n1 = n - 1; let n2 = n - 2;
+
+          let f1 = fib(n1); let f2 = fib(n2);
+          (f1 + f2) as ty!{ r : i32 | r >= nv * nv }
+      } else {
+          1
+      }
+  }
+  \end{minted}
+  \caption{Example demonstrating recursive function calls by proving a divergence property of the fibonacci sequence}
+  \label{lst:eval-fib}
+\end{listing}
+
+
+
+\section{Loop Invariants: Proof of the Gauss Summation Formula}
+
+\label{subsec:evaluation-complex-mutable-ref}\section{Complex Mutable References}
+
+
+
+\section{Rephrasing built-ins in terms of Refinement Types}
+
 
 \paragraph*{panic}
 \paragraph*{assert}
 
-\label{subsec:evaluation-complex-mutable-ref}\section{Complex Mutable References}
 
-\section{Proof of the Gauss Summation Formula}
 
 \chapter{Related Work}
 

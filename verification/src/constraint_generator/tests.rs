@@ -1620,6 +1620,62 @@ mod evaluation {
     }
 
     #[test]
+    fn maximum() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn max(a: ty!{ a: i32 }, b: ty!{ b: i32}) -> ty!{ v: i32 | v >= a && v >= b && (v == a || v == b) } {
+                    if a > b {
+                        a as ty!{ x: i32 | x >= a && x >= b && (x == a || x == b) }
+                    } else {
+                        b
+                    }
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= a && v >= b && (v == a || v == b) }");
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn clamp() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn clamp(
+                    a: &mut ty!{ a1: i32 | true => s | (s <= max) && (s == a1 || s == max) }, 
+                    max: ty!{ max: i32 }
+                ) -> ty!{ v:  () } {
+                    if *a > max {
+                        *a = max as ty!{ r | (r <= max) && (r == a1 || r == max) }; ()
+                    } else {};
+                    ()
+                }
+
+                fn client() -> ty!{ v : i32 | v == 42 } {
+                    let mut a = 1337; let max = 42;
+                    clamp(&mut a, max);
+                    a
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                match item.ident.name.as_str() {
+                    "clamp" => pretty::assert_eq!(ty.to_string(), "ty!{ v : () | true }"),
+                    "client" => pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == 42 }"),
+                    _ => panic!(),
+                }
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
     fn fibonacci() {
         init_tracing();
         with_item_and_rt_lib(
@@ -1635,7 +1691,7 @@ mod evaluation {
                         // f1, f2 needed for Symbolic Execution
                         (f1 + f2) as ty!{ r : i32 | r >= nv * nv }
                     } else {
-                        1 as ty!{ s : i32 | s >= nv * nv  }
+                        1
                     }
                 }
             }
@@ -1683,4 +1739,24 @@ mod evaluation {
         )
         .unwrap();
     }
+
+    #[test]
+    fn simple_example() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn inc(a : ty!{ n : i32 | n > 0}) -> ty!{v : i32 | v > 1} {
+                    let b = 1;
+                    a + b
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 1 }")
+            },
+        )
+        .unwrap();
+    }
+
 }

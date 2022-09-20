@@ -636,7 +636,7 @@ where
                         tcx,
                         solver,
                     ) {
-                        Ok(()) => (then_ty, else_ctx.pop_formula()),
+                        Ok(()) => (then_ty, then_ctx.pop_formula()),
                         Err(err) => anyhow::bail!(
                             "types follow the sub typing constraints, but their contexts do not {}",
                             err
@@ -651,7 +651,7 @@ where
                         tcx,
                         solver,
                     ) {
-                        Ok(()) => (else_ty, then_ctx.pop_formula()),
+                        Ok(()) => (else_ty, else_ctx.pop_formula()),
                         Err(err) => anyhow::bail!(
                             "types follow the sub typing constraints, but their contexts do not {}",
                             err

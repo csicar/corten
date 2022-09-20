@@ -310,12 +310,12 @@ where
                 ctx.clone(),
             ))
         }
-        ExprKind::Block(hir::Block { stmts, expr, .. }, None) => {
+        ExprKind::Block(hir::Block { stmts, expr: inner_expr, .. }, None) => {
             let ctx_after_stmts = transition_stmt(stmts, tcx, ctx, local_ctx, solver, fresh)?;
 
-            match expr {
+            match inner_expr {
                 Some(expr) => type_of(expr, tcx, &ctx_after_stmts, local_ctx, solver, fresh),
-                None => todo!("dont know how to handle block without expr (yet)"),
+                None => Ok((RefinementType::new_empty_refinement_for(expr, local_ctx, fresh.fresh_ident()), ctx.clone())),
             }
         }
         ExprKind::Block(_, Some(_)) => {

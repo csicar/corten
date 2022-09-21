@@ -22,6 +22,7 @@
 \usepackage[bibstyle=numeric, backend=bibtex]{biblatex}
 \addbibresource{../Meine Bibliothek.bib}
 
+% % dark mode
 % \usemintedstyle{monokai}
 % \usepackage{draculatheme}
 
@@ -1332,15 +1333,49 @@ Thanks to Corten's modular approach, handling recursive functions is strait forw
       } else {
           1
       }
-  }
+    }
   \end{minted}
   \caption{Example demonstrating recursive function calls by proving a divergence property of the fibonacci sequence}
   \label{lst:eval-fib}
 \end{listing}
 
 
-
 \section{Loop Invariants: Proof of the Gauss Summation Formula}
+
+The next example demonstrates, that CortenC can also verify loop invariants. Listing \ref{lst:gauss} shows a function, that calculates the sum $\sum_{i = 1}^N i$ by repeatedly increment a variable by $i$. 
+Of course there exists a closed formula computing the same result: $n \cdot (n + 1) \over 2$, which is given as the specification. CortenC will therefore proof, that the closed form return the same result compared to the iterative summation.
+
+This example is quite challenging, because of interdependencies between \code{i} and \code{sum} in the invariant as well as the old value of \code{i} and old values of \code{sum} in the loop body. 
+
+To proof, that the invariant holds after each loop body execution, we need the exact information, that \code{i} was incremented by one and \code{sum} by \code{i} as well as the knowledge, that \code{i} and \code{sum} satisfied the predicates. Corten solves this problem by treating predicates as immutable and retaining "dangling" predicates (i.e. no longer associated with a program variable).
+
+The second challenge is establishing the loop invariant in the first place: Relaxing the type of \code{i} from $= 0$ to $\leq nv$ is only valid, because we know relaxing the type of \code{sum} from $= 0$ to $ 2 * sv == iv * (iv + 1)$ is valid if $iv = 0$ and vice versa: To update the type of \code{sum} first, we need the knowledge, that $iv = 0$, but once we relax the type of \code{i}, \code{i} gets a new logic variable, which is distinct from the logic variable used in the type of \code{sum}. Thus the loop invariant needs to be established atomically.
+
+For this purpose, CortenC provides the \code{relax\_ctx!} macro, that allows the programmer to change the type of multiple variables at a time, as long as the previous state \textit{as a whole} implies the newly chosen predicates.
+
+\begin{listing}[h]
+  \begin{minted}[autogobble, texcomments]{rust}
+  fn gauss(n: ty!{ nv : i32 | nv > 0 }) 
+  -> ty!{ v : i32 | 2 * v == nv * (nv + 1) } {
+    let mut i = 0;
+    let mut sum = 0;
+    
+    // Loop Invariant:
+    relax_ctx!{
+        n |-> nv | nv > 0,
+        i |-> iv | iv <= nv,
+        sum |-> sv | 2 * sv == iv * (iv + 1)
+    }
+    while i < n {
+        i = (i + 1);
+        sum = (sum + i);
+    }
+    sum
+  }
+  \end{minted}
+  \caption{Example loops with complex loop invariants and value updates effecting the invariant}
+  \label{lst:gauss}
+\end{listing}
 
 \label{subsec:evaluation-complex-mutable-ref}\section{Complex Mutable References}
 
@@ -1348,11 +1383,43 @@ Thanks to Corten's modular approach, handling recursive functions is strait forw
 
 \section{Rephrasing built-ins in terms of Refinement Types}
 
+The following example demonstrates, that Corten naturally extends to unusual edge cases and still allows easy verification based on them.
+Rust has built-in functions for aborting execution \- called \code{panic} \- and a function for conditionally aborting execution \- called \code{assert}. Listing \ref{lst:eval-builtins} shows a reimplementation of these functions with full refined type specifications. 
+\code{panic} asserts that after a call to it, \code{false} is valid. This naturally follows from inverting the path condition after exiting the loop. 
+\code{assert} also uses the path condition to assert the correctness of \code{cond} and uses panic for the else case. The return type of \code{assert} can use the logic variable \code{c} from the input directly as the predicate, that is satisfied after the execution.
+The \code{client} just needs to make sure, that the proof of \code{c} is stored in the context by storing the value in the variable \code{\_witness}: If the returned value is discarded, it will not be stored in the context and therefore will not be available when proving the return value specification.
 
-\paragraph*{panic}
-\paragraph*{assert}
+
+\begin{listing}[h]
+  \begin{minted}[autogobble, texcomments]{rust}
+  fn panic() -> ty!{ v : () | false } {
+      while(true) { () }
+  }
+
+  fn assert(cond: ty!{ c : bool }) -> ty!{ v: () | c } {
+      if cond {
+          () as ty!{ v: () | c }
+      } else {
+          panic()
+      }
+  }
+
+  fn client(a : ty!{ av: i32 }) -> ty!{ v: i32 | v > 0 } {
+      let arg = a > 0;
+      let _witness = assert(arg);
+      a
+  }
+  \end{minted}
+  \caption{Example showing how \code{panic} and \code{assert} can be naturally specified and verified in CortenC}
+  \label{lst:eval-builtins}
+\end{listing}
 
 
+\section{Extendability with Other tools}
+
+- Corten: only safe
+- Expend Corten by using external tools to verify unsafe
+- use assert to tell Corten what to assume and external tool what to verify
 
 \chapter{Related Work}
 

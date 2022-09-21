@@ -242,28 +242,6 @@ For this thesis the following conclusion can be drawn:
 \chapter{Foundations}
 
 
-\section{Rustc}
-
-This section summarizes the relevant parts of Rustc mainly based on the rustc dev guide \cite{noauthor_overview_nodate}
-
-Rustc offers an APIs for writing compiler plugins, which can access the intermediate languages of Rust at different stages during the compilation and allows the plugin to emit warnings and errors. 
-At a high level, rustc is built with stages, that incrementally lower the source code to an executable binary. Rustc has multiple stages and associated data structures. 
-Relevant for the thesis are the first few stages: Firstly the AST, which is a representation of the source code after lexing and parsing, 
-
-\begin{figure}[h]
-	\centering
-	\includegraphics[width=0.7\linewidth]{./rustc-stages.pdf}
-	\caption{Diagram providing an overview of the Rustc Compiler Stages}
-	\label{fig:rust-stages}
-\end{figure}
-
-Figure \ref{fig:rust-stages} shows the the main compiler stages of Rustc and the associated data structure. The first data structure, that is extracted from the source code is the AST (short for abstract syntax tree), which is the result of parsing and expanding macros. 
-Based on the AST, the high-level intermediate representation (short HIR) is created by resolving the names and desugaring some language constructs. The HIR contains accurate source labels, which map all nodes in the HIR to their source code locations. 
-The HIR is then used as the basis for type checking returning the typed high-level intermediate representation (short THIR), which annotates every node with its type. THIR also lowers some additional constructs like automatic dereferencing and overloading and more. In contrast to the previous representations, "[t]he THIR only represents bodies, i.e. <<executable code>>; this includes function bodies [..]. Consequently, the THIR has no representation for items like \code{struct}s or \code{trait}s." \cite[p. 1]{noauthor_thir_nodate}
-THIR will then be used to create the mid-level IR by drastically simplifying the language: The tree structure with complex expression of the THIR is turned in to a control-flow graph (short CFG) with basic blocks containing simple (i.e. non-nested) expressions.
-
-Finally Rustc uses external tools \- like llvm \- to generate executable files and link them.
-
 \section{Rust}
 
 
@@ -330,6 +308,29 @@ The notion of refinements in embedded into the base language using subtyping: A 
     {\text{SMT-Valid}(\llbracket \Gamma \rrbracket)}
     {}
 \end{equation*}
+
+
+\section{Rustc}
+
+This section summarizes the relevant parts of Rustc mainly based on the rustc dev guide \cite{noauthor_overview_nodate}
+
+Rustc offers an APIs for writing compiler plugins, which can access the intermediate languages of Rust at different stages during the compilation and allows the plugin to emit warnings and errors. 
+At a high level, rustc is built with stages, that incrementally lower the source code to an executable binary. Rustc has multiple stages and associated data structures. 
+Relevant for the thesis are the first few stages: Firstly the AST, which is a representation of the source code after lexing and parsing, 
+
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=0.7\linewidth]{./rustc-stages.pdf}
+	\caption{Diagram providing an overview of the Rustc Compiler Stages}
+	\label{fig:rust-stages}
+\end{figure}
+
+Figure \ref{fig:rust-stages} shows the the main compiler stages of Rustc and the associated data structure. The first data structure, that is extracted from the source code is the AST (short for abstract syntax tree), which is the result of parsing and expanding macros. 
+Based on the AST, the high-level intermediate representation (short HIR) is created by resolving the names and desugaring some language constructs. The HIR contains accurate source labels, which map all nodes in the HIR to their source code locations. 
+The HIR is then used as the basis for type checking returning the typed high-level intermediate representation (short THIR), which annotates every node with its type. THIR also lowers some additional constructs like automatic dereferencing and overloading and more. In contrast to the previous representations, "[t]he THIR only represents bodies, i.e. <<executable code>>; this includes function bodies [..]. Consequently, the THIR has no representation for items like \code{struct}s or \code{trait}s." \cite[p. 1]{noauthor_thir_nodate}
+THIR will then be used to create the mid-level IR by drastically simplifying the language: The tree structure with complex expression of the THIR is turned in to a control-flow graph (short CFG) with basic blocks containing simple (i.e. non-nested) expressions.
+
+Finally Rustc uses external tools \- like llvm \- to generate executable files and link them.
 
 
 \chapter{The MiniCorten Language}
@@ -468,6 +469,8 @@ The main difference is, that in Rust, every piece of data has a unique, known ow
 \end{gather*}
 
 \end{definition}
+
+
 
 \chapter{The Refinement Type System}
 

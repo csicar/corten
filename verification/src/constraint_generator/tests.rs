@@ -1710,9 +1710,9 @@ mod evaluation {
         with_item_and_rt_lib(
             &quote! {
                 fn gauss(n: ty!{ nv : i32 | nv > 0 }) -> ty!{ v : i32 | 2 * v == nv * (nv + 1) } {
-                    let mut i = 0 as ty!{ iv : i32 | iv == 0 };
+                    let mut i = 0;
+                    let mut sum = 0;
 
-                    let mut sum = 0 as ty!{ sv : i32 | sv == iv * nv };
                     relax_ctx!{
                         ;
                         n |-> nv | nv > 0,
@@ -1726,7 +1726,6 @@ mod evaluation {
                         //}
                         i = (i + 1);
                         sum = (sum + i);
-                        ()
                     }
                     sum
                 }

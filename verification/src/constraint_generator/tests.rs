@@ -1647,7 +1647,7 @@ mod evaluation {
         with_item_and_rt_lib(
             &quote! {
                 fn clamp(
-                    a: &mut ty!{ a1: i32 | true => s | (s <= max) && (s == a1 || s == max) }, 
+                    a: &mut ty!{ a1: i32 | true => s | (s <= max) && (s == a1 || s == max) },
                     max: ty!{ max: i32 }
                 ) -> ty!{ v:  () } {
                     if *a > max {
@@ -1758,5 +1758,4 @@ mod evaluation {
         )
         .unwrap();
     }
-
 }

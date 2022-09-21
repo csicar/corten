@@ -241,11 +241,35 @@ For this thesis the following conclusion can be drawn:
 
 \chapter{Foundations}
 
+This chapter will introduce 
+
+
+\section{Refinement Types}
+
+The type system, that this thesis will adapt, is based on the Refinement Type system described by Vazou et al. \cite{vazou_abstract_2013} and Rondon et al. \cite{rondon_liquid_2008}. 
+The central idea of Refinement Types is adding predicates to a language's type: For example, a type \code{i32} might be refined with the predicate $v > 0$. The refined type is written as $\left\{ v : \text{i32} \mid v > 0 \right\}$. In terms of semantics this means, that any inhabitant of that type must also satisfy the predicate. 
+
+The notion of refinements in embedded into the base language using subtyping: A refined type $\tau$ is a subtype of $\tau'$ if $\tau$'s predicate implies the predicate of $\tau'$ (in the current typing context $\Gamma$).
+As is common with subtyping systems, the subtype can then be used in the place where the super type is expected.
+The following rule shows how subtyping is handled by Liquid types \cite[p. 6]{rondon_liquid_2008}:
+
+\begin{equation*}
+  \inferrule*
+    {\text{SMT-Valid}(\llbracket \Gamma \rrbracket \wedge \llbracket e_1 \rrbracket \Rightarrow \llbracket e_2 \rrbracket)}
+    {\Gamma \vdash \left\{ v : b \mid e_1 \right\} \preceq \left\{ v: b \mid e_2 \right\}}
+\end{equation*}
+
+Refinement Types are related to dependent types, distinguished by the limited expressiveness of the type. Refinement types trade off expressiveness for automatic type checking. Allowed formulas are chosen from a SMT decidable logic. 
+Rondon et al. \cite{rondon_liquid_2008} chose the EUFA as the logic fragment, meaning a propositionaly logic with the theories of equality, uninterpreted functions and linear arithmetic.
+
 
 \section{Rust}
 
+The Rust programming language, first conceived of by Graydon Hoare, is multi-paradigm programming language, that draws inspiration from functional and imperative programming languages. The core forms a set of features usually found in functional programming languages: Functions, closures, algebraic data types, type classes (called traits in Rust) and pattern matching, immutability are all common place in Rust.
+But what is unusual is, that Rust extends this base with optional mutability of data and references. The Rust programming language is design to closed control the amount of mutability and what it can effect. To this end, Rust incorporates the notion of affine types into its type system (called ownership system in Rust). Among other things, it is used to handle memory management, safe concurrency and simplified reasoning about program behaviour.
+The next paragraph will explain the ownership system works.
 
-\paragraph{Aliasing XOR Mutabillity} The key behind Rusts type system is, that for every variable at every point during the execution, that variable is either aliased or mutable, but never both at the same time.
+\paragraph{Aliasing XOR Mutabillity} The key behind Rusts ownership system is, that for every variable at every point during the execution, that variable can either aliased or mutable, but never both at the same time.
 
 Rust accomplished this by introducing three types of access permissions for a variable, which are associated with every scope\footnote{In modern Rust, this model was generalized to cover more cases, but the idea is still valid}:
 \begin{enumerate}
@@ -279,6 +303,8 @@ In contrast, languages with instance-of-checks allow an implementation of a poly
 
 \paragraph*{Explicit Mutable Access} A consequence of the ownership rules is, that a function can only mutate (part of) the state, that is passed to it as a parameter. There is no global state and there is no implicit access to an object instance. Thus any intention of mutating state must already be expressed in the function signature, which makes the specification of this mutation quite natural.
 
+\paragraph*{No subtyping} this leaves subtyping open to refinement types
+
 \paragraph*{What Rust does not solve} Even though Rust simplifies reasoning about mutability and aliasing of mutable data, Rust does not eliminate the need to reason about multiple references to mutable data. For example, Listing \ref{lst:alias-mut} shows how \code{cell}'s type is influenced by changes to \code{r}. This does not mean, that the ownership rule  \textit{mutability XOR aliasing} are broken: Even though both \code{cell} and \code{r} are mutable, but only one is active.
 
 \begin{listing}[h]
@@ -293,26 +319,9 @@ In contrast, languages with instance-of-checks allow an implementation of a poly
   \label{lst:alias-mut}
 \end{listing}
 
-\section{Refinement Types}
-
-The type system, that this thesis will adapt, is based on the Refinement Type system described in \cite{vazou_abstract_2013} and \cite{rondon_liquid_2008}. 
-The central idea of Refinement Types is adding predicates to a language's type: For example, a type \code{i32} might be refined with the predicate $v > 0$. In terms of semantics this means, that any inhabitant of that type must also satisfy the predicate. 
-
-- Dependent Type but automatic
-- limited expressiveness
-- SMT solvable decidable logic
-
-The notion of refinements in embedded into the base language using subtyping: A refined type $\tau$ is a subtype of $\tau'$ if $\tau$'s predicate implies the predicate of $\tau'$ (in the current typing context $\Gamma$)
-\begin{equation*}
-  \inferrule*
-    {\text{SMT-Valid}(\llbracket \Gamma \rrbracket)}
-    {}
-\end{equation*}
-
-
 \section{Rustc}
 
-This section summarizes the relevant parts of Rustc mainly based on the rustc dev guide \cite{noauthor_overview_nodate}
+Since the implementation of the proposed interacts with Rustc, the reference implementation of a Rust compiler, this section will summarize the relevant parts of Rustc mainly based on the Rustc dev guide \cite{noauthor_overview_nodate}
 
 Rustc offers an APIs for writing compiler plugins, which can access the intermediate languages of Rust at different stages during the compilation and allows the plugin to emit warnings and errors. 
 At a high level, rustc is built with stages, that incrementally lower the source code to an executable binary. Rustc has multiple stages and associated data structures. 

@@ -195,7 +195,7 @@ Looking at the distribution of unsafe uses in Figure \ref{fig:unsafe-hist}, we c
 \end{figure}
 
 
-\section{Mutability}
+\label{sec:analysis-mutability} \section{Mutability}
 
 Finally we will analyse how common mutable variables and references are used in Rust. 
 The frequency of usage will inform the acceptable level of specification effort.
@@ -361,9 +361,8 @@ The goal is to remove as much incidental complexity as possible without compromi
 
 \section{Syntax}
 
-\todo{Call it CortenRust (after Weathering Steel)}
 This subsection will introduce the syntax of MiniCorten, a language modelled after a simplified version of Rust, with the addition of refinement types.
-To simplify the formal definitions and proofs, the language is restricted to ANF\todo{What does the abbrev stand for? XXX Normal Form}, meaning arguments of expressions must be variables. Note that the implementation does not have this restriction.
+To simplify the formal definitions and proofs, the language is restricted to A-Normal Form (short ANF), meaning arguments of expressions must be variables. ANF was described by \cite{sabry_reasoning_1993}. Note that the implementation does not have this restriction.
 
 There are two namespaces for identifiers: $x \in \text{PVar}$ for variables of program variables and $\alpha \in \text{LVar}$ for variable in the refinement predicates. The syntax is defined by the following BNF-Grammar:
 
@@ -427,6 +426,8 @@ There are two namespaces for identifiers: $x \in \text{PVar}$ for variables of p
     | ()                    : unit value
 \end{bnfgrammar}
 
+Most constructs are standard, the main difference being the addition of refinement types, that consist of a logic variable $\alpha$, a base type $b$ (from the target language) and a predicate $\varphi$. Intuitively this means, that the value inhabiting that type satisfied the $\varphi$ in $\alpha$ represents the value. 
+
 \section{Semantics}
 
 The semantics are mostly standard. The main difference being that Rust and our simplified language enable most statements to be used in place of an expression. The value is determined by the last statement in the sequence. For example If-Expressions, sequences of statements and function all follow this rule: Their (return) value is determined by the last statement or expression in the sequence.
@@ -450,7 +451,7 @@ The main difference is, that in Rust, every piece of data has a unique, known ow
    \bbracket{e_1 + e_2} \sigma &= \bbracket{e_1} \sigma + \bbracket{e_2} \sigma \\
    \bbracket{*x} \sigma &= \sigma(y) \qquad \text{if } \sigma(x) = \code{ref}(y) \\
    \bbracket{\code{\&mut } x} \sigma &= \code{ref}(x) \\
-   \bbracket{e \code{ as } \tau} \sigma &= \bbracket{e} \\
+   \bbracket{e \code{ as } \tau} \sigma &= \bbracket{e}\sigma \\
   \end{align*}
  \end{definition}
  
@@ -518,10 +519,12 @@ Corten is directly embedded in Rust using two macros. Firstly the macro \code{ty
 \subsection{Decidable, Conservative Subtyping}
 
 The idea 
+Having a decidable subtyping system is essential to making it feasible in practice: A developer expect type checking to be automatic and part of compilation without additional effort. There is no need for user interaction, if the SMT solver can automatically verify the program.
 
 \subsection{Mutable Values}
 
-Corten elected to  \dots
+As section seen in \ref{sec:analysis-mutability}, mutable declarations are quite common in Rust. Therefore handling them is essential for Corten.
+Corten elected to treat predicates as immutable, meaning assigning to a variable will not change the old predicates, that was associated with the variable.
 Therefore assigning a new value to a variable will give that variable a new type, but \- crucially \- keep the logic variable in the typing context, which means that types of other variables can still refer to it. Logic variables, that are (no longer) associated with a program variable, are called dangling variables.
 That means, that the number of predicates in the context increases with every new value assignment.
 In the example, the typing context at the end of the function body contains $v_1$, $v_2$ and their predicates and the association of \code{i} to $v_2$.
@@ -812,6 +815,97 @@ We write:
 %     {\Gamma \vdash e \texttt{ as } \tau': \tau'}
 % \end{gather*}
 
+\section{Function Declaration Type Checking}
+
+Without loss of generality, we assume arguments are ordered by their type: First immutable / owner arguments and then mutable arguments.
+
+When handling mutable references in parameters some subtleties need to be considered. The function can change both the referenced \textit{value} as well as the reference \textit{location}. To describe the referenced value is normally done using the $\{ \alpha \mid \alpha \doteq \&b\}$ syntax. The question arises: If $\alpha$ was the logic variable for a parameter, what should be the analog for $b$? In contrast to local variables, there is no variable representing the referenced value for parameters. As seen in section \ref{subsec:mutable-references}, using the dereference operator would come with a lot of complications.
+Instead we introduce $arg^i_n$, a special variable denoting the initial abstract value (i.e. stack location), that the mutable reference of argument $n$ points to. $i$ denotes the level of nesting: For the $n$th parameter with the Rust type \code{\&mut \&mut i32} we would generate $arg^1_n$ and $arg^2_n$.
+
+\begin{gather*}
+  \inferrule*[left=Fn-Decl]
+    { (\{ a_1 \mapsto \alpha_1, b_1 \mapsto \delta_1 \}, \varphi^\alpha_1 \wedge \dots \wedge \delta_1 = arg^1_1 \wedge \varphi^\beta_1 \wedge \dots ) \vdash \bar s \Rightarrow \Gamma'
+      \\ \Gamma' \vdash s_{res} : \tau_{res} \Rightarrow \Gamma''
+      \\ \Gamma'' \vdash \tau_{res} \preceq \tau
+      \\ \Gamma'' \preceq (\{\beta_1 \mapsto \gamma_1\}, \varphi^\gamma_1 )
+    }
+    {\code{fn } f(a_1 : \{ \alpha_1 \mid \varphi^\alpha_1 \}, \dots, b_1 : \{ \beta_1 \mid \varphi^\beta_1 \Rightarrow \gamma_1 \mid \varphi^\gamma_1\}) \to \tau \{ \bar s; s_{res} \}}
+\end{gather*}
+
+
+\section{Sub-Typing Rules: $\Gamma \vdash \tau \preceq \tau'$}
+
+\[
+  \inferrule*[left=$\preceq$-Ty]
+    {\text{SMT-Valid}(\Phi \wedge \varphi'[\beta \triangleright \alpha ] \implies \varphi)}
+    {\Gamma = (\mu, \Phi) \vdash \{ \alpha \mid \varphi\} \preceq \{ \beta \mid \varphi' \}}
+\]
+
+% alternative (should be equivalent):
+
+% \[
+%   \inferrule*[left=$\preceq$-Ty-Alt]
+%     {
+%       \Gamma[f \mapsto \alpha], \varphi \preceq \Gamma[f \mapsto \beta], \varphi'
+%       \\ f \text{ fresh}
+%     }
+%     {\Gamma \vdash \{ \alpha \mid \varphi\} \preceq \{ \beta \mid \varphi' \}}
+% \]
+
+Note that, $\Gamma \vdash \tau \preceq \tau'$ can be rephrased in terms of $\Gamma \preceq \Gamma'$ by introducing a fresh variable with the predicates $\tau$ and $\tau'$. The rephrased form is equivalent, but rephrasing the sub context rule in terms of sub-typing is in general not possible: Because all constraints need to be satisfied at the same time when checking for sub-contexts, just checking each variable at a time would be a weaker proposition.
+
+\section{Sub-Context Rules: $\Gamma \preceq \Gamma'$}
+
+\[
+  \inferrule*[left=$\preceq$-Ctx]
+    {
+      \text{SMT-Valid}(\Phi'[\mu(\alpha) \triangleright \mu'(\alpha)\ \mid \alpha \in dom(\mu)] \implies \Phi)
+      \\ dom(\mu) \subseteq dom(\mu')
+    }
+    {(\Phi, \mu) \preceq (\Phi', \mu')}
+\]
+
+In contrast to other refinement type systems, Corten allows types in the context to refer to one another.
+For example a type specifications \code{a : \{ $\alpha$ : i32 | $\alpha$ > $\beta$\}, b:  \{ $\beta$: i32 | $\beta$ != $\alpha$\}} would be valid and result in the context $\Gamma = (\emptyset, \alpha \neq \beta \wedge \beta \geq \alpha)$. In the example, the value $0$ i a valid inhabitant of \code{a}'s type as long as $\code{b} \geq 1$.
+
+This means that types may need to be changed atomically.
+
+
+\section{Expressions Typing: $\Gamma \vdash e : \tau$}
+
+\begin{gather*}
+  \inferrule*[left=Lit]
+    {l \text{ fresh} \\ \text{base\_ty}(v) = b}
+    {\Gamma \vdash v: \{ l : b \mid l \doteq v\} }
+  %
+  \\
+  \inferrule*[left=Var]
+    {\alpha \text{ fresh} \\ \mu(x) = \beta}
+    {\Gamma = (\mu, \Phi)\vdash x : \{ \alpha : b \mid \beta \doteq \alpha \} }
+  %
+  \\
+  \inferrule*[left=Var-Ref]
+    {\Gamma \vdash y : \tau \\ \Gamma \vdash x : \{ \beta : \&b \mid \beta \doteq \&y \}}
+    {\Gamma \vdash *x : \tau }
+  %
+  \\
+  \inferrule*[left=Add]
+    {
+      \gamma \text{ fresh}
+      \\ \mu(x_1) = \alpha
+      \\ \mu(x_2) = \beta
+    }
+    {\Gamma \vdash x_1 + x_2 : \{ \gamma: b \mid \gamma \doteq \alpha + \beta \} }
+  %
+  \\
+  \inferrule*[left=Intro-Sub]
+    {
+      \Gamma \vdash e : \tau
+      \\ \Gamma \vdash \tau \preceq \tau'
+    }
+    {\Gamma \vdash e \texttt{ as } \tau': \tau'}
+\end{gather*}
+
 \section{Statement Type Checking $\Gamma \vdash s \Rightarrow \Gamma'$}
 
 \begin{gather*}
@@ -884,94 +978,6 @@ We write:
     {(\mu, \Phi) \vdash \code{let res} = f(a, \dots, \code{\&mut} b, \dots) \Rightarrow (\mu[a \mapsto \alpha', \dots, subst^{-1}], \Phi \wedge \varphi'_{\alpha} \wedge \dots)}
 \end{gather*}
 
-\section{Expressions Typing: $\Gamma \vdash e : \tau$}
-
-\begin{gather*}
-  \inferrule*[left=Lit]
-    {l \text{ fresh} \\ \text{base\_ty}(v) = b}
-    {\Gamma \vdash v: \{ l : b \mid l \doteq v\} }
-  %
-  \\
-  \inferrule*[left=Var]
-    {\alpha \text{ fresh} \\ \mu(x) = \beta}
-    {\Gamma = (\mu, \Phi)\vdash x : \{ \alpha : b \mid \beta \doteq \alpha \} }
-  %
-  \\
-  \inferrule*[left=Var-Ref]
-    {\Gamma \vdash y : \tau \\ \Gamma \vdash x : \{ \beta : \&b \mid \beta \doteq \&y \}}
-    {\Gamma \vdash *x : \tau }
-  %
-  \\
-  \inferrule*[left=Add]
-    {
-      \gamma \text{ fresh}
-      \\ \mu(x_1) = \alpha
-      \\ \mu(x_2) = \beta
-    }
-    {\Gamma \vdash x_1 + x_2 : \{ \gamma: b \mid \gamma \doteq \alpha + \beta \} }
-  %
-  \\
-  \inferrule*[left=Intro-Sub]
-    {
-      \Gamma \vdash e : \tau
-      \\ \Gamma \vdash \tau \preceq \tau'
-    }
-    {\Gamma \vdash e \texttt{ as } \tau': \tau'}
-\end{gather*}
-
-
-\section{Function Declaration Type Checking}
-
-Without loss of generality, we assume arguments are ordered by their type: First immutable / owner arguments and then mutable arguments.
-
-When handling mutable references in parameters some subtleties need to be considered. The function can change both the referenced \textit{value} as well as the reference \textit{location}. To describe the referenced value is normally done using the $\{ \alpha \mid \alpha \doteq \&b\}$ syntax. The question arises: If $\alpha$ was the logic variable for a parameter, what should be the analog for $b$? In contrast to local variables, there is no variable representing the referenced value for parameters. As seen in section \ref{subsec:mutable-references}, using the dereference operator would come with a lot of complications.
-Instead we introduce $arg^i_n$, a special variable denoting the initial abstract value (i.e. stack location), that the mutable reference of argument $n$ points to. $i$ denotes the level of nesting: For the $n$th parameter with the Rust type \code{\&mut \&mut i32} we would generate $arg^1_n$ and $arg^2_n$.
-
-\begin{gather*}
-  \inferrule*[left=Fn-Decl]
-    { (\{ a_1 \mapsto \alpha_1, b_1 \mapsto \delta_1 \}, \varphi^\alpha_1 \wedge \dots \wedge \delta_1 = arg^1_1 \wedge \varphi^\beta_1 \wedge \dots ) \vdash \bar s \Rightarrow \Gamma'
-      \\ \Gamma' \vdash s_{res} : \tau_{res} \Rightarrow \Gamma''
-      \\ \Gamma'' \vdash \tau_{res} \preceq \tau
-      \\ \Gamma'' \preceq (\{\beta_1 \mapsto \gamma_1\}, \varphi^\gamma_1 )
-    }
-    {\code{fn } f(a_1 : \{ \alpha_1 \mid \varphi^\alpha_1 \}, \dots, b_1 : \{ \beta_1 \mid \varphi^\beta_1 \Rightarrow \gamma_1 \mid \varphi^\gamma_1\}) \to \tau \{ \bar s; s_{res} \}}
-\end{gather*}
-
-\section{Sub-Typing Rules: $\Gamma \vdash \tau \preceq \tau'$}
-
-\[
-  \inferrule*[left=$\preceq$-Ty]
-    {\Phi \wedge \varphi'[\beta \triangleright \alpha ] \vDash \varphi}
-    {\Gamma = (\mu, \Phi) \vdash \{ \alpha \mid \varphi\} \preceq \{ \beta \mid \varphi' \}}
-\]
-
-alternative (should be equivalent):
-
-\[
-  \inferrule*[left=$\preceq$-Ty-Alt]
-    {
-      \Gamma[f \mapsto \alpha], \varphi \preceq \Gamma[f \mapsto \beta], \varphi'
-      \\ f \text{ fresh}
-    }
-    {\Gamma \vdash \{ \alpha \mid \varphi\} \preceq \{ \beta \mid \varphi' \}}
-\]
-
-
-\section{Sub-Context Rules: $\Gamma \preceq \Gamma'$}
-
-\[
-  \inferrule*[left=$\preceq$-Ctx]
-    {
-      \Phi'[\mu(\alpha) \triangleright \mu'(\alpha)\ \mid \alpha \in dom(\mu)] \vDash \Phi
-      \\ dom(\mu) \subseteq dom(\mu')
-    }
-    {(\Phi, \mu) \preceq (\Phi', \mu')}
-\]
-
-In contrast to other refinement type systems, Corten allows types in the context to refer to one another.
-For example a type specifications \code{a : \{ $\alpha$ : i32 | $\alpha$ > $\beta$\}, b:  \{ $\beta$: i32 | $\beta$ != $\alpha$\}} would be valid and result in the context $\Gamma = (\emptyset, \alpha \neq \beta \wedge \beta \geq \alpha)$. In the example, the value $0$ i a valid inhabitant of \code{a}'s type as long as $\code{b} \geq 1$.
-
-This means that types may need to be changed atomically.
 
 \section{Soundness of the Type System}
 
@@ -1118,7 +1124,11 @@ Rondon et al. \cite{rondon_liquid_2008} describe a mechanism to infer complex re
 
 Vazou et al. \cite{vazou_abstract_2013} found, that the expressiveness of refinement types can still be expanded without leaving a decidable fragment by adding uninterpreted functions to the logic. In the type system, these uninterpreted functions represent "abstract predicates". At the definition site, abstract predicates can not be inspected and restricted, but the caller can instantiate then with a concrete predicate.
 
+\subsection{Convenience Improvements}
 
+For practical use, it would make sense to relax the distinction between logic variables and program variables for immutable variables. Because these variables can not change, there is no need to introduce replace their types. This also means, that relaxing the predicate for immutable variables is never necessary.
+
+In some cases, the programmer might want to choose an invariant for a variable, that any assigned value has to satisfy. In terms of the type system, this would not be challenging, only requiring 
 
 \chapter{Implementation: CortenC}
 
@@ -1256,7 +1266,7 @@ The following paragraph will give an example for how these SMT solver requests l
   \label{lst:simple-example-cortenc}
 \end{listing}
 
-Consider the example program \ref{lst:simple-example-conrtenc}, which returns the increment of the argument.
+Consider the example program \ref{lst:simple-example-cortenc}, which returns the increment of the argument.
 Rustc will call the CortenC callback with the item \code{fn inc} once the HIR construction is completed. Next, the callback calls \code{type\_check\_function} where the initial context $\Gamma = ( a \mapsto n, \left\{ n > 0\right\})$ is constructed and calls \code{type\_expr} with the the function body expression. Base the function body is a sequence \code{transition\_stmt} is called for all expect the last expression in the sequence. \code{let b = 1} updates the context to $\Gamma_1 = ( a \mapsto n, b \mapsto v_1, \left\{ n > 0, v_1 = 1\right\})$ ($v_1$ is a name generated by \code{Fresh}). 
 Finally \code{type\_expr} types the expression \code{a + b} according to the typing rules described above resulting in the type $\left\{ v_2 : i32 \mid v_2 = n + v_1\right\}$.
 This type is then returned as the overall type of the body expression to \code{type\_check\_function}, which has the responsibility of checking that in the context $\Gamma_1$, the actual return type is a subtype of the specified type in the signature. 
@@ -1266,41 +1276,29 @@ Because the SMT call returned \code{unsat}, the subtype relation is valid and th
 
 \begin{listing}[h]
   \begin{minted}[autogobble]{lisp}
-    (declare-datatypes () ((Unit unit)))
+  (declare-datatypes () ((Unit unit)))
+  ; <Context>
+    ; decl for <fud.rs>:79:73: 79:74 (#0) local b
+    (declare-const _0 Int)
+    
+    ; decl for <fud.rs>:79:9: 79:10 (#0) local a
+    (declare-const n Int)
+    
+    ; predicate for _0: local b     ty!{ _0 : i32 | _0 == 1 }
+    (assert (= |_0| 1))
+    
+    ; predicate for n: local a     ty!{ n : i32 | n > 0 }
+    (assert (> |n| 0))
+  ; </Context>
 
-    ; <Context>
-      ; decl for <fud.rs>:79:73: 79:74 (#0) local b
-      (declare-const _0 Int)
-      
-      ; decl for <fud.rs>:79:9: 79:10 (#0) local a
-      (declare-const n Int)
-      
-      ; predicate for _0: local b
-      ;     ty!{ _0 : i32 | _0 == 1 }
-      (assert
-          (= |_0| 1)
-      )
-      
-      ; predicate for n: local a
-      ;     ty!{ n : i32 | n > 0 }
-      (assert
-          (> |n| 0)
-      )
-    ; </Context>
-
-    (declare-const _1 Int)
-    (assert
-        (= (+ |n| |_0|) |_1|)
-    )
-    
-    (assert
-        (not (> |_1| 1))
-    )
-    
-    ; checking: ty!{ _1 : i32 | n + _0 == _1 } ≼  ty!{ v : i32 | v > 1 }
-    (check-sat)
-    
-    ; done checking is_subtype_of! is sat: false
+  (declare-const _1 Int)
+  (assert (= (+ |n| |_0|) |_1|))
+  
+  (assert (not (> |_1| 1)))
+  
+  ; checking: ty!{ _1 : i32 | n + _0 == _1 } <=  ty!{ v : i32 | v > 1 }
+  (check-sat)
+  ; done checking is_subtype_of! is sat: false
   \end{minted}
   \caption{SMT Requests dispatched by CortenC for checking that the returned type matches the specified type}
   \label{lst:smt-sample-output}
@@ -1325,7 +1323,7 @@ In this chapter Corten will be tested on a selection of examples to test the pra
 
 \section{Maximum using Path Conditions}
 
-The first example will show how a the \code{max} function can be implemented and fully verified in CortenC. The mathematical maximum is defined as $r = max(a, b) iff r \geq a \wedge r \geq b \wedge (r == a \vee r == b)$. Listing \ref{lst:eval-max} shows how this can be expressed in CortenC.
+The first example will show how a the \code{max} function can be implemented and fully verified in CortenC. The mathematical maximum is defined as $r = \max(a, b) \text{iff} r \geq a \wedge r \geq b \wedge (r = a \vee r = b)$. Listing \ref{lst:eval-max} shows how this can be expressed in CortenC.
 
 
 \begin{listing}[h]

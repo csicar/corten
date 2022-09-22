@@ -17,14 +17,15 @@
 \usepackage{amsthm}
 \usepackage{csquotes}
 \usepackage{ stmaryrd }
+\usepackage{stackengine,scalerel}
 \usepackage[british]{babel}
 
 \usepackage[bibstyle=numeric, backend=bibtex]{biblatex}
 \addbibresource{../Meine Bibliothek.bib}
 
-% % dark mode
-% \usemintedstyle{monokai}
-% \usepackage{draculatheme}
+% dark mode
+\usemintedstyle{monokai}
+\usepackage{draculatheme}
 
 
 
@@ -38,6 +39,10 @@
 
 \newcommand{\mtext}[1]{$\text{#1}$}
 \newcommand{\tuple}[2]{\langle #1 \mid #2 \rangle}
+\newcommand{\bbracket}[1]{\llbracket #1 \rrbracket}
+
+\DeclareMathOperator{\rref}{ref}
+
 
 
 \newcommand{\ccolon}[0]{: }
@@ -266,8 +271,10 @@ Rondon et al. \cite{rondon_liquid_2008} chose the EUFA as the logic fragment, me
 \section{Rust}
 
 The Rust programming language, first conceived of by Graydon Hoare, is multi-paradigm programming language, that draws inspiration from functional and imperative programming languages. The core forms a set of features usually found in functional programming languages: Functions, closures, algebraic data types, type classes (called traits in Rust) and pattern matching, immutability are all common place in Rust.
-But what is unusual is, that Rust extends this base with optional mutability of data and references. The Rust programming language is design to closed control the amount of mutability and what it can effect. To this end, Rust incorporates the notion of affine types into its type system (called ownership system in Rust). Among other things, it is used to handle memory management, safe concurrency and simplified reasoning about program behaviour.
-The next paragraph will explain the ownership system works.
+But what is unusual is, that Rust extends this base with optional mutability of data and references. The Rust programming language is design to closed control the amount of mutability and what it can effect. To this end, Rust incorporates the notion of affine types into its type system (called ownership system in Rust).
+Rust took inspiration from a research language called Cyclone introduced by Grossman et al. \cite{grossman_region-based_nodate}.
+Among other things, the ownership system is used to handle memory management, safe concurrency and simplifies reasoning about program behaviour.
+The next paragraph will explain how the ownership system works.
 
 \paragraph{Aliasing XOR Mutabillity} The key behind Rusts ownership system is, that for every variable at every point during the execution, that variable can either aliased or mutable, but never both at the same time.
 
@@ -303,7 +310,10 @@ In contrast, languages with instance-of-checks allow an implementation of a poly
 
 \paragraph*{Explicit Mutable Access} A consequence of the ownership rules is, that a function can only mutate (part of) the state, that is passed to it as a parameter. There is no global state and there is no implicit access to an object instance. Thus any intention of mutating state must already be expressed in the function signature, which makes the specification of this mutation quite natural.
 
-\paragraph*{No subtyping} this leaves subtyping open to refinement types
+\paragraph*{Minimal subtyping} In contrast to object oriented languages, Rust has no user-extendable notion of subtyping. 
+Rust does have a notion of subtyping for its permission system, which serves the purpose of coercing mutable references \code{\&mut T} to immutable references \code{\& T} etc. where needed. Because of the limited, well-known scope, these subtyping relations create no ambiguity with a refinement type system.
+
+\paragraph*{No overloaded functions}
 
 \paragraph*{What Rust does not solve} Even though Rust simplifies reasoning about mutability and aliasing of mutable data, Rust does not eliminate the need to reason about multiple references to mutable data. For example, Listing \ref{lst:alias-mut} shows how \code{cell}'s type is influenced by changes to \code{r}. This does not mean, that the ownership rule  \textit{mutability XOR aliasing} are broken: Even though both \code{cell} and \code{r} are mutable, but only one is active.
 
@@ -355,37 +365,41 @@ The goal is to remove as much incidental complexity as possible without compromi
 This subsection will introduce the syntax of MiniCorten, a language modelled after a simplified version of Rust, with the addition of refinement types.
 To simplify the formal definitions and proofs, the language is restricted to ANF\todo{What does the abbrev stand for? XXX Normal Form}, meaning arguments of expressions must be variables. Note that the implementation does not have this restriction.
 
+There are two namespaces for identifiers: $x \in \text{PVar}$ for variables of program variables and $\alpha \in \text{LVar}$ for variable in the refinement predicates. The syntax is defined by the following BNF-Grammar:
+
 \begin{bnfgrammar}
-  $program$ ::=
-    $func\_decl$ * : function declaration
+  $program$  ::=
+    $func\_decl$ * : function declarations
   ;;
-  $func\_decl$ ::=
+  func\_decl ::=
     $ident$( $param$ * ) -> $ty$ \{ $stmt$ \}
   ;;
-  $param$ ::= $ident$ \ccolon  $ty$
+  $param$ ::= $x$ \ccolon  $\tau$
   ;;
-  $stmt$ ::=
-    $expr$                                                : expression
-    | let mut? $ident$ = $expr$                           : declaration
-    | $ident$ = $expr$                                    : assignment
-    | while ($expr$) \{ $stmt$ \}                         : while loop
-    | relax\_ctx!\{ $pred$* ; ($ident$ \ccolon $ty$)* \}  : context relaxation
+  $s$: stmt 
+  ::=
+    $e$                                                   : expression
+    | $s_1$; $s_2$                                        : sequence
+    | let mut? $x$ = $e$                                  : declaration
+    | $x$ = $e$                                           : assignment
+    | let $x_v$ = $x_f$($x_1, \dots, x_n$)                : function call
+    | while ($x$) \{ $s$ \}                               : while loop
+    | if $e_c$ \{ $s_t$ \} else \{ $s_e$ \}               : if statement
+    | relax\_ctx!\{ $\varphi$* ; ($x$ \ccolon $\tau$)* \} : context relaxation
   ;;
-  $expr$ ::=
+  $e$                                              : expression 
+  ::=
     $ident$                                         : variable reference
     | $lit$                                         : constant
     | $expr$ + $expr$                               : addition
-    | $ident$($ident$ *)                            : function call
-    | if $expr$ \{ $stmt$ \} else \{ $stmt$ \}      : if expression
-    | $stmt$; $expr$                                : sequence
     | * $ident$                                     : dereference
     | \& $ident$                                    : immutable reference
     | \&mut $ident$                                 : mutable reference
     | $expr$ as $ty$                                : type relaxation
   ;;
-  $ty$ ::= ty!\{ $logic\_ident$ \ccolon $base\_ty$ \cmid $pred$ \} : refinement type
+  $\tau$ : type ::= ty!\{ $logic\_ident$ \ccolon $base\_ty$ \cmid $pred$ \} : refinement type
   ;;
-  $pred$ ::=
+  $\varphi$ : pred ::=
     $ref\_pred$                                     : predicate for a reference type
     | $value\_pred$                                 : predicate for a value type
   ;;
@@ -399,14 +413,14 @@ To simplify the formal definitions and proofs, the language is restricted to ANF
   | $pred$ \cdisj $pred$          : disjunction
   | ! $pred$                      : negation
   ;;
-  $base\_ty$ ::=
+  $b$: base\_ty ::=
     i32                     : integer
     | unit                  : unit type
     | bool                  : boolean
     | \& $base\_ty$         : immutable reference
     | \&mut $base\_ty$      : mutable reference
   ;;
-  $lit$ ::=
+  $v$: lit ::=
       0,1,...,n             : integer
     | true                  : boolean true
     | false                 : boolean false
@@ -422,64 +436,76 @@ The semantics loosely based on Jung's MiniRust.
 Another difference between Rust and MiniCorten is of course the addition of refinement types.
 
 In terms of the formal description, the rules are similar to Pierce's \cite[p. 166f]{pierce_types_2002-3} "Reference" language. % Also: Semantik von programmiersprachen WhileT p.45
-The main difference is, that in Rust, every piece of data has a unique, known owner. This fact makes the concept of locations redundant. Instead we treat $\code{ref } x$ as a value itself. The following definitions show the new execution rules.
+The main difference is, that in Rust, every piece of data has a unique, known owner. This fact makes the concept of locations redundant. Instead we treat $\code{ref}(x)$ as a value itself. The following definitions show the new execution rules.
 
 \begin{definition}[Execution-State]
-  The state of execution is given by $\sigma : \text{PVar} \to \text{Value}$. The set of function declarations is constant and given by $\Sigma : \text{Fn-Name} \to ((\text{Arg}_1, \dots, \text{Arg}_n), \text(ReturnValue))$
+  The execution state is a partial function from program variables to values: $\sigma : \text{PVar} \rightharpoonup \text{Value}$. 
+\end{definition}
+
+
+\begin{definition}[Evaluation of Expressions: $\bbracket{e} \sigma$ ]
+  \begin{align*}
+   \bbracket{v} \sigma &= v \\
+   \bbracket{x} \sigma &= \sigma(x) \\
+   \bbracket{e_1 + e_2} \sigma &= \bbracket{e_1} \sigma + \bbracket{e_2} \sigma \\
+   \bbracket{*x} \sigma &= \sigma(y) \qquad \text{if } \sigma(x) = \code{ref}(y) \\
+   \bbracket{\code{\&mut } x} \sigma &= \code{ref}(x) \\
+   \bbracket{e \code{ as } \tau} \sigma &= \bbracket{e} \\
+  \end{align*}
+ \end{definition}
+ 
+
+\begin{definition}[Declaration Environment]
+  The environment of function declarations is constant and globally known. It is defined as a partial function $\Sigma : \text{Fn-Name} \rightharpoonup (n, s)$ where $n$ is the number of arguments and $s$ is the body of the function
 \end{definition}
 
 \begin{definition}[Small-Step Semantics of MiniCorten: $\tuple{e}{\sigma} \leadsto \tuple{e'}{\sigma'}$]
 
-
 \begin{gather*}
   \inferrule*[left=SS-Assign]
     {\star}
-    {x = v \mid \sigma \leadsto \code{unit} \mid \sigma[x \mapsto v]}
-  \inferrule*[left=SS-Assign-Inner]
-    {t \mid \sigma \leadsto t' \mid \sigma'}
-    {x = t \mid \sigma \leadsto x = t' \mid \sigma'}
+    {\tuple{x = e }{ \sigma } \leadsto \tuple{\code{unit} }{ \sigma[x \mapsto \bbracket{e}\sigma]}}
   \\
   \inferrule*[left=SS-Decl]
     {\star}
-    {\tuple{\code{let } x = v}{\sigma} \leadsto \tuple{unit}{\sigma[ x \mapsto v]}}
-  \\
-  \inferrule*[left=SS-Deref]
-    {\sigma(x) = v}
-    {* \code{ref } x \mid \sigma \leadsto v \mid \sigma}
-  \inferrule*[left=SS-Deref-Inner]
-    {t \mid \sigma \leadsto t' \mid \sigma'}
-    {* t \mid \sigma \leadsto * t' \mid \sigma'}
-  \\
-  \inferrule*[left=SS-Ref-Inner]
-      {t \mid \sigma \leadsto t' \mid \sigma'}
-      {\code{ref } t \mid \sigma \leadsto \code{ref } t' \mid \sigma'}
+    {\tuple{\code{let } x = e}{\sigma} \leadsto \tuple{unit}{\sigma[ x \mapsto \bbracket{e}\sigma]}}
   \\
   \inferrule*[left=SS-Seq-Inner]
-      {e_1 \mid \sigma \leadsto e_1' \mid \sigma'}
-      {e_1; e_2 \mid \sigma \leadsto e_1', e_2 \mid \sigma'}
+      {\tuple{e_1 }{ \sigma } \leadsto \tuple{e_1' }{ \sigma'}}
+      {\tuple{e_1; e_2 }{ \sigma } \leadsto \tuple{e_1'; e_2 }{ \sigma'}}
   \inferrule*[left=SS-Seq-N]
     {\star}
-    {\code{unit}; e_2 \mid \sigma \leadsto e_2 \mid \sigma'}
+    {\tuple{\code{unit}; e_2 }{ \sigma } \leadsto \tuple{e_2 }{ \sigma'}}
   \\
   \inferrule*[left=SS-IF-T]
-    {\sigma(x) = \code{true}}
-    {\tuple{\code{if } x\ \{ e_t \} \code { else } \{ e_e \} }{\sigma} \leadsto \tuple{e_t}{\sigma}}
+    {\bbracket{x} \sigma = \code{true}}
+    {\tuple{\code{if } x\ \{ s_t \} \code { else } \{ s_e \} }{\sigma} \leadsto \tuple{s_t}{\sigma}}
   \inferrule*[left=SS-IF-F]
-    {\sigma(x) = \code{false}}
-    {\tuple{\code{if } x\ \{ e_t \} \code { else } \{ e_e \} }{\sigma} \leadsto \tuple{e_e}{\sigma}}
+    {\bbracket{x}\sigma = \code{false}}
+    {\tuple{\code{if } x\ \{ s_t \} \code { else } \{ s_e \} }{\sigma} \leadsto \tuple{s_e}{\sigma}}
   \\
   \inferrule*[left=SS-While]
     {\star}
     {
-      \tuple{ \code{while } e_c\ \{\ e_b \}}{\sigma}
+      \tuple{ \code{while } e_c\ \{\ s_b \}}{\sigma}
       \leadsto
-      \tuple{ \code{if } e_c \{ e_b;  \code{while } e_c \{ e_b \} \} { \code{ else } } \{ \code{unit} \} }{\sigma}
+      \tuple{ \code{if } e_c \{ s_b;  \code{while } e_c \{ s_b \} \} { \code{ else } } \{ \code{unit} \} }{\sigma}
     }
+  \\
+  \inferrule*[left=SS-Call]
+    {\tuple{\Sigma(f)[arg_1 \triangleright x_1, \dots, arg_n \triangleright x_n]}{\sigma} \leadsto \tuple{v_r}{\sigma'} }
+    {\tuple{f(x_1, \dots, x_2)}{\sigma} \leadsto \tuple{v_r}{\sigma' \oplus \sigma}}
 \end{gather*}
 
+where $$(\sigma' \oplus \sigma)(x) =
+  \begin{cases}
+    \sigma(x) & \text{if } x = arg_i \\
+    \sigma'(x) & \text{if } x \in \text{dom}(\sigma) \cap \text{dom}(\sigma')\\
+    \sigma(x) & \text{otherwise }
+  \end{cases}$$
 \end{definition}
 
-
+The \textsc{SS-Call} rule does not scope the variables from the callee to the caller. This is actually fine, because by definition variable names are distinct. Therefore only the arguments need to be replaced in the resulting state.
 
 \chapter{The Refinement Type System}
 
@@ -682,111 +708,111 @@ We write:
 \end{itemize}
 
 
-\section{Expression Typing: $\Gamma \vdash e : \tau \Rightarrow \Gamma'$}
+% \section{Expression Typing: $\Gamma \vdash e : \tau \Rightarrow \Gamma'$}
 
-\begin{gather*}
-  \inferrule*[left=Lit]
-    {l \text{ fresh} \\ \text{base\_ty}(v) = b}
-    {\Gamma \vdash v: \{ l : b \mid l \doteq v\} \Rightarrow \Gamma}
-  %
-  \\
-  \inferrule*[left=Var]
-    {\alpha \text{ fresh} \\ \mu(x) = \beta}
-    {\Gamma = (\mu, \Phi)\vdash x : \{ \alpha : b \mid \beta \doteq \alpha \} \Rightarrow \Gamma}
-  %
-  \\
-  \inferrule*[left=Var-Ref]
-    {\Gamma \vdash y : \tau \\ \Gamma \vdash x : \{ \beta : \&b \mid \beta \doteq \&y \}}
-    {\Gamma \vdash *x : \tau \Rightarrow \Gamma}
-  %
-  \\
-  \inferrule*[left=If]
-    {
-      \Gamma \vdash \mu(x) : \text{bool} \Rightarrow \Gamma
-      \\ \Gamma, \mu(x) \doteq \code{true} \vdash e_t : \tau \Rightarrow \Gamma'
-      \\ \Gamma, \mu(x) \doteq \code{false} \vdash e_e : \tau \Rightarrow \Gamma'
-    }
-    {\Gamma \vdash \text{if } x \text{ then }e_t\text{ else } e_e : \tau \Rightarrow \Gamma'}
-  %
-  \\
-  \inferrule*[left=While]
-    {
-      \Gamma_I, \mu(x) \doteq \code{true} \vdash s \Rightarrow \Gamma_I'
-      \\ \Gamma_I', \mu(x) \doteq \code{true} \preceq \Gamma_I
-    }
-    {\Gamma_I \vdash \texttt{while } x \{ s \} \Rightarrow \Gamma_I,\mu(x) \doteq \code{false}}
-  %
-  \\
-  \inferrule*[left=Seq]
-    {
-      \Gamma \vdash s_1 : \tau_1 \Rightarrow \Gamma'
-      \\ \Gamma' \vdash \bar s : \tau \Rightarrow \Gamma''
-    }
-    {\Gamma \vdash s_1 ; \bar s : \tau \Rightarrow \Gamma''}
-  %
-  \\
-  \inferrule*[left=Add]
-    {
-      \gamma \text{ fresh}
-      \\ \mu(x_1) = \alpha
-      \\ \mu(x_2) = \beta
-    }
-    {\Gamma \vdash x_1 + x_2 : \{ \gamma: b \mid \gamma \doteq \alpha + \beta \} \Rightarrow \Gamma}
-  %
-  \\
-  \inferrule*[left=Decl]
-    {
-      \Gamma \vdash e :  \{ \beta \mid \varphi \} \Rightarrow \Gamma'
-    }
-    {\Gamma \vdash \code{let } x = e : \code{()} \Rightarrow \Gamma'[ x \mapsto \beta], \varphi}
-  %
-  \\
-  \inferrule*[left=Assign]
-    {\Gamma \vdash e : \{ \beta \mid \varphi \} \Rightarrow \Gamma'}
-    {\Gamma \vdash x = e : \code{unit} \Rightarrow \Gamma' [x \mapsto \beta], \varphi}
-  %
-  \\
-  \inferrule*[left=Assign-Strong]
-    {
-      \Gamma \vdash e : \{ \beta \mid \varphi \} \Rightarrow \Gamma'
-      \\ \Gamma \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y\}
-    }
-    {\Gamma \vdash *x = e : \tau \Rightarrow \Gamma' [y \mapsto \beta], \varphi}
-  %
-  \\
-  \inferrule*[left=Assign-Weak]
-    {
-      \Gamma \vdash e : \tau \Rightarrow \Gamma'
-      \\ \Gamma' \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y_1 \vee \dots \vee \alpha \doteq \&y_n \} \Rightarrow \Gamma'
-      \\ \Gamma' \vdash \tau \preceq \{ \beta_1 \mid \varphi_1 \}
-      \\ \Gamma'[x \mapsto \beta_1], \varphi_1 \preceq \Gamma'
-      \\\\ \dots
-      \\\\
-      \\ \Gamma' \vdash \tau \preceq \{ \beta_n \mid \varphi_n \}
-      \\ \Gamma'[x \mapsto \beta_n], \varphi_n \preceq \Gamma'
-      }
-    {\Gamma \vdash *x = e : \tau \Rightarrow \Gamma'}
-  %
-  \\
-  \inferrule*[left=Fn-Call]
-    {
-      \text{subst} = ...
-      \\
-      \\ (\mu[subst], \alpha \doteq \mu(a) \wedge \dots \wedge \varphi_{\alpha} \wedge\dots) \preceq (\mu, \Phi)
-      \\ f : (\{ \alpha \mid \varphi_{\alpha} \} \Rightarrow \{ \alpha' \mid \varphi'_{\alpha} \}, \dots) \to \tau
-    }
-    {(\mu, \Phi) \vdash f(a, \dots, \&mut b, \dots) : \tau \Rightarrow (\mu[a \mapsto \alpha', \dots, subst^{-1}], \Phi \wedge \varphi'_{\alpha} \wedge \dots)}
-  %
-  \\
-  \inferrule*[left=Intro-Sub]
-    {
-      \Gamma \vdash e : \tau
-      \\ \Gamma \vdash \tau \preceq \tau'
-    }
-    {\Gamma \vdash e \texttt{ as } \tau': \tau'}
-\end{gather*}
+% \begin{gather*}
+%   \inferrule*[left=Lit]
+%     {l \text{ fresh} \\ \text{base\_ty}(v) = b}
+%     {\Gamma \vdash v: \{ l : b \mid l \doteq v\} \Rightarrow \Gamma}
+%   %
+%   \\
+%   \inferrule*[left=Var]
+%     {\alpha \text{ fresh} \\ \mu(x) = \beta}
+%     {\Gamma = (\mu, \Phi)\vdash x : \{ \alpha : b \mid \beta \doteq \alpha \} \Rightarrow \Gamma}
+%   %
+%   \\
+%   \inferrule*[left=Var-Ref]
+%     {\Gamma \vdash y : \tau \\ \Gamma \vdash x : \{ \beta : \&b \mid \beta \doteq \&y \}}
+%     {\Gamma \vdash *x : \tau \Rightarrow \Gamma}
+%   %
+%   \\
+%   \inferrule*[left=If]
+%     {
+%       \Gamma \vdash \mu(x) : \text{bool} \Rightarrow \Gamma
+%       \\ \Gamma, \mu(x) \doteq \code{true} \vdash e_t : \tau \Rightarrow \Gamma'
+%       \\ \Gamma, \mu(x) \doteq \code{false} \vdash e_e : \tau \Rightarrow \Gamma'
+%     }
+%     {\Gamma \vdash \text{if } x \text{ then }e_t\text{ else } e_e : \tau \Rightarrow \Gamma'}
+%   %
+%   \\
+%   \inferrule*[left=While]
+%     {
+%       \Gamma_I, \mu(x) \doteq \code{true} \vdash s \Rightarrow \Gamma_I'
+%       \\ \Gamma_I', \mu(x) \doteq \code{true} \preceq \Gamma_I
+%     }
+%     {\Gamma_I \vdash \texttt{while } x \{ s \} \Rightarrow \Gamma_I,\mu(x) \doteq \code{false}}
+%   %
+%   \\
+%   \inferrule*[left=Seq]
+%     {
+%       \Gamma \vdash s_1 : \tau_1 \Rightarrow \Gamma'
+%       \\ \Gamma' \vdash \bar s : \tau \Rightarrow \Gamma''
+%     }
+%     {\Gamma \vdash s_1 ; \bar s : \tau \Rightarrow \Gamma''}
+%   %
+%   \\
+%   \inferrule*[left=Add]
+%     {
+%       \gamma \text{ fresh}
+%       \\ \mu(x_1) = \alpha
+%       \\ \mu(x_2) = \beta
+%     }
+%     {\Gamma \vdash x_1 + x_2 : \{ \gamma: b \mid \gamma \doteq \alpha + \beta \} \Rightarrow \Gamma}
+%   %
+%   \\
+%   \inferrule*[left=Decl]
+%     {
+%       \Gamma \vdash e :  \{ \beta \mid \varphi \} \Rightarrow \Gamma'
+%     }
+%     {\Gamma \vdash \code{let } x = e : \code{()} \Rightarrow \Gamma'[ x \mapsto \beta], \varphi}
+%   %
+%   \\
+%   \inferrule*[left=Assign]
+%     {\Gamma \vdash e : \{ \beta \mid \varphi \} \Rightarrow \Gamma'}
+%     {\Gamma \vdash x = e : \code{unit} \Rightarrow \Gamma' [x \mapsto \beta], \varphi}
+%   %
+%   \\
+%   \inferrule*[left=Assign-Strong]
+%     {
+%       \Gamma \vdash e : \{ \beta \mid \varphi \} \Rightarrow \Gamma'
+%       \\ \Gamma \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y\}
+%     }
+%     {\Gamma \vdash *x = e : \tau \Rightarrow \Gamma' [y \mapsto \beta], \varphi}
+%   %
+%   \\
+%   \inferrule*[left=Assign-Weak]
+%     {
+%       \Gamma \vdash e : \tau \Rightarrow \Gamma'
+%       \\ \Gamma' \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y_1 \vee \dots \vee \alpha \doteq \&y_n \} \Rightarrow \Gamma'
+%       \\ \Gamma' \vdash \tau \preceq \{ \beta_1 \mid \varphi_1 \}
+%       \\ \Gamma'[x \mapsto \beta_1], \varphi_1 \preceq \Gamma'
+%       \\\\ \dots
+%       \\\\
+%       \\ \Gamma' \vdash \tau \preceq \{ \beta_n \mid \varphi_n \}
+%       \\ \Gamma'[x \mapsto \beta_n], \varphi_n \preceq \Gamma'
+%       }
+%     {\Gamma \vdash *x = e : \tau \Rightarrow \Gamma'}
+%   %
+%   \\
+%   \inferrule*[left=Fn-Call]
+%     {
+%       \text{subst} = ...
+%       \\
+%       \\ (\mu[subst], \alpha \doteq \mu(a) \wedge \dots \wedge \varphi_{\alpha} \wedge\dots) \preceq (\mu, \Phi)
+%       \\ f : (\{ \alpha \mid \varphi_{\alpha} \} \Rightarrow \{ \alpha' \mid \varphi'_{\alpha} \}, \dots) \to \tau
+%     }
+%     {(\mu, \Phi) \vdash f(a, \dots, \&mut b, \dots) : \tau \Rightarrow (\mu[a \mapsto \alpha', \dots, subst^{-1}], \Phi \wedge \varphi'_{\alpha} \wedge \dots)}
+%   %
+%   \\
+%   \inferrule*[left=Intro-Sub]
+%     {
+%       \Gamma \vdash e : \tau
+%       \\ \Gamma \vdash \tau \preceq \tau'
+%     }
+%     {\Gamma \vdash e \texttt{ as } \tau': \tau'}
+% \end{gather*}
 
-\section{Try: Statements $\Gamma \vdash s \Rightarrow \Gamma'$}
+\section{Statement Type Checking $\Gamma \vdash s \Rightarrow \Gamma'$}
 
 \begin{gather*}
   \inferrule*[left=If]
@@ -858,7 +884,7 @@ We write:
     {(\mu, \Phi) \vdash \code{let res} = f(a, \dots, \code{\&mut} b, \dots) \Rightarrow (\mu[a \mapsto \alpha', \dots, subst^{-1}], \Phi \wedge \varphi'_{\alpha} \wedge \dots)}
 \end{gather*}
 
-\paragraph*{Expressions: $\Gamma \vdash e : \tau$}
+\section{Expressions Typing: $\Gamma \vdash e : \tau$}
 
 \begin{gather*}
   \inferrule*[left=Lit]
@@ -951,10 +977,10 @@ This means that types may need to be changed atomically.
 
 As usual, we consider the three properties (see Pierce \cite[p. 95, p.167]{pierce_types_2002}) of a type system when assessing the correctness of MiniCorten:
 
-\begin{definition}
-  State Conformance: A state $\sigma$ is conformant with respect to a typing context $\Gamma = (\mu, \varphi)$ (written as $\sigma : \Gamma$), iff:
+\begin{definition}[State Conformance]
+  A state $\sigma$ is conformant with respect to a typing context $\Gamma = (\mu, \varphi)$ (written as $\sigma : \Gamma$), iff:
   $$\vDash \left(\bigwedge_{x \in \text{Var}} \mu(x) \doteq \sigma(x)\right) \to \varphi$$
-   I.e. the a execution's value assignments imply the type refinements
+   I.e. the execution's value assignments imply the type refinements
 \end{definition}
 
 \begin{definition}
@@ -962,8 +988,8 @@ As usual, we consider the three properties (see Pierce \cite[p. 95, p.167]{pierc
     If $t$ is closed and well-typed, then $t$ is a value or $t \leadsto t'$, where $t'$ is a value.
 \end{definition}
 
-\begin{definition}
-  Preservation: If $\Gamma \vdash e : \tau \Rightarrow \Gamma$ and $e \leadsto e'$, then $\Gamma \vdash e' : \tau \Rightarrow \Gamma$
+\begin{definition}[Preservation]
+  If $\Gamma \vdash e : \tau \Rightarrow \Gamma$ and $e \leadsto e'$, then $\Gamma \vdash e' : \tau \Rightarrow \Gamma$
 \end{definition}
 
 The state conformance rule differs from the usual rule in two ways. Firstly we consider the runtime value instead of the runtime type. Secondly there needs to be one set of variable assignments that satisfies all predicates in $\Gamma$.
@@ -971,29 +997,62 @@ The state conformance rule differs from the usual rule in two ways. Firstly we c
 Because MiniCorten is based on Rust, we will assume, that progress, as well as preservation for the base-types. This includes preservation of type- and ownership-safety. Thus it is sufficient to prove, that assuming these properties hold, preservation of the refinement types is holds.
 
 
-\begin{lemma}
-  Preservation of State Conformance: If $\Gamma \vdash e : \tau \Rightarrow \Gamma''$, $\sigma : \Gamma$ and $\tuple{t}{\sigma} \leadsto \tuple{t'}{\sigma'}$, then  $\sigma' : \Gamma'$ and $\Gamma' \vdash e' : \tau' \Rightarrow \Gamma''$
+\begin{lemma}[Conformance of Evaluation]
+  If $\sigma : \Gamma$ and $\bbracket{e} \sigma = v$ then $\vDash \varphi \to \bbracket{e} \Gamma$ 
+\end{lemma}
+% ty!{ == a + b }
+% [[a =]]
+\begin{proof}
+  
+\end{proof}
+
+
+\begin{lemma}[Preservation of State Conformance]
+  If $\Gamma \vdash s \Rightarrow \Gamma_2$, $\sigma : \Gamma$ and $\tuple{s}{\sigma} \leadsto \tuple{s_1}{\sigma_1}$, then  $\sigma_1 : \Gamma_1$ and $\Gamma_1 \vdash s_1 \Rightarrow \Gamma_2$ for some $\Gamma_1$
 \end{lemma}
 
 
 \begin{proof} Rule Induction over $\tuple{t}{\sigma} \leadsto \tuple{t'}{\sigma'}$
 \begin{itemize}
   \item \textsc{Case SS-Assign}:
-    $\sigma' = \sigma[x \mapsto v]$. With rule inversion \textsc{Assign}: $e' = \code{unit}$ and post state: $\Gamma'' = \Gamma'[x \mapsto \beta], \varphi$ with $\Gamma \vdash e : \{ \beta \mid \varphi \}$.
+    Given $\sigma :: \Gamma$, $\Gamma \vdash x = e \Rightarrow \Gamma_2$
+    show $\exists \Gamma_1, \sigma[ x \mapsto \llbracket e \rrbracket \sigma] : \Gamma_1 \wedge \Gamma_1 \vdash \code{unit} \Rightarrow \Gamma_2 $
 
-    $e$ is a value, because of the requirement in \textsc{SS-Assign}. By rule inversion \textsc{Lit} over assumption $\Gamma \vdash v: \{ \beta \mid \varphi \} \Rightarrow \Gamma$: $\varphi = (\beta \doteq v)$
+    Rule inversion over $\Gamma \vdash x = e \Rightarrow \Gamma_2$ gives $\Gamma \vdash e: \{ \alpha : b \mid \alpha \doteq \llbracket e \rrbracket \}$ and $\Gamma_2 = (\Gamma[x \mapsto \alpha], \alpha \doteq \llbracket e \rrbracket)$
 
-    $\mu'(x) = \beta$, $\sigma'(x) = v$ and induction hypothesis $\sigma : \Gamma$. Since $\mu'(x) \doteq \varphi(x) \to \varphi$ is trivially valid. Monotonicity of State Conformance gives us the goal.
-
-    Because $e'$ is \code{unit}, the second proof obligation is trivially true, because $\Gamma' = \Gamma''$
-  \item \textsc{Case SS-Assign-Inner}:
-    Induction hypothesis: $\tuple{e}{\sigma} \leadsto \tuple{e'}{\sigma'}$, $\sigma' : \Gamma'$, $\Gamma \vdash e' : \tau' \Rightarrow \Gamma''$
+    For $\Gamma_1 = \Gamma_2$, $\sigma[x \mapsto \bbracket{e}\sigma ] : (\Gamma[x \mapsto \alpha], \alpha \doteq \llbracket e \rrbracket)$, $\alpha$ is fresh and therefore monotonicity applies.
     
-    Induction hypothesis is equal to proof obligation.
-  \item \textsc{Case SS-Decl}:
-    $\sigma' = \sigma[ x \mapsto v]$, $e' = \code{unit}$.
-    
-    $\sigma' : \Gamma'$ because of monotonicity; $\Gamma' \vdash \code{unit} : \code{Unit} \Rightarrow \Gamma'$ by SS semantics true
+    % Let $v = \llbracket e \rrbracket \sigma$. 
+    % For $\Gamma_1 = (\mu[x \mapsto v], \varphi)$
+
+    % $\sigma' = \sigma[x \mapsto v]$. With rule inversion \textsc{Assign}: $e' = \code{unit}$ and post state: $\Gamma'' = \Gamma'[x \mapsto \beta], \varphi$ with $\Gamma \vdash e : \{ \beta \mid \varphi \}$.
+
+    % $e$ is a value, because of the requirement in \textsc{SS-Assign}. By rule inversion \textsc{Lit} over assumption $\Gamma \vdash v: \{ \beta \mid \varphi \} \Rightarrow \Gamma$: $\varphi = (\beta \doteq v)$
+
+    % $\mu'(x) = \beta$, $\sigma'(x) = v$ and induction hypothesis $\sigma : \Gamma$. Since $\mu'(x) \doteq \varphi(x) \to \varphi$ is trivially valid. Monotonicity of State Conformance gives us the goal.
+
+    % Because $e'$ is \code{unit}, the second proof obligation is trivially true, because $\Gamma' = \Gamma''$
+  \item \textsc{Case SS-Seq-Inner}:
+    Given: $\tuple{c_1}{\sigma} \leadsto \tuple{c_1'}{\sigma'}$, \\
+     $\Gamma \vdash c_1 ; c_2 \Rightarrow \Gamma_2$, \\
+     $\forall \Gamma_2, \Gamma \vdash c_1 \Rightarrow \Gamma_2 \wedge \sigma : \Gamma \to \exists \Gamma_1, \sigma' : \Gamma_1 \wedge \Gamma_1 \vdash c_1' \Rightarrow \Gamma_2$ \\
+    show $\exists \Gamma_1, \sigma' : \Gamma_1 \wedge \Gamma_1 \vdash c_1' ; c_2  \Rightarrow \Gamma_2$.
+
+    Rule inversion over $\Gamma \vdash c_1 ; c_2 \Rightarrow \Gamma_2$ yields $\Gamma \vdash c_1 \Rightarrow \Gamma_1$, $\Gamma_1 \vdash c_2 \Rightarrow \Gamma_2$
+
+    The preconditions for the third induction hypothesis are satisfied for $\Gamma_1$ delivers 
+    $\exists \Gamma_1', \sigma' : \Gamma_1' \wedge \Gamma_1' \vdash c_1' \Rightarrow \Gamma_1$
+
+    State conformance $\sigma' : \Gamma_1'$ follows directly from this.
+
+    For $\Gamma_1'$ the preconditions for the \textsc{Seq} rule are satisfied.
+  \item \textsc{Case SS-Seq-N}: 
+    Given: $\Gamma \vdash \code{unit}; c \Rightarrow \Gamma_2$, $\sigma : \Gamma$
+    show $\exists \Gamma_1, \sigma : \Gamma_1 \wedge \Gamma \vdash c \Rightarrow \Gamma_2$.
+
+    Rule inversion over $\Gamma \vdash \code{unit}; c \Rightarrow \Gamma_2$ yields $\Gamma \vdash c \Rightarrow \Gamma_2$.
+    Together with the second induction hypothesis this implies the goal.
+  \item \textsc{Case SS-Decl}: analogous to \textsc{Case SS-Assign}
   \item \textsc{Case Deref}
     $\sigma(x) = v$, $e' = v$, $\sigma' = \sigma$
 

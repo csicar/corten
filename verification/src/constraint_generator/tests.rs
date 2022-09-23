@@ -1783,7 +1783,7 @@ mod evaluation {
         with_item_and_rt_lib(
             &quote! {
                 fn swap(
-                    x : &mut ty!{ x1: i32 | true => x2 | x2 == y1 }, 
+                    x : &mut ty!{ x1: i32 | true => x2 | x2 == y1 },
                     y : &mut ty!{ y1: i32 | true => y2 | y2 == x1 }
                 )  -> ty!{ v: () }  {
                     let tmp = *x;
@@ -1791,19 +1791,19 @@ mod evaluation {
                     *y = tmp;
                     ()
                 }
-                
-                // fn sort_inplace ( 
-                //     x: &mut ty!{ x1: i32 | true => min | min <= x1 && min <= y1 && (min == x1 || min == y1) }, 
+
+                // fn sort_inplace (
+                //     x: &mut ty!{ x1: i32 | true => min | min <= x1 && min <= y1 && (min == x1 || min == y1) },
                 //     y: &mut ty!{ y1: i32 | true => max | max >= x1 && max >= y1 && (max == x1 || max == y1) }
                 // ) -> ty!{ v: () } {
                 //     if *x > *y {
                 //         swap(x, y);
                 //     } else {
-                
+
                 //     };
                 //     ()
                 // }
-                
+
                 // fn client() -> ty!{ v: () } {
                 //     let mut x = 2;
                 //     let mut y = 3;
@@ -1813,7 +1813,7 @@ mod evaluation {
                 //     //println!("x: -, y: -, a: {a}, b: {b}");
                 //     swap(a, b);
                 //     //println!("x: -, y: -, a: {a}, b: {b}");
-                    
+
                 //     let mut z = 5;
                 //     //println!("x: -, y: -, a: {a}, b: {b}, z: {z}");
                 //     a = &mut z;

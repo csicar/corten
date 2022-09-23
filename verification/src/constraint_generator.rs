@@ -155,7 +155,6 @@ where
             }
             trace!(ctx=%ctx.with_tcx(tcx), "initial context for the function ");
 
-
             // get refinement for output
             let expected_type = match output {
                 hir::FnRetTy::Return(return_type) => {
@@ -577,7 +576,8 @@ where
         ExprKind::Unary(hir::UnOp::Deref, inner_expr) => {
             // Whole expression:`*x`, expr = `x`
             // reference_ty = `ty!{ _1 | _1 = &y }`
-            let (reference_ty, ctx_after) = type_of(inner_expr, tcx, ctx, local_ctx, solver, fresh)?;
+            let (reference_ty, ctx_after) =
+                type_of(inner_expr, tcx, ctx, local_ctx, solver, fresh)?;
 
             trace!(%reference_ty);
             let ident = reference_ty.get_as_reference_type()?;

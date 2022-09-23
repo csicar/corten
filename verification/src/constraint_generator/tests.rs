@@ -1798,40 +1798,44 @@ mod evaluation {
                 // ) -> ty!{ v: () } {
                 //     if *x > *y {
                 //         swap(x, y);
+                //         relax_ctx {
+
+                //         }
                 //     } else {
 
                 //     };
                 //     ()
                 // }
 
-                // fn client() -> ty!{ v: () } {
-                //     let mut x = 2;
-                //     let mut y = 3;
-                //     //println!("x: {x}, y: {y}");
-                //     let mut a = &mut x;
-                //     let mut b = &mut y;
-                //     //println!("x: -, y: -, a: {a}, b: {b}");
-                //     swap(a, b);
-                //     //println!("x: -, y: -, a: {a}, b: {b}");
+                fn client() -> ty!{ v: () } {
+                    let mut x = 2;
+                    let mut y = 3;
+                    //println!("x: {x}, y: {y}");
+                    let mut a = &mut x;
+                    let mut b = &mut y;
+                    //println!("x: -, y: -, a: {a}, b: {b}");
+                    swap(a, b);
+                    //println!("x: -, y: -, a: {a}, b: {b}");
 
-                //     let mut z = 5;
-                //     //println!("x: -, y: -, a: {a}, b: {b}, z: {z}");
-                //     a = &mut z;
-                //     b = &mut x;
-                //     //println!("x: -, y: -, a: {a}, b: {b}, z: -");
-                //     *a = *b;
-                //     //println!("x: {x}, y: -, a: {a}, b: -, z: -");
-                //     sort_inplace(&mut x, a);
-                //     //println!("x: {x}, y: -, a: {a}, b: -, z: -");
-                //     //println!("x: {x}, y: {y}, z: {z}");
-                //     ()
-                // }
+                    let mut z = 5;
+                    //println!("x: -, y: -, a: {a}, b: {b}, z: {z}");
+                    a = &mut z;
+                    b = &mut x;
+                    //println!("x: -, y: -, a: {a}, b: {b}, z: -");
+                    *a = *b;
+                    //println!("x: {x}, y: -, a: {a}, b: -, z: -");
+                    // sort_inplace(&mut x, a);
+                    //println!("x: {x}, y: -, a: {a}, b: -, z: -");
+                    //println!("x: {x}, y: {y}, z: {z}");
+                    ()
+                }
             }
             .to_string(),
             |item, tcx| {
                 let ty = type_check_function(item, &tcx).unwrap();
                 match item.ident.name.as_str() {
                     "swap" => pretty::assert_eq!(ty.to_string(), "ty!{ v : () | true }"),
+                    "client" => pretty::assert_eq!(ty.to_string(), "ty!{ v : () | true }"),
                     _ => panic!(),
                 }
             },

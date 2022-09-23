@@ -1280,6 +1280,25 @@ mod mut_ref {
         )
         .unwrap();
     }
+
+    #[test]
+    fn test_deref_arg() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn f(a: &mut ty!{a1: i32 | true => a2 | true}) -> ty!{ v : i32 | v == a1} {
+                    let tmp = *a;
+                    tmp
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == a1 }");
+            },
+        )
+        .unwrap();
+    }
 }
 
 /// Loops
@@ -1753,6 +1772,68 @@ mod evaluation {
             |item, tcx| {
                 let ty = type_check_function(item, &tcx).unwrap();
                 pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v > 1 }")
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn complex_mutability() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn swap(
+                    x : &mut ty!{ x1: i32 | true => x2 | x2 == y1 }, 
+                    y : &mut ty!{ y1: i32 | true => y2 | y2 == x1 }
+                )  -> ty!{ v: () }  {
+                    let tmp = *x;
+                    *x = *y;
+                    *y = tmp;
+                    ()
+                }
+                
+                // fn sort_inplace ( 
+                //     x: &mut ty!{ x1: i32 | true => min | min <= x1 && min <= y1 && (min == x1 || min == y1) }, 
+                //     y: &mut ty!{ y1: i32 | true => max | max >= x1 && max >= y1 && (max == x1 || max == y1) }
+                // ) -> ty!{ v: () } {
+                //     if *x > *y {
+                //         swap(x, y);
+                //     } else {
+                
+                //     };
+                //     ()
+                // }
+                
+                // fn client() -> ty!{ v: () } {
+                //     let mut x = 2;
+                //     let mut y = 3;
+                //     //println!("x: {x}, y: {y}");
+                //     let mut a = &mut x;
+                //     let mut b = &mut y;
+                //     //println!("x: -, y: -, a: {a}, b: {b}");
+                //     swap(a, b);
+                //     //println!("x: -, y: -, a: {a}, b: {b}");
+                    
+                //     let mut z = 5;
+                //     //println!("x: -, y: -, a: {a}, b: {b}, z: {z}");
+                //     a = &mut z;
+                //     b = &mut x;
+                //     //println!("x: -, y: -, a: {a}, b: {b}, z: -");
+                //     *a = *b;
+                //     //println!("x: {x}, y: -, a: {a}, b: -, z: -");
+                //     sort_inplace(&mut x, a);
+                //     //println!("x: {x}, y: -, a: {a}, b: -, z: -");
+                //     //println!("x: {x}, y: {y}, z: {z}");
+                //     ()
+                // }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                match item.ident.name.as_str() {
+                    "swap" => pretty::assert_eq!(ty.to_string(), "ty!{ v : () | true }"),
+                    _ => panic!(),
+                }
             },
         )
         .unwrap();

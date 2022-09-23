@@ -153,6 +153,8 @@ where
                     };
                 ctx.add_ty(param.pat.hir_id, start_refinement)
             }
+            trace!(ctx=%ctx.with_tcx(tcx), "initial context for the function ");
+
 
             // get refinement for output
             let expected_type = match output {
@@ -219,6 +221,7 @@ where
 
                 let (type_of_init, mut ctx_after) =
                     type_of(initializer, tcx, &curr_ctx, local_ctx, solver, fresh)?;
+                // let type_of_init = type_of_init.rename_binder(&fresh.fresh_ident()).unwrap();
                 assert!(
                     local.ty.is_none(),
                     "Type Annotations on `let` not yet supported"
@@ -237,9 +240,8 @@ where
                     )
                 }
                 trace!(
-                    "adding type {} to local {:?} in ctx. Stmt hir id: {}",
+                    "adding type {} to ctx. Stmt hir id: {}",
                     &type_of_init,
-                    &local,
                     local.pat.hir_id
                 );
                 ctx_after.add_reference_dest(
@@ -247,6 +249,7 @@ where
                     TypeTarget::Definition(local.pat.hir_id),
                 );
                 ctx_after.add_ty(local.pat.hir_id, type_of_init.clone());
+                trace!("resulting ctx {}", ctx_after.with_tcx(tcx));
                 ctx_after
             }
             hir::StmtKind::Item(_) => todo!(),
@@ -571,16 +574,31 @@ where
             //TODO check no mut in expr
             anyhow::Ok((ty, ctx_after_right))
         }
-        ExprKind::Unary(hir::UnOp::Deref, expr) => {
-            let (reference_ty, ctx_after) = type_of(expr, tcx, ctx, local_ctx, solver, fresh)?;
+        ExprKind::Unary(hir::UnOp::Deref, inner_expr) => {
+            // Whole expression:`*x`, expr = `x`
+            // reference_ty = `ty!{ _1 | _1 = &y }`
+            let (reference_ty, ctx_after) = type_of(inner_expr, tcx, ctx, local_ctx, solver, fresh)?;
+
             trace!(%reference_ty);
             let ident = reference_ty.get_as_reference_type()?;
             let dest_hir_id = ctx.lookup_reference_dest(&ident)?;
             //TODO Fix: type should be
-            let ty = ctx
+            let target_ty = ctx
                 .lookup_type_by_type_target(&dest_hir_id)
                 .ok_or_else(|| anyhow!("ctx must contain hirid"))?;
-            info!("type targed {ty}");
+            info!("type targed {target_ty}");
+
+            let binder = fresh.fresh_ident();
+            let binder_ident = format_ident!("{}", &binder);
+            let target_ty_binder = format_ident!("{}", target_ty.binder);
+
+            let ty = RefinementType {
+                base: local_ctx.expr_ty(expr),
+                binder,
+                predicate: parse_quote! {
+                    #binder_ident == #target_ty_binder
+                },
+            };
             anyhow::Ok((ty, ctx_after))
         }
         ExprKind::Unary(_, _) => todo!(),

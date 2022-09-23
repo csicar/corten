@@ -56,6 +56,19 @@ impl<'tcx> rustc_lint::LateLintPass<'tcx> for MyLint {
     fn check_expr(&mut self, _cx: &rustc_lint::LateContext<'tcx>, _expr: &rustc_hir::Expr<'tcx>) {
         // Static analysis goes here
     }
+
+    fn check_fn(
+        &mut self,
+        late: &rustc_lint::LateContext<'tcx>,
+        _: rustc_hir::intravisit::FnKind<'tcx>,
+        _: &'tcx rustc_hir::FnDecl<'tcx>,
+        _: &'tcx rustc_hir::Body<'tcx>,
+        _: rustc_span::Span,
+        hir_id: rustc_hir::HirId,
+    ) {
+        let hir_node = late.tcx.hir().get(hir_id);
+        println!("{:?}", hir_node)
+    }
 }
 
 struct OurCompilerCalls {}

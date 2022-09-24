@@ -280,9 +280,7 @@ where
         &self,
         target: &TypeTarget<syn::Ident>,
     ) -> Option<String> {
-        trace!("target {:?}", target);
         let target = self.lookup_reference_dest(target).unwrap();
-        trace!("has reference dst {:?}", target);
         self.binders
             .iter()
             .find(|(k, _)| k == &&target)

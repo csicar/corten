@@ -450,10 +450,7 @@ pub fn encode_smt(
         syn::Expr::Reference(syn::ExprReference { expr: inner, .. }) => match inner {
             box syn::Expr::Path(syn::ExprPath { path, .. }) => {
                 let ident = path.get_ident().unwrap();
-                trace!("ident {ident}, expr {}", quote! {#expr});
-                let r = target_to_binder(&TypeTarget::Definition(ident.clone()));
-                trace!("returns {r}");
-                r
+                target_to_binder(&TypeTarget::Definition(ident.clone()))
             }
             box syn::Expr::Call(syn::ExprCall {
                 func: box syn::Expr::Path(syn::ExprPath { path: fn_name, .. }),

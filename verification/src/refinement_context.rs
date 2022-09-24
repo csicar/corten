@@ -310,6 +310,7 @@ where
 
     /// for a context { _1 == _2 && true, _2 == &x, _3 > 0 },
     /// self.equivalence_set_for_logic_var("_1") will return (set!["_1", "_2"], "x")
+    /// only accurate for the restricted language used on references!
     #[instrument(skip_all, fields(?logic_var), ret)]
     fn equivalence_set_for_logic_var<'i>(
         predicates: Vec<&'i syn::Expr>,
@@ -355,6 +356,8 @@ where
                                     } else if equivalence_set.contains(&right_name) {
                                         equivalence_set.insert(left_name);
                                     }
+                                } else {
+                                    todo!()
                                 }
                             }
                             _ => {
@@ -373,16 +376,22 @@ where
                                 }
                             }
                         }
+                    } else {
+                        todo!()
                     }
                 }
-                syn::Expr::Binary(_) => {}
-                syn::Expr::Lit(_) => {}
+                syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Bool(b),
+                    ..
+                }) if b.value => {}
+                syn::Expr::Binary(_) => todo!(),
+                syn::Expr::Lit(_) => todo!(),
                 syn::Expr::Paren(syn::ExprParen { expr: box expr, .. }) => {
                     equivalent_logic_vars_in_expr(equivalence_set, equivalent_pvars, expr)
                 }
-                syn::Expr::Path(_) => {}
-                syn::Expr::Reference(_) => {}
-                syn::Expr::Unary(_) => {}
+                syn::Expr::Path(_) => todo!(),
+                syn::Expr::Reference(_) => todo!(),
+                syn::Expr::Unary(_) => todo!(),
                 _ => todo!(),
             }
         }
@@ -396,7 +405,7 @@ where
                 equivalent_logic_vars_in_expr(
                     &mut equivalence_set,
                     &mut equivalent_pvars,
-                    &predicate,
+                    predicate,
                 );
             }
 

@@ -317,7 +317,7 @@ Rust does have a notion of subtyping for its permission system, which serves the
 
 \paragraph*{What Rust does not solve} Even though Rust simplifies reasoning about mutability and aliasing of mutable data, Rust does not eliminate the need to reason about multiple references to mutable data. For example, Listing \ref{lst:alias-mut} shows how \code{cell}'s type is influenced by changes to \code{r}. This does not mean, that the ownership rule  \textit{mutability XOR aliasing} are broken: Even though both \code{cell} and \code{r} are mutable, but only one is active.
 
-\begin{listing}[h]
+\begin{listing}[ht]
   \begin{minted}{rust}
     let mut cell = 2;
     let r = &mut cell;
@@ -532,7 +532,7 @@ In the example, the typing context at the end of the function body contains $v_1
 There are other approaches for handling changing values in refinement types, which will be described and compared in \ref{subsec:related-work-mutability}.
 
 
-\begin{listing}[h]
+\begin{listing}[ht]
   \begin{minted}[texcomments]{rust}
     fn inc() -> ty!{ v: i32 | v == 3 } {
         let mut i = 2;       // $\{ v_1 : i32 \mid v_1 == 2 \}$
@@ -565,7 +565,7 @@ Note, that the type can only be changed because we know exactly what \code{b} re
 
 
 
-\begin{listing}[h]
+\begin{listing}[ht]
   \begin{minted}[texcomments]{rust}
     fn client() -> ty!{ v: i32 | v == 4 } {
         let a = 2;       // $\{ v_1 : i32 \mid v_1 == 2 \}$
@@ -589,7 +589,7 @@ Because the destination is ambiguous, assigning to \code{*res} can not change th
 
 
 
-\begin{listing}[h]
+\begin{listing}[ht]
   \begin{minted}[texcomments]{rust}
     fn weak_updates(x : ty!{ x1 : i32 }) -> ty!{ v : i32 | v > 2 * x1 + 10 } {
       let mut y = x as ty!{ y1 : i32 | y1 >= x1 };
@@ -614,7 +614,7 @@ Because the destination is ambiguous, assigning to \code{*res} can not change th
 
 Firstly, the type system is path sensitive, meaning that the type system is aware of necessary XXX that need to be passed for an expression to be evaluated. For example listing \ref{lst:max-path-sensitive} shows a function computing the maximum of its inputs. In the then branch, $a$ is only a maximum of $a$ and $b$, because the condition $a > b$ implies it. Corten will symbolically evaluate the condition and store it in its typing context.
 
-\begin{listing}[h]
+\begin{listing}[ht]
   \begin{minted}{rust}
     fn max(a : ty!{ av: i32 }, b: ty!{ bv: i32 })
         -> ty!{ v: i32 | v >= av && v >= bv} {
@@ -636,7 +636,7 @@ Firstly, the type system is path sensitive, meaning that the type system is awar
 
 \label{subsec:strong-type-updates}\subsection{Strong Type Updates}
 
-\begin{listing}[h]
+\begin{listing}[ht]
   \begin{minted}{rust}
     fn strong_updates(b: ty!{ bv: i32 | bv > 0}) -> ty!{ v: i32 | v > 2} {
         let mut a = 2;
@@ -656,7 +656,7 @@ For a verification system to be scalable, it needs to be able modularize a proof
 
 Notice, that all of the type information about \code{y} is preserved when \code{inc(x)} is called. There are no further annotations needed to type check this program. This is possible, because in safe Rust, any (externally observable) mutation done by a function must be part of the function signature. Corten expands on this, by enabling the user specify exactly how a referenced value is mutated.
 
-\begin{listing}[h]
+\begin{listing}[ht]
   \begin{minted}{rust}
     fn inc(a: &mut ty!{ a1: i32 => a2 | a2 == a1 + 1 }) {
       *a = *a + 1;
@@ -674,150 +674,43 @@ Notice, that all of the type information about \code{y} is preserved when \code{
 
 
 
-\label{subsec:mutual-reference}\subsection{Mutual Reference}
-
-Complex mutation patterns often result in complex interdependencies. We deem it necessary to allow different types to refer to each other.\todo{why?}
-
-\begin{listing}[h]
-  \begin{minted}{rust}
-      let sum = 0;
-      let i = 0;
-      
-  \end{minted}
-  \caption{Function computing the maximum of its inputs; guaranteeing that the returned value is larger than its inputs}
-  \label{lst:mutual-reference}
-\end{listing}
 
 \label{subsec:atomic-updates}\subsection{Atomic Updates}
 
-- relax ctx
-- non-atomic might not be sufficient
+Complex mutation patterns can result in complex interdependencies. We deem it necessary to allow different types to refer to each other. 
+The properties of arguments might depend on each other, consequently their refinement types should be able to refer to each other.
 
+The listing \ref{lst:mutual-reference} is extract from the evaluation example \ref{subsec:evaluation-gauss}. It requires establishing an invariant, where \code{i} has the predicate $\geq 0$ and \code{sum} has the predicate $= i \cdot n$.
 
-\section{Definitions}
+Attempting to update one type at a time, will not yield the desired result. If \code{i} is updated first, then it is not possible to establish \code{sum}'s type, because \code{i}'s type is no longer expressive enough.
+If \code{sum} is updated first, we can establish its type, but once \code{i} is updated, it will refer to a different logic variable for \code{i} than \code{sum}. If we tried to carry the information, that the two logic variables are the same in the type, it would no longer be an invariant, because reassigning the value would invalidate it\footnote{
+  For this use-case, it might also be possible to relax a single variable at a time, by renaming the logic variables to their old names after the subtyping relation is shown. This approach was not chosen, because its influence on correctness are hard to assess.
+}.
 
-\paragraph*{$P$} is the set of program variables used in rust program. Common names $a, b, c$
-\paragraph*{$L$} is the set of logic variables used in refinement types. Common names: $\alpha, \beta$
+\begin{listing}[ht]
+  \begin{minted}[autogobble]{rust}
+    let sum = 0;
+    let i = 0;
+    
+    relax_ctx!{
+      i: ty!{ iv : i32 | iv > 0  },
+      sum: ty!{ sv: i32 | 2 * sv == iv * (iv + 1) }
+    }
 
-\paragraph*{$\Gamma = (\mu, \Phi)$} is a tuple containing a function $\mu: P \to L$ mapping all program variables to their (current) logic variable and a set of formulas $\Phi$ over $L$. During execution of statements, the set increases monotonically
+    i = i + 1;
+    sum = sun + i;
 
-\paragraph*{$\tau$} is a user defined type $\{ \alpha : b \mid \varphi\}$. Where $\alpha$ is a logic variable from $L$, $b$ is a base type from Rust (like \texttt{i32}) and $\varphi$ is a formula over variables in $L$.
+  \end{minted}
+  \caption{Demonstration of interdependent types}
+  \label{lst:mutual-reference}
+\end{listing}
 
-\paragraph*{Abbreviations}
-We write:
-\begin{itemize}
-  \item  $\Gamma, c$ for $(\mu, \Phi \wedge c)$
-  \item $\Gamma[a \mapsto \alpha]$ for $(\mu[a \mapsto \alpha], \Phi)$
-\end{itemize}
-
-
-% \section{Expression Typing: $\Gamma \vdash e : \tau \Rightarrow \Gamma'$}
-
-% \begin{gather*}
-%   \inferrule*[left=Lit]
-%     {l \text{ fresh} \\ \text{base\_ty}(v) = b}
-%     {\Gamma \vdash v: \{ l : b \mid l \doteq v\} \Rightarrow \Gamma}
-%   %
-%   \\
-%   \inferrule*[left=Var]
-%     {\alpha \text{ fresh} \\ \mu(x) = \beta}
-%     {\Gamma = (\mu, \Phi)\vdash x : \{ \alpha : b \mid \beta \doteq \alpha \} \Rightarrow \Gamma}
-%   %
-%   \\
-%   \inferrule*[left=Var-Ref]
-%     {\Gamma \vdash y : \tau \\ \Gamma \vdash x : \{ \beta : \&b \mid \beta \doteq \&y \}}
-%     {\Gamma \vdash *x : \tau \Rightarrow \Gamma}
-%   %
-%   \\
-%   \inferrule*[left=If]
-%     {
-%       \Gamma \vdash \mu(x) : \text{bool} \Rightarrow \Gamma
-%       \\ \Gamma, \mu(x) \doteq \code{true} \vdash e_t : \tau \Rightarrow \Gamma'
-%       \\ \Gamma, \mu(x) \doteq \code{false} \vdash e_e : \tau \Rightarrow \Gamma'
-%     }
-%     {\Gamma \vdash \text{if } x \text{ then }e_t\text{ else } e_e : \tau \Rightarrow \Gamma'}
-%   %
-%   \\
-%   \inferrule*[left=While]
-%     {
-%       \Gamma_I, \mu(x) \doteq \code{true} \vdash s \Rightarrow \Gamma_I'
-%       \\ \Gamma_I', \mu(x) \doteq \code{true} \preceq \Gamma_I
-%     }
-%     {\Gamma_I \vdash \texttt{while } x \{ s \} \Rightarrow \Gamma_I,\mu(x) \doteq \code{false}}
-%   %
-%   \\
-%   \inferrule*[left=Seq]
-%     {
-%       \Gamma \vdash s_1 : \tau_1 \Rightarrow \Gamma'
-%       \\ \Gamma' \vdash \bar s : \tau \Rightarrow \Gamma''
-%     }
-%     {\Gamma \vdash s_1 ; \bar s : \tau \Rightarrow \Gamma''}
-%   %
-%   \\
-%   \inferrule*[left=Add]
-%     {
-%       \gamma \text{ fresh}
-%       \\ \mu(x_1) = \alpha
-%       \\ \mu(x_2) = \beta
-%     }
-%     {\Gamma \vdash x_1 + x_2 : \{ \gamma: b \mid \gamma \doteq \alpha + \beta \} \Rightarrow \Gamma}
-%   %
-%   \\
-%   \inferrule*[left=Decl]
-%     {
-%       \Gamma \vdash e :  \{ \beta \mid \varphi \} \Rightarrow \Gamma'
-%     }
-%     {\Gamma \vdash \code{let } x = e : \code{()} \Rightarrow \Gamma'[ x \mapsto \beta], \varphi}
-%   %
-%   \\
-%   \inferrule*[left=Assign]
-%     {\Gamma \vdash e : \{ \beta \mid \varphi \} \Rightarrow \Gamma'}
-%     {\Gamma \vdash x = e : \code{unit} \Rightarrow \Gamma' [x \mapsto \beta], \varphi}
-%   %
-%   \\
-%   \inferrule*[left=Assign-Strong]
-%     {
-%       \Gamma \vdash e : \{ \beta \mid \varphi \} \Rightarrow \Gamma'
-%       \\ \Gamma \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y\}
-%     }
-%     {\Gamma \vdash *x = e : \tau \Rightarrow \Gamma' [y \mapsto \beta], \varphi}
-%   %
-%   \\
-%   \inferrule*[left=Assign-Weak]
-%     {
-%       \Gamma \vdash e : \tau \Rightarrow \Gamma'
-%       \\ \Gamma' \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y_1 \vee \dots \vee \alpha \doteq \&y_n \} \Rightarrow \Gamma'
-%       \\ \Gamma' \vdash \tau \preceq \{ \beta_1 \mid \varphi_1 \}
-%       \\ \Gamma'[x \mapsto \beta_1], \varphi_1 \preceq \Gamma'
-%       \\\\ \dots
-%       \\\\
-%       \\ \Gamma' \vdash \tau \preceq \{ \beta_n \mid \varphi_n \}
-%       \\ \Gamma'[x \mapsto \beta_n], \varphi_n \preceq \Gamma'
-%       }
-%     {\Gamma \vdash *x = e : \tau \Rightarrow \Gamma'}
-%   %
-%   \\
-%   \inferrule*[left=Fn-Call]
-%     {
-%       \text{subst} = ...
-%       \\
-%       \\ (\mu[subst], \alpha \doteq \mu(a) \wedge \dots \wedge \varphi_{\alpha} \wedge\dots) \preceq (\mu, \Phi)
-%       \\ f : (\{ \alpha \mid \varphi_{\alpha} \} \Rightarrow \{ \alpha' \mid \varphi'_{\alpha} \}, \dots) \to \tau
-%     }
-%     {(\mu, \Phi) \vdash f(a, \dots, \&mut b, \dots) : \tau \Rightarrow (\mu[a \mapsto \alpha', \dots, subst^{-1}], \Phi \wedge \varphi'_{\alpha} \wedge \dots)}
-%   %
-%   \\
-%   \inferrule*[left=Intro-Sub]
-%     {
-%       \Gamma \vdash e : \tau
-%       \\ \Gamma \vdash \tau \preceq \tau'
-%     }
-%     {\Gamma \vdash e \texttt{ as } \tau': \tau'}
-% \end{gather*}
+For this purpose, Corten provides a mechanism for the programmer to instruct Corten to relax all variables at once \- named \code{relax\_ctx}. The syntax is similar to the refinement type syntax, but allows for multiple variables to be described at a time. The type system will check all refinement types at once, resulting in the successful type checking of the example.
 
 \section{Function Declaration Type Checking}
 
-Without loss of generality, we assume arguments are ordered by their type: First immutable / owner arguments and then mutable arguments.
+The following sections will introduce the type checking rules of Corten, starting with the rule for checking function declarations.
+Without loss of generality, we assume arguments are ordered by their type: First immutable / owned arguments and then mutable arguments.
 
 When handling mutable references in parameters some subtleties need to be considered. The function can change both the referenced \textit{value} as well as the reference \textit{location}. To describe the referenced value is normally done using the $\{ \alpha \mid \alpha \doteq \&b\}$ syntax. The question arises: If $\alpha$ was the logic variable for a parameter, what should be the analog for $b$? In contrast to local variables, there is no variable representing the referenced value for parameters. As seen in section \ref{subsec:mutable-references}, using the dereference operator would come with a lot of complications.
 Instead we introduce $arg^i_n$, a special variable denoting the initial abstract value (i.e. stack location), that the mutable reference of argument $n$ points to. $i$ denotes the level of nesting: For the $n$th parameter with the Rust type \code{\&mut \&mut i32} we would generate $arg^1_n$ and $arg^2_n$.
@@ -833,7 +726,9 @@ Instead we introduce $arg^i_n$, a special variable denoting the initial abstract
 \end{gather*}
 
 
-\section{Sub-Typing Rules: $\Gamma \vdash \tau \preceq \tau'$}
+\section{Sub-Typing Rule: $\Gamma \vdash \tau \preceq \tau'$}
+
+Next, we introduce the Rule for checking the subtype relation: a type $\tau$ is a subtype of $\tau'$ in the context $\Gamma$, if the predicate of the supertype imply the predicate of the subtype. Corten uses a decidable, propositional logic with the theories of equality and linear arithmetic. Before dispatching a request to the SMT solver, the supertype's logic variable is substituted for the subtype's variable to the predicate to refer to the same variable.
 
 \[
   \inferrule*[left=$\preceq$-Ty]
@@ -856,19 +751,23 @@ Note that, $\Gamma \vdash \tau \preceq \tau'$ can be rephrased in terms of $\Gam
 
 \section{Sub-Context Rules: $\Gamma \preceq \Gamma'$}
 
+In contrast to other refinement type systems, Corten allows types in the context to refer to one another.
+For example a type specifications \code{a : \{ $\alpha$ : i32 | $\alpha$ > $\beta$\}, b:  \{ $\beta$: i32 | $\beta$ != $\alpha$\}} would be valid and result in the context $\Gamma = (\emptyset, \alpha \neq \beta \wedge \beta \geq \alpha)$. In the example, the value $0$ i a valid inhabitant of \code{a}'s type as long as $\code{b} \geq 1$.
+
+The rule \textsc{$\preceq$-Ctx} serves the purpose of allowing these interdependencies between predicates while still providing an applicable concept of subtyping: As long as the set of predicates in $\Gamma'$ imply the predicates for $\Gamma$, the sub-context relation is satisfied and $\Gamma'$ ($\Gamma$) is called the super-context (sub-context) respectively. 
+To be more precise: The rule needs to relate the predicates for each \textit{program} variable with the opposing predicates for that program variable. The substitution $\Phi'[\mu'(\alpha) \triangleright \mu(\alpha)\ \mid \alpha \in \text{dom}(\mu)] \implies \Phi$ forces the logic variable associated with \code{x} in $\Gamma'$ to be substituted by the logic variable $\mu(x)$ , which is associated with \code{x} in $\Gamma'$.
+
+The domain re
+
 \[
   \inferrule*[left=$\preceq$-Ctx]
     {
-      \text{SMT-Valid}(\Phi'[\mu(\alpha) \triangleright \mu'(\alpha)\ \mid \alpha \in dom(\mu)] \implies \Phi)
-      \\ dom(\mu) \subseteq dom(\mu')
+      \text{SMT-Valid}(\Phi'[\mu'(\alpha) \triangleright \mu(\alpha)\ \mid \alpha \in \text{dom}(\mu)] \implies \Phi)
+      \\ \text{dom}(\mu) \subseteq \text{dom}(\mu')
     }
     {(\Phi, \mu) \preceq (\Phi', \mu')}
 \]
 
-In contrast to other refinement type systems, Corten allows types in the context to refer to one another.
-For example a type specifications \code{a : \{ $\alpha$ : i32 | $\alpha$ > $\beta$\}, b:  \{ $\beta$: i32 | $\beta$ != $\alpha$\}} would be valid and result in the context $\Gamma = (\emptyset, \alpha \neq \beta \wedge \beta \geq \alpha)$. In the example, the value $0$ i a valid inhabitant of \code{a}'s type as long as $\code{b} \geq 1$.
-
-This means that types may need to be changed atomically.
 
 
 \section{Expressions Typing: $\Gamma \vdash e : \tau$}
@@ -907,6 +806,14 @@ This means that types may need to be changed atomically.
 \end{gather*}
 
 \section{Statement Type Checking $\Gamma \vdash s \Rightarrow \Gamma'$}
+
+
+\paragraph*{Abbreviations}
+We write:
+\begin{itemize}
+  \item  $\Gamma, c$ for $(\mu, \Phi \wedge c)$
+  \item $\Gamma[a \mapsto \alpha]$ for $(\mu[a \mapsto \alpha], \Phi)$
+\end{itemize}
 
 \begin{gather*}
   \inferrule*[left=If]
@@ -1162,7 +1069,7 @@ There are additional short forms of these macro calls, which where cut from the 
 
 Note that, because the \code{ty!} macro takes the place of a Rust type, normal IDE features, like "Goto Type Definition" still work on the base types without any adaptation.
 
-\begin{listing}[h]
+\begin{listing}[ht]
   \begin{minted}[autogobble]{rust}
   pub type Refinement<
     T,                      // Rust type
@@ -1209,7 +1116,7 @@ Both \code{type\_expr} and \code{transition\_stmt} carry a collection of paramet
 These function utilize \code{require\_is\_sub\_context} and \code{require\_is\_subtype\_of} to dispatch the actual SMT solver requests. These functions are also responsible for encoding the predicates and substituting variable names where necessary. 
 The following paragraph will give an example for how these SMT solver requests look like.
 
-\begin{listing}[h]
+\begin{listing}[ht]
   \begin{minted}[autogobble, texcomments]{rust}
   fn type_check_function(
     function: &hir::Item,
@@ -1255,7 +1162,7 @@ The following paragraph will give an example for how these SMT solver requests l
 
 \paragraph{Simple Example}
 
-\begin{listing}[h]
+\begin{listing}[ht]
   \begin{minted}[autogobble, texcomments]{rust}
   fn inc(a : ty!{ n : i32 | n > 0}) -> ty!{v : i32 | v > 1} {
     let b = 1;
@@ -1274,7 +1181,7 @@ Thusly \code{require\_is\_subtype\_of} is called with the two types and subseque
 Because the SMT call returned \code{unsat}, the subtype relation is valid and the function type checking was successful.
 
 
-\begin{listing}[h]
+\begin{listing}[ht]
   \begin{minted}[autogobble]{lisp}
   (declare-datatypes () ((Unit unit)))
   ; <Context>
@@ -1326,7 +1233,7 @@ In this chapter Corten will be tested on a selection of examples to test the pra
 The first example will show how a the \code{max} function can be implemented and fully verified in CortenC. The mathematical maximum is defined as $r = \max(a, b) \text{iff} r \geq a \wedge r \geq b \wedge (r = a \vee r = b)$. Listing \ref{lst:eval-max} shows how this can be expressed in CortenC.
 
 
-\begin{listing}[h]
+\begin{listing}[ht]
   \begin{minted}[autogobble, texcomments]{rust}
   fn max(a: ty!{ a: i32 }, b: ty!{ b: i32}) 
     -> ty!{ v: i32 | v >= a && v >= b && (v == a || v == b) } {
@@ -1343,7 +1250,7 @@ The first example will show how a the \code{max} function can be implemented and
 
 Of course an incorrect implementation will produce a type judgement error. If, for example, the else branch returned \code{a} instead of \code{b}, the system would return the error shown in listing \ref{lst:eval-max-error}. The exact location of where the error occurred is also the current implementation does not expose this data yet.
 
-\begin{listing}[h]
+\begin{listing}[ht]
   \begin{minted}[autogobble]{text}
   Subtyping judgement failed: 
   ty!{ _1 : i32 | true && _1 == a } is not a sub_ty of 
@@ -1364,7 +1271,7 @@ Path sensitivity is not limited to the return value: Effect on the type context 
 
 Note, that when typing \code{client}, CortenC needs to match \code{\&mut x} with \code{a} and thusly \code{x} with \code{s} to correctly handle the effects of calling \code{clamp}. Because of this reason, function calls require all arguments to be variables or reference to variables. This is not a restriction of the type system, but a simplification for the implementation.
 
-\begin{listing}[h]
+\begin{listing}[ht]
   \begin{minted}[autogobble, texcomments]{rust}
   fn clamp(
       a: &mut ty!{ a1: i32 | true => s | (s <= max) && (s == a1 || s == max) }, 
@@ -1391,7 +1298,7 @@ Note, that when typing \code{client}, CortenC needs to match \code{\&mut x} with
 Thanks to Corten's modular approach, handling recursive functions is strait forward in CortenC. Listing \ref{lst:eval-fib} demonstrates this by implementing a function, that returns the $n$th fibonacci number $F_n$ and asserting that $F_n \geq n^2$. Because $n$ is arbitrary, this is proves that the fibonacci sequence grows faster than the $n^2$.
 
 
-\begin{listing}[h]
+\begin{listing}[ht]
   \begin{minted}[autogobble, texcomments]{rust}
     fn fib(n: ty!{ nv: i32 | nv >= 0}) -> ty!{ v: i32 | v >= nv * nv } {
       if n >= 2 {
@@ -1409,7 +1316,7 @@ Thanks to Corten's modular approach, handling recursive functions is strait forw
 \end{listing}
 
 
-\section{Loop Invariants: Proof of the Gauss Summation Formula}
+\label{sec:evaluation-gauss} \section{Loop Invariants: Proof of the Gauß Summation Formula}
 
 The next example demonstrates, that CortenC can also verify loop invariants. Listing \ref{lst:gauss} shows a function, that calculates the sum $\sum_{i = 1}^N i$ by repeatedly increment a variable by $i$. 
 Of course there exists a closed formula computing the same result: $n \cdot (n + 1) \over 2$, which is given as the specification. CortenC will therefore proof, that the closed form return the same result compared to the iterative summation.
@@ -1422,7 +1329,7 @@ The second challenge is establishing the loop invariant in the first place: Rela
 
 For this purpose, CortenC provides the \code{relax\_ctx!} macro, that allows the programmer to change the type of multiple variables at a time, as long as the previous state \textit{as a whole} implies the newly chosen predicates.
 
-\begin{listing}[h]
+\begin{listing}[ht]
   \begin{minted}[autogobble, texcomments]{rust}
   fn gauss(n: ty!{ nv : i32 | nv > 0 }) 
   -> ty!{ v : i32 | 2 * v == nv * (nv + 1) } {
@@ -1459,7 +1366,7 @@ Rust has built-in functions for aborting execution \- called \code{panic} \- and
 The \code{client} just needs to make sure, that the proof of \code{c} is stored in the context by storing the value in the variable \code{\_witness}: If the returned value is discarded, it will not be stored in the context and therefore will not be available when proving the return value specification.
 
 
-\begin{listing}[h]
+\begin{listing}[ht]
   \begin{minted}[autogobble, texcomments]{rust}
   fn panic() -> ty!{ v : () | false } {
       while(true) { () }
@@ -1484,7 +1391,7 @@ The \code{client} just needs to make sure, that the proof of \code{c} is stored 
 \end{listing}
 
 
-\section{Extendability with Other tools}
+\section{Interoperability with Other Tools}
 
 - Corten: only safe
 - Expend Corten by using external tools to verify unsafe
@@ -1519,6 +1426,25 @@ this is not the only way to deal with mutability:
 \section{Comparison to Flux}
 
 \chapter{Conclusion \& Future Work}
+
+The goal of this thesis is to show, that Refinement Types can be idiomatically adapted to languages with unique mutable references. 
+The thesis has show, that CortenC can type check Refinement Types in Rust, enforcing properties over mutable data and references and that these types fit idiomatically into Rust, if an inference system was added to CortenC.
+The type system was sufficiently expressive for verifying complex properties about mutable data, recursive functions and loop invariants. 
+In addition, the thesis analyzed the use of mutability in Rust and reaffirmed the limited prevalence of \code{unsafe} in Rust code.
+For a subset of Rust (named Corten), a formal description of the syntax and small-step semantics was described.
+A syntax for Refinement Types for Rust was devised and an accompanying type system was designed.
+Based in the formal description, a proof-of-concept implementation shows, that automatic type checking of this type system is possible and feasible. The implementation also shows, that using the interface provided by Rustc is practical and beneficial for user-friendliness.
+
+The evaluations has shown, that meaningful specifications can be automatically type checked. 
+As planned and suspected, the lack of an inference system, calls for some avoidable specification, otherwise the evaluation has demonstrated, that the required specification effort is limited.
+The breath of features implemented in the thesis is limited, mainly because getting the foundations right took some experimenting, though the foundations layed in the thesis are purposefully designed with these extensions in mind. Therefore covering more language features should be unproblematic.
+
+
+In terms of future work, there are two axis to work on: 
+On one hand covering more language features, like records or algebraic data types, would greatly improve the practicality of CortenC. 
+
+On the other hand expanding the expressiveness of the type system would also be interesting: Introducing abstract predicates would allow a whole new set of properties to be specified. In particular developing a model of concurrency patterns could be a great application for them in Rust.
+
 
 \printbibliography
 

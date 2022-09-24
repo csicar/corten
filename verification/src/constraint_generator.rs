@@ -111,6 +111,12 @@ where
                 .zip(body.params)
                 .enumerate()
             {
+                let argument_identifier_name = param
+                    .pat
+                    .simple_ident()
+                    .ok_or_else(|| anyhow!("must just be a simple ident"))?
+                    .as_str()
+                    .to_string();
                 let start_refinement =
                     match RefinementType::from_type_alias(hir_ty, tcx, *middle_ty) {
                         Ok(refinement) => {
@@ -121,6 +127,10 @@ where
                             // to have the same predicate as before.
                             // We could also use `ty!{ _ | true }}` here
                             expected_end_state.add_ty(param.pat.hir_id, refinement.clone());
+                            ctx.add_reference_dest(
+                                argument_identifier_name.to_string(),
+                                TypeTarget::Definition(param.pat.hir_id),
+                            );
                             refinement
                         }
                         Err(_) => {
@@ -128,14 +138,9 @@ where
                                 MutRefinementType::from_type_alias(hir_ty, tcx, *middle_ty)?;
                             info!(%start, %end, "found mutable ty");
                             ctx.add_argument_no(arg_no, start);
-                            let pat_path_name = param
-                                .pat
-                                .simple_ident()
-                                .ok_or_else(|| anyhow!("must just be a simple ident"))?
-                                .as_str()
-                                .to_string();
+
                             ctx.add_reference_dest(
-                                pat_path_name.to_string(),
+                                argument_identifier_name.to_string(),
                                 TypeTarget::Anonymous(arg_no),
                             );
                             expected_end_state.add_argument_no(arg_no, end);
@@ -145,7 +150,7 @@ where
                             RefinementType {
                                 base: *middle_ty,
                                 predicate: parse_quote! {
-                                    #anon_ident_syn == arg(#arg_no)
+                                    #anon_ident_syn == & arg(#arg_no)
                                 },
                                 binder: anon_ident,
                             }
@@ -580,7 +585,7 @@ where
                 type_of(inner_expr, tcx, ctx, local_ctx, solver, fresh)?;
 
             trace!(%reference_ty);
-            let ident = reference_ty.get_as_reference_type()?;
+            let ident = ctx.get_reference_target_for_type(&reference_ty)?;
             let dest_hir_id = ctx.lookup_reference_dest(&ident)?;
             //TODO Fix: type should be
             let target_ty = ctx
@@ -599,6 +604,7 @@ where
                     #binder_ident == #target_ty_binder
                 },
             };
+
             anyhow::Ok((ty, ctx_after))
         }
         ExprKind::Unary(_, _) => todo!(),
@@ -764,7 +770,7 @@ where
                     // `*b = 2`; b's type: ty!{ v : &mut i32 | v == &a }
                     // ==> because b refers to a, change a's type
                     trace!(%reference_type, ctx=%ctx.with_tcx(tcx));
-                    let ident = reference_type.get_as_reference_type()?;
+                    let ident = ctx.get_reference_target_for_type(&reference_type)?;
                     (ctx.lookup_reference_dest(&ident)?.clone(), ctx_after)
                 }
                 other => todo!("don't know how to assign to {:?}", other),
@@ -878,10 +884,13 @@ fn symbolic_execute<'a, 'b, 'c, 'tcx>(
             }?;
 
             // In the example `type_target` would be `i`
-            let type_target = ctx.lookup_hir(&ref_var).unwrap().get_as_reference_type()?;
+            let type_target =
+                ctx.get_reference_target_for_type(&ctx.lookup_hir(&ref_var).unwrap())?;
 
             // In the example `lvar_of_type_target` would be the hir of `i`
-            let lvar_of_type_target = ctx.get_logic_var_for_reference_target(&type_target);
+            let lvar_of_type_target = ctx
+                .get_logic_var_for_reference_target(&type_target)
+                .unwrap();
 
             let refinement_ident = format_ident!("{}", &lvar_of_type_target);
             trace!(

@@ -1,12 +1,14 @@
 use crate::hir_ext::TyExt;
 use crate::refinement_context::TypeTarget;
 use anyhow::anyhow;
+use anyhow::Context;
 use rustc_hir as hir;
 use rustc_middle::ty::TypeckResults;
 use syn::parse_quote;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::ExprCall;
+use tracing::instrument;
 use tracing::trace;
 
 use core::fmt::Display;
@@ -57,17 +59,21 @@ impl<'a> RefinementType<'a> {
         }
     }
 
-    /// Tries to get the type contents as a reference type:
-    /// E.g. `ty!{ v: &mut i32 | v == &a }` => a
-    pub fn get_as_reference_type(&self) -> anyhow::Result<TypeTarget<syn::Ident>> {
-        match &self.predicate {
+    pub fn get_reference_type_in_expr(expr: &syn::Expr) -> anyhow::Result<TypeTarget<syn::Ident>> {
+        match expr {
+            // matches <sth> = &arg(<literal>)
             syn::Expr::Binary(syn::ExprBinary {
                 left: _,
                 op: syn::BinOp::Eq(_),
                 right:
-                    box syn::Expr::Call(syn::ExprCall {
-                        func: box syn::Expr::Path(syn::ExprPath { path: fn_name, .. }),
-                        args,
+                    box syn::Expr::Reference(syn::ExprReference {
+                        mutability: _,
+                        expr:
+                            box syn::Expr::Call(syn::ExprCall {
+                                func: box syn::Expr::Path(syn::ExprPath { path: fn_name, .. }),
+                                args,
+                                ..
+                            }),
                         ..
                     }),
                 ..
@@ -102,8 +108,18 @@ impl<'a> RefinementType<'a> {
                 _ => todo!(),
             },
 
-            _ => todo!("{self}"),
+            _ => Err(anyhow!(
+                "dont know how to create reference type from {}",
+                quote! {#expr}
+            )),
         }
+    }
+
+    /// Tries to get the type contents as a reference type:
+    /// E.g. `ty!{ v: &mut i32 | v == &a }` => a
+    pub fn get_as_reference_type(&self) -> anyhow::Result<TypeTarget<syn::Ident>> {
+        RefinementType::get_reference_type_in_expr(&self.predicate)
+            .with_context(|| format!("on refinement type {self}"))
     }
 
     pub fn rename_binder(&self, new_name: &str) -> anyhow::Result<RefinementType<'a>> {
@@ -434,29 +450,33 @@ pub fn encode_smt(
         syn::Expr::Reference(syn::ExprReference { expr: inner, .. }) => match inner {
             box syn::Expr::Path(syn::ExprPath { path, .. }) => {
                 let ident = path.get_ident().unwrap();
-                target_to_binder(&TypeTarget::Definition(ident.clone()))
+                trace!("ident {ident}, expr {}", quote! {#expr});
+                let r = target_to_binder(&TypeTarget::Definition(ident.clone()));
+                trace!("returns {r}");
+                r
             }
-            _ => todo!(),
+            box syn::Expr::Call(syn::ExprCall {
+                func: box syn::Expr::Path(syn::ExprPath { path: fn_name, .. }),
+                args,
+                ..
+            }) => {
+                if fn_name.get_ident().unwrap() == "arg" && args.len() == 1 {
+                    let arg = args.first().unwrap();
+                    let arg_no = match arg {
+                        syn::Expr::Lit(syn::ExprLit {
+                            lit: syn::Lit::Int(v),
+                            ..
+                        }) => v.base10_parse::<usize>().unwrap(),
+                        _ => todo!(),
+                    };
+                    target_to_binder(&TypeTarget::Anonymous(arg_no))
+                } else {
+                    todo!()
+                }
+            }
+            _ => todo!("not implemented: {}", quote! {#expr}),
         },
-        syn::Expr::Call(syn::ExprCall {
-            func: box syn::Expr::Path(syn::ExprPath { path: fn_name, .. }),
-            args,
-            ..
-        }) => {
-            if fn_name.get_ident().unwrap() == "arg" && args.len() == 1 {
-                let arg = args.first().unwrap();
-                let arg_no = match arg {
-                    syn::Expr::Lit(syn::ExprLit {
-                        lit: syn::Lit::Int(v),
-                        ..
-                    }) => v.base10_parse::<usize>().unwrap(),
-                    _ => todo!(),
-                };
-                target_to_binder(&TypeTarget::Anonymous(arg_no))
-            } else {
-                todo!()
-            }
-        }
+
         _other => todo!("expr: {}, {:?}", quote! { #expr }, expr),
     }
 }

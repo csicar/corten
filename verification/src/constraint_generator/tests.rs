@@ -978,6 +978,45 @@ mod fn_call {
         )
         .unwrap();
     }
+
+    #[test]
+    fn test_ref_immutable_parameter_pos() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn swap(
+                    x : &mut ty!{ x1: i32 | true => x2 | x2 == y1 },
+                    y : &mut ty!{ y1: i32 | true => y2 | y2 == x1 }
+                )  -> ty!{ v: () }  {
+                    let tmp = *x;
+                    *x = *y;
+                    *y = tmp;
+                    ()
+                }
+
+                fn client(
+                    mut i: ty!{ i1 : i32 }, mut j: ty!{ j1 : i32 }
+                ) -> ty!{ v: i32 | v == j1 - i1 } {
+                    let mut a = &mut i;
+                    let mut b = &mut j;
+                    swap(a, b);
+                    let va = *a;
+                    let vb = *b;
+                    va - vb
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                match item.ident.name.as_str() {
+                    "swap" => pretty::assert_eq!(ty.to_string(), "ty!{ v : () | true }"),
+                    "client" => pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == j1 - i1 }"),
+                    _ => panic!(),
+                }
+            },
+        )
+        .unwrap();
+    }
 }
 
 /// Tests for `is_sub_context`
@@ -1792,42 +1831,31 @@ mod evaluation {
                     ()
                 }
 
-                // fn sort_inplace (
-                //     x: &mut ty!{ x1: i32 | true => min | min <= x1 && min <= y1 && (min == x1 || min == y1) },
-                //     y: &mut ty!{ y1: i32 | true => max | max >= x1 && max >= y1 && (max == x1 || max == y1) }
-                // ) -> ty!{ v: () } {
-                //     if *x > *y {
-                //         swap(x, y);
-                //         relax_ctx {
-
-                //         }
-                //     } else {
-
-                //     };
-                //     ()
-                // }
-
-                fn client() -> ty!{ v: () } {
-                    let mut x = 2;
-                    let mut y = 3;
+                fn client(
+                    mut i: ty!{ i1 : i32 }, mut j: ty!{ j1 : i32 }
+                ) -> ty!{ v: i32 | v == 1 } {
                     //println!("x: {x}, y: {y}");
-                    let mut a = &mut x;
-                    let mut b = &mut y;
+                    // let mut i = 0;
+                    // let mut j = 0;
+                    let mut a = &mut i;
+                    let mut b = &mut j;
                     //println!("x: -, y: -, a: {a}, b: {b}");
                     swap(a, b);
-                    //println!("x: -, y: -, a: {a}, b: {b}");
+                    // //println!("x: -, y: -, a: {a}, b: {b}");
 
-                    let mut z = 5;
-                    //println!("x: -, y: -, a: {a}, b: {b}, z: {z}");
-                    a = &mut z;
-                    b = &mut x;
-                    //println!("x: -, y: -, a: {a}, b: {b}, z: -");
-                    *a = *b;
-                    //println!("x: {x}, y: -, a: {a}, b: -, z: -");
-                    // sort_inplace(&mut x, a);
-                    //println!("x: {x}, y: -, a: {a}, b: -, z: -");
-                    //println!("x: {x}, y: {y}, z: {z}");
-                    ()
+                    // let mut z = 5;
+                    // //println!("x: -, y: -, a: {a}, b: {b}, z: {z}");
+                    // a = &mut z;
+                    // b = &mut i;
+                    // //println!("x: -, y: -, a: {a}, b: {b}, z: -");
+                    // *a = *b;
+                    // //println!("x: {x}, y: -, a: {a}, b: -, z: -");
+                    // if i > *a {
+                    //     swap(&mut i, a);
+                    // } else {
+
+                    // };
+                    1
                 }
             }
             .to_string(),
@@ -1835,9 +1863,32 @@ mod evaluation {
                 let ty = type_check_function(item, &tcx).unwrap();
                 match item.ident.name.as_str() {
                     "swap" => pretty::assert_eq!(ty.to_string(), "ty!{ v : () | true }"),
-                    "client" => pretty::assert_eq!(ty.to_string(), "ty!{ v : () | true }"),
+                    "client" => pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == 1 }"),
                     _ => panic!(),
                 }
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn mutable_references() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn client() -> ty!{ v: i32 | v == 4 } {
+                    let mut a = 2;       // a : $\{ v_1 : i32 \mid v_1 == 2 \}$
+                    let mut b = &mut a;  // b : $\{ v_2 : &i32 \mid v_2 == &a \}$
+                    *b = 0; // changes a's value and type
+                    let c = &mut b;  // c : $\{ v_3 : &i32 \mid v_3 == &b \}$
+                    **c = 4; // changes a's value and type
+                    a
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == 4 }")
             },
         )
         .unwrap();

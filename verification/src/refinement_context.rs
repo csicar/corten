@@ -276,15 +276,142 @@ where
 
     /// To encode a predicate `l == &p` to smt, we need to know the logic var associated with `p`
     /// `self.get_logic_var_for_reference_target(TypeTarget::Definition(p))` returns p's logic variable
-    pub fn get_logic_var_for_reference_target(&self, target: &TypeTarget<syn::Ident>) -> String {
+    pub fn get_logic_var_for_reference_target(
+        &self,
+        target: &TypeTarget<syn::Ident>,
+    ) -> Option<String> {
+        trace!("target {:?}", target);
         let target = self.lookup_reference_dest(target).unwrap();
-
+        trace!("has reference dst {:?}", target);
         self.binders
             .iter()
             .find(|(k, _)| k == &&target)
-            .unwrap()
-            .1
-            .clone()
+            // .unwrap_or_else(|| panic!("cannot find {:?} in binders: {:?}", target, self.binders))
+            .map(|target| target.1.clone())
+    }
+
+    /// Get the reference destination described by `ty`' and its predicate in the ctx `self`.
+    /// for a type { _2 | _2 == &x } return TypeTarget::Definition(x)
+    /// for a type { _3 | _3 == _1 } in ctx {_1 == &y } return TypeTarget::Definition(x)
+    pub fn get_reference_target_for_type(
+        &self,
+        ty: &RefinementType,
+    ) -> anyhow::Result<TypeTarget<syn::Ident>> {
+        RefinementType::get_reference_type_in_expr(&ty.predicate).or_else(|_| {
+            let mut predicates: Vec<&syn::Expr> = self
+                .types
+                .iter()
+                .map(|(_binder, ty)| &ty.predicate)
+                .collect();
+            predicates.push(&ty.predicate);
+            Self::equivalence_set_for_logic_var(predicates, &ty.binder)
+                .1
+                .ok_or_else(|| anyhow!("could not find a reference target for type {}", ty))
+        })
+    }
+
+    /// for a context { _1 == _2 && true, _2 == &x, _3 > 0 },
+    /// self.equivalence_set_for_logic_var("_1") will return (set!["_1", "_2"], "x")
+    #[instrument(skip_all, fields(?logic_var), ret)]
+    fn equivalence_set_for_logic_var<'i>(
+        predicates: Vec<&'i syn::Expr>,
+        logic_var: &str,
+    ) -> (HashSet<String>, Option<TypeTarget<syn::Ident>>) {
+        fn equivalent_logic_vars_in_expr(
+            equivalence_set: &mut HashSet<String>,
+            equivalent_pvars: &mut HashSet<TypeTarget<syn::Ident>>,
+            expr: &syn::Expr,
+        ) {
+            match expr {
+                syn::Expr::Binary(syn::ExprBinary {
+                    left,
+                    op: syn::BinOp::And(_),
+                    right,
+                    ..
+                }) => {
+                    equivalent_logic_vars_in_expr(equivalence_set, equivalent_pvars, left);
+                    equivalent_logic_vars_in_expr(equivalence_set, equivalent_pvars, right);
+                }
+                syn::Expr::Binary(syn::ExprBinary {
+                    left:
+                        box syn::Expr::Path(syn::ExprPath {
+                            path: left_path, ..
+                        }),
+                    op: syn::BinOp::Eq(_),
+                    right: box right,
+                    ..
+                }) => {
+                    if let Some(left_name) = left_path.get_ident().map(syn::Ident::to_string) {
+                        trace!("right side: {}", quote! {#right});
+                        match right {
+                            syn::Expr::Path(syn::ExprPath {
+                                path: right_path, ..
+                            }) => {
+                                if let Some(right_name) =
+                                    right_path.get_ident().map(syn::Ident::to_string)
+                                {
+                                    // matches ` _1 == b`
+
+                                    if equivalence_set.contains(&left_name) {
+                                        equivalence_set.insert(right_name);
+                                    } else if equivalence_set.contains(&right_name) {
+                                        equivalence_set.insert(left_name);
+                                    }
+                                }
+                            }
+                            _ => {
+                                trace!(?equivalence_set, ?left_name, "im here ");
+                                if equivalence_set.contains(&left_name) {
+                                    trace!("im here");
+                                    // matches `_1 == XXXX` if `_1` in equivalence set
+
+                                    // try to match `_1 == &b`
+                                    if let Ok(pvar) =
+                                        RefinementType::get_reference_type_in_expr(expr)
+                                    {
+                                        trace!("im here");
+                                        equivalent_pvars.insert(pvar);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                syn::Expr::Binary(_) => {}
+                syn::Expr::Lit(_) => {}
+                syn::Expr::Paren(syn::ExprParen { expr: box expr, .. }) => {
+                    equivalent_logic_vars_in_expr(equivalence_set, equivalent_pvars, expr)
+                }
+                syn::Expr::Path(_) => {}
+                syn::Expr::Reference(_) => {}
+                syn::Expr::Unary(_) => {}
+                _ => todo!(),
+            }
+        }
+        let mut equivalence_set = HashSet::from([logic_var.to_string()]);
+        let mut equivalent_pvars = HashSet::new();
+
+        loop {
+            let size_before = equivalence_set.len();
+
+            for predicate in predicates.iter() {
+                equivalent_logic_vars_in_expr(
+                    &mut equivalence_set,
+                    &mut equivalent_pvars,
+                    &predicate,
+                );
+            }
+
+            // reached fixed-point?b
+            if size_before == equivalence_set.len() {
+                break;
+            }
+        }
+        assert!(
+            equivalent_pvars.len() <= 1,
+            "Only one program variable should be equivalent to any program var"
+        );
+        (equivalence_set, equivalent_pvars.into_iter().next())
     }
 
     pub fn encode_predicates<P>(&self, solver: &mut Solver<P>) -> anyhow::Result<()> {
@@ -300,7 +427,7 @@ where
             solver.comment(&format!("    {}", ty)).into_anyhow()?;
             solver
                 .assert(refinements::encode_smt(&ty.predicate, &|target| {
-                    self.get_logic_var_for_reference_target(target)
+                    self.get_logic_var_for_reference_target(target).unwrap()
                 }))
                 .into_anyhow()?;
             anyhow::Ok(())
@@ -313,7 +440,7 @@ where
         self.formulas.iter().try_for_each(|expr| {
             solver
                 .assert(refinements::encode_smt(expr, &|target| {
-                    self.get_logic_var_for_reference_target(target)
+                    self.get_logic_var_for_reference_target(target).unwrap()
                 }))
                 .into_anyhow()?;
 
@@ -652,7 +779,9 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
         .iter()
         .map(|(_, ty)| {
             refinements::encode_smt(&ty.predicate, &|target| {
-                intersection_renamed_super_ctx.get_logic_var_for_reference_target(target)
+                intersection_renamed_super_ctx
+                    .get_logic_var_for_reference_target(target)
+                    .unwrap()
             })
         })
         .chain(
@@ -661,7 +790,9 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
                 .iter()
                 .map(|formula| {
                     refinements::encode_smt(formula, &|target| {
-                        intersection_renamed_super_ctx.get_logic_var_for_reference_target(target)
+                        intersection_renamed_super_ctx
+                            .get_logic_var_for_reference_target(target)
+                            .unwrap()
                     })
                 }),
         )
@@ -721,7 +852,7 @@ pub fn require_is_subtype_of<'tcx, P>(
     }
     solver
         .assert(refinements::encode_smt(&sub_ty.predicate, &|target| {
-            ctx.get_logic_var_for_reference_target(target)
+            ctx.get_logic_var_for_reference_target(target).unwrap()
         }))
         .into_anyhow()?;
 
@@ -738,7 +869,7 @@ pub fn require_is_subtype_of<'tcx, P>(
         .assert(format!(
             "(not {})",
             refinements::encode_smt(&renamed_super_ty.predicate, &|target| {
-                ctx.get_logic_var_for_reference_target(target)
+                ctx.get_logic_var_for_reference_target(target).unwrap()
             })
         ))
         .into_anyhow()?;

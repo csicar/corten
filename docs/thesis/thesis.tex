@@ -535,8 +535,8 @@ There are other approaches for handling changing values in refinement types, whi
 \begin{listing}[ht]
   \begin{minted}[texcomments]{rust}
     fn inc() -> ty!{ v: i32 | v == 3 } {
-        let mut i = 2;       // $\{ v_1 : i32 \mid v_1 == 2 \}$
-        i = i + 1;           // $\{ v_2 : i32 \mid v_2 == v_1 + 1 \}$
+        let mut i = 2;       // i : $\{ v_1 : i32 \mid v_1 == 2 \}$
+        i = i + 1;           // i : $\{ v_2 : i32 \mid v_2 == v_1 + 1 \}$
         i
     }
   \end{minted}
@@ -568,10 +568,10 @@ Note, that the type can only be changed because we know exactly what \code{b} re
 \begin{listing}[ht]
   \begin{minted}[texcomments]{rust}
     fn client() -> ty!{ v: i32 | v == 4 } {
-        let a = 2;       // $\{ v_1 : i32 \mid v_1 == 2 \}$
-        let b = &mut a;  // $\{ v_2 : &i32 \mid v_2 == &a \}$
+        let a = 2;       // a : $\{ v_1 : i32 \mid v_1 == 2 \}$
+        let b = &mut a;  // b : $\{ v_2 : &i32 \mid v_2 == &a \}$
         *b = 0; // changes a's value and type
-        let c = &mut b;
+        let c = &mut b;  // c : $\{ v_3 : &i32 \mid v_3 == &b \}$
         **c = 4; // changes a's value and type
         a
     }
@@ -757,7 +757,7 @@ For example a type specifications \code{a : \{ $\alpha$ : i32 | $\alpha$ > $\bet
 The rule \textsc{$\preceq$-Ctx} serves the purpose of allowing these interdependencies between predicates while still providing an applicable concept of subtyping: As long as the set of predicates in $\Gamma'$ imply the predicates for $\Gamma$, the sub-context relation is satisfied and $\Gamma'$ ($\Gamma$) is called the super-context (sub-context) respectively. 
 To be more precise: The rule needs to relate the predicates for each \textit{program} variable with the opposing predicates for that program variable. The substitution $\Phi'[\mu'(\alpha) \triangleright \mu(\alpha)\ \mid \alpha \in \text{dom}(\mu)] \implies \Phi$ forces the logic variable associated with \code{x} in $\Gamma'$ to be substituted by the logic variable $\mu(x)$ , which is associated with \code{x} in $\Gamma'$.
 
-The domain re
+The domain restriction ensures, that the sub-context does not contain additional program variables, which would leave unconstrained variables in the antecedent
 
 \[
   \inferrule*[left=$\preceq$-Ctx]
@@ -856,23 +856,26 @@ We write:
   \inferrule*[left=Assign-Strong]
     {
       \Gamma \vdash e : \{ \beta \mid \varphi \}
-      \\ \Gamma \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y\}
+      \\ \Gamma \vdash x: \{ \alpha : \& b \mid \varphi \}
+      \\ \Gamma, \varphi \vdash \alpha \text{ must reference } y
     }
     {\Gamma \vdash *x = e \Rightarrow \Gamma [y \mapsto \beta], \varphi}
   %
   \\
   \inferrule*[left=Assign-Weak]
     {
-      \Gamma \vdash e : \tau
-      \\ \Gamma' \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y_1 \vee \dots \vee \alpha \doteq \&y_n \}
+      \Gamma \vdash e : \tau 
+      \\ \Gamma \vdash x: \{ \alpha : \& b \mid \varphi \}
+      \\ \Gamma, \varphi \vdash \alpha \text{ could reference } y_1 \vee \dots \vee y_n
+      % \\ \Gamma' \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y_1 \vee \dots \vee \alpha \doteq \&y_n \}
       \\ \Gamma \vdash \tau \preceq \{ \beta_1 \mid \varphi_1 \}
       \\ \Gamma[x \mapsto \beta_1], \varphi_1 \preceq \Gamma
       \\\\ \dots
       \\\\
       \\ \Gamma \vdash \tau \preceq \{ \beta_n \mid \varphi_n \}
-      \\ \Gamma[x \mapsto \beta_n], \varphi_n \preceq \Gamma'
+      \\ \Gamma[x \mapsto \beta_n], \varphi_n \preceq \Gamma
       }
-    {\Gamma \vdash *x = e \Rightarrow \Gamma'}
+    {\Gamma \vdash *x = e \Rightarrow \Gamma}
   %
   \\
   \inferrule*[left=Fn-Call]
@@ -884,6 +887,25 @@ We write:
     }
     {(\mu, \Phi) \vdash \code{let res} = f(a, \dots, \code{\&mut} b, \dots) \Rightarrow (\mu[a \mapsto \alpha', \dots, subst^{-1}], \Phi \wedge \varphi'_{\alpha} \wedge \dots)}
 \end{gather*}
+
+
+
+% The rule $\Gamma \vdash \alpha \text{ could reference } y_1 \vee \dots \vee y_n$ stipulates, that the context $\Gamma$ permits $\alpha$ to refer to at most $y_1 \vee \dots \vee y_n$, but no other variables. 
+The  $\Gamma \vdash \alpha \text{ must reference } y$ rule stipulates, that the context $\Gamma$ requires $\alpha$ to refer to exactly $y$. it is necessary to follow basic indirections from equality constraints, that other rules (like \textsc{Fn-Call} or \textsc{Var}) introduce. Because of the how limited the subset of the predicate language used for references is, even a very basic, conservative approximation is adequate for this purpose: 
+A fixpoint construction of an equivalence class containing all logic variables equal to $\alpha$ is incrementally constructed. If any of these variables reference $y$, then $\alpha$ must reference $y$.
+Of course a more sophisticated approach is also possible: Dispatching a request to SMT, that asserts, that $\alpha$ references some (unconstrained) $y$ and that there is second $y'$ with this a property. Retrieving the value for $y$ from SMT is the result of the rule application.
+
+\begin{gather*}
+  \inferrule*[left=Must-Ref]
+    {\exists y. \forall \alpha, \beta, \dots. \Phi \to \alpha \doteq \&y 
+    \\ \vDash \Phi \to \alpha \doteq \&y
+      \\ 
+      \vDash \Phi \wedge \alpha \doteq \&y  \wedge \alpha \doteq \&y' \to y \doteq y'
+    }
+    {(\mu, \Phi) \vdash \alpha \text{ must reference } y}
+\end{gather*}
+\todo{In think the first precondition and second precondition should serve the same purpose. Second one should be nicer and correct}
+
 
 
 \section{Soundness of the Type System}

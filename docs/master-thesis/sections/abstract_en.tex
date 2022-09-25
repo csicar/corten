@@ -1,0 +1,22 @@
+%% LaTeX2e class for student theses
+%% sections/abstract_en.tex
+%% 
+%% Karlsruhe Institute of Technology
+%% Institute for Program Structures and Data Organization
+%% Chair for Software Design and Quality (SDQ)
+%%
+%% Dr.-Ing. Erik Burger
+%% burger@kit.edu
+%%
+%% Version 1.3.5, 2020-06-26
+
+\Abstract
+
+Software correctness is a central goal for software development.
+One way to improve correctness is using strong and descriptive types and verifying them with type systems.
+In particular Refinement Types demonstrated, that even with a verification system that is restricted to a decidable logic, intricate properties can be expressed and verified in a lightweight and gradual way.
+However existing approaches for adapting Refinement Types from functional to imperative languages proved hard without compromising on at least one of core features of Refinement Types.
+% I argue that a base language restricted to unique mutable references will make
+This thesis aims to design a Refinement Type system without such compromises by taking advantage of Rust's restriction to unique mutable references.
+I will define a Refinement Type language and typing rules and argue for their soundness. Additionally I will implement a prototype verifier to evaluate the effectiveness of the approach on selected examples.
+

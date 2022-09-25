@@ -49,6 +49,9 @@
 
 % monospace type: Bera Mono
 \RequirePackage[scaled=.78]{beramono}
+% \usepackage{inconsolata}
+% \RequirePackage{tgcursor}
+% \RequirePackage{cascadia-code}
 
 % semi-bold type (for subsections and paragraphs)
 \newcommand*{\sbdefault}{sb}
@@ -63,7 +66,7 @@
 \addtokomafont{paragraph}{\sbseries}
 
 % microtype for nicer typography
-% \RequirePackage[expansion=true]{microtype}
+\RequirePackage[protrusion=false, expansion=false]{microtype} % csicar: modified: both set to `false' to work with tectonic
 
 % commands for code and model keywords in text
 \newcommand{\code}[1]{\texttt{\hyphenchar\font45\relax #1}}

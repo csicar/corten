@@ -30,6 +30,7 @@
 % \usepackage{csquotes}
 \usepackage{ stmaryrd }
 \usepackage{stackengine,scalerel}
+\usepackage[nameinlink]{cleveref}
 
 % \usepackage[scaled=.78]{beramono}
 % \usepackage{tgcursor}
@@ -205,26 +206,207 @@ The contributions of this thesis are:
 \end{enumerate}
 
 The thesis if structured as follows: 
-In chapter XXX an empirical analysis of \code{unsafe} and mutability uses is performed. 
-Then chapter XXX will give an overview of the foundation the thesis build upon. 
-Chapter XXX defines the subset of Rust, that will be the basis for the type system.
-Next chapter XXX explains the actual type system and verification, as well as justifying its correctness, followed by chapter XXX, which will provide more information about the implementation.
-The type system will then be tested in minimal benchmarks in chapter XXX.
-Chapter XXX reports on related work and alternative approaches.
-Finally chapter XXX concludes the thesis and gives an overview over possible future work.
+\cref{ch:foundations} will give an overview of the foundation the thesis build upon.
+Thereafter in \cref{ch:analysis} an empirical analysis of \code{unsafe} and mutability uses is performed to gain an understanding of how Rust is used.
+\Cref{ch:language} defines the subset of Rust, that will be the basis for the type system.
+Next \cref{ch:type-system} explains the actual type system and type checking, as well as justifying its correctness, followed by chapter \cref{ch:implementation}, which will provide additional information about how the type system was implemented.
+The implementation will then be tested on minimal benchmarks in \cref{ch:evaluation}.
+\Cref{ch:related-work} reports on related work and alternative approaches.
+Finally \cref{ch:conclusion} concludes the thesis and gives an overview over possible future work.
+
+\chapter{Foundations} \label{ch:foundations}
+
+We start by giving a basic overview over the fundamental concepts, that are relevant for our work.
+The semantics of our subset of Rust are discussed in \cref{ch:language}.
+
+\section{Refinement Types}
+
+The type system, that this thesis will adapt, is based on the Refinement Type system described by Vazou et al. \cite{vazou_abstract_2013} and Rondon et al. \cite{rondon_liquid_2008}. 
+The central idea of Refinement Types is adding predicates to a language's type: For example, a type \code{i32} might be refined with the predicate $v > 0$. The refined type is written as $\left\{ v : \text{i32} \mid v > 0 \right\}$. In terms of semantics this means, that any inhabitant of that type must also satisfy the predicate. 
+
+The notion of refinements in embedded into the base language using subtyping: A refined type $\tau$ is a subtype of $\tau'$ if $\tau$'s predicate implies the predicate of $\tau'$ (in the current typing context $\Gamma$).
+As is common with subtyping systems, the subtype can then be used in the place where the super type is expected.
+The following rule shows how subtyping is handled by Liquid types \cite[p. 6]{rondon_liquid_2008}:
+
+\begin{equation*}
+  \inferrule*
+    {\text{SMT-Valid}(\llbracket \Gamma \rrbracket \wedge \llbracket e_1 \rrbracket \Rightarrow \llbracket e_2 \rrbracket)}
+    {\Gamma \vdash \left\{ v : b \mid e_1 \right\} \preceq \left\{ v: b \mid e_2 \right\}}
+\end{equation*}
+
+Refinement Types are related to dependent types, distinguished by the limited expressiveness of the type. Refinement types trade off expressiveness for automatic type checking. Allowed formulas are chosen from a SMT decidable logic. 
+Rondon et al. \cite{rondon_liquid_2008} chose the EUFA as the logic fragment, meaning a propositionaly logic with the theories of equality, uninterpreted functions and linear arithmetic.
 
 
-\chapter{Empirical Analysis of Use-Cases}
+\section{Rust}
+
+The Rust programming language \cite{matsakis_rust_2014}, is a multi-paradigm systems programming language, originally developed by Graydon Hoare at Mozilla Research.
+Even though Rust is quite young, the first stable release published in 2015, it has attracted interest in a wide area of applications and organization. It is used everything from Volvo building embedded software for cars \cite{foufas_why_2022} to Western Digital implementing a NVMe driver for Linux in Rust \cite{larabel_lpc_2022} and of course the Rust compiler it self.
+It draws inspiration from functional and imperative programming languages. The core forms a set of features usually found in functional programming languages: Functions, closures, algebraic data types, type classes (called traits in Rust) and pattern matching, immutability are all common place in Rust.
+However, Rust is also influenced by C: Rust extends its ML base with optional mutability of data and references and manual memory management. Many design decisions of Rust can be explained by Rust's ambitions to offer safe and clear ML-like abstractions without compromising on performance compared to C.
+For example, Rust elected to use manual memory management like C, which guarantees faster and predictable execution times when compared to garbage collection. Crucial, Rust does not compromise on safety to accomplish this: To this end, Rust incorporates the notion of affine types into its type system (called \textit{ownership system} in Rust). This additional type system guarantees, 
+Inspired by research language Cyclone introduced by Grossman et al. \cite{grossman_region-based_nodate}, this type system guarantees the absence of memory errors.
+% The Rust programming language is designed to offer tight control over the amount of mutability and what it mutation can effect. 
+Rust also offers a special language subset called \code{unsafe} Rust, which deactivates the static ownership checking and places the responsibility of ensuring memory safety on the programmer, analogous to C. \code{unsafe} Rust is used to provide low-level primitives, that expose a safe interface, that can be used in safe Rust. From here on out, we will focus on safe Rust.
+
+Among other things, the ownership system is used to handle memory management, safe concurrency and simplifies reasoning about program behaviour.
+The next paragraph will explain how the ownership system works.
+
+\paragraph{Aliasing XOR Mutabillity}
+
+The ownership system is an implementation of affine types. It uniquely associates each memory object with an owner. 
+The owner of a Rust object is the binding, that is responsible for freeing the object. In the listing \ref{lst:ownership-transfer}, first \code{a} is the owner of the \code{User} object. An object may only be used once, at which point it is consumed and ownership is transferred to its new binding. In the example \code{greet(user)} uses \code{a} and transferring ownership to \code{greet}. At the end of \code{greet}, there is no new owner, as a result the user object is freed.
+
+\begin{listing}[ht]
+  \begin{minted}[texcomments]{rust}
+    struct User { name: String, age: u32 }
+
+    fn greet(user: User) -> String { // \code{greet} takes ownership for \code{user}
+      format!("Hi {}", user.name)
+    } // End of scope: Owned value \code{user} is dropped
+    ...
+    let a = User { name: "Alice", age: 25 };
+    let result = greet(a); // Transfer ownership of \code{user} to \code{greet}
+    println!(a.name); // error: use of moved value `a`
+  \end{minted}
+  \caption{Example demonstrating the Ownership System: \code{greet(a)} transfers ownership of \code{a} to \code{greet}}
+  \label{lst:ownership-transfer}
+\end{listing}
+
+On closer inspection, handing over the ownership of \code{a} to \code{greet} is not sensible: \code{greet} just needs to read the value, but should not take ownership of \code{a}. 
+For that purpose, Rust offers a different kind of value transfer called \textit{references}, which have similar execution semantics to pointers. Because creating a reference does not transfer the ownership of the pointee, is is called a \textit{borrow}. Listing \ref{lst:ownership-immut-borrow} rephrases \code{greet} to only take a borrow of the user, instead of taking ownership. Because \code{user} is not owned by \code{greet}, it is not permitted to extract \code{user.name} (of Type \code{String}), instead only borrows to the name are allowed. 
+
+\begin{listing}[ht]
+  \begin{minted}[texcomments]{rust}
+    fn greet(user: &User) -> String { // \code{greet} borrows \code{user}
+      let name_ref : &String = &user.name; // borrow \code{name} from \code{user}
+      format!("Hi {}", name_ref)
+    } // End of scope: The borrows are dropped, but the user object is not
+    ...
+    let a = User { name: "Alice", age: 25 };
+    let result = greet(&a); // Lend \code{a} to \code{greet}
+    println!(a.name); // No error
+  \end{minted}
+  \caption{Example demonstrating borrowing: \code{greet(a)} transfers ownership of \code{a} to \code{greet}}
+  \label{lst:ownership-immut-borrow}
+\end{listing}
+
+Borrowing, just like pointers, entail the risk of dangling pointers. Rust protects from this risk, by tracking the lifetimes (i.e. the required duration, where a reference must be valid) of objects. While interesting in its own right, it is not relevant for this thesis.
+
+
+
+Mutable references can exacerbate the problem, which leads to the key insight of Rust: 
+Memory unsafe can arise from the the presence of two reference where a least one is mutable.
+Thus, Rust ensures, that for every variable at every point during the execution, that variable can either aliased or mutable, but never both at the same time. 
+\Cref{lst:ownership-mut-borrow} demonstrates that Rust will not accept a problem where aliased and mutable access is possible at a time. To resolve the issue, the mutable reference should be borrows after the call to \code{greet}.
+
+
+\begin{listing}[ht]
+  \begin{minted}{rust}
+    fn age(user: &mut User) {
+      (*user).age = user.age + 1;
+    }
+    ...
+    let a = User { name: "Alice", age: 25 };
+    let b = &a;
+    let c = &mut a; // error: cannot borrow `a` as mutable because it is also borrowed as immutable
+    age(c);
+    let result = greet(&b); // Lend \code{a} to \code{greet}
+    println!(a.name);
+  \end{minted}
+  \caption{Example demonstrating mutable borrowing: \code{age(a)} needs a mutable borrow of user to increase the age, but \code{a} is borrows immutably, which is forbidden}
+  \label{lst:ownership-mut-borrow}
+\end{listing}
+
+In conclusion ownership makes both aliasing as well as mutability quite tame:
+If a variable is aliased, it must be immutable and as a result, represents just a value (like in pure functional languages).
+If a variable is mutable, it can not be aliased and as a result, any effect of the mutation is well known and locally visible.
+Although the ownership system was originally introduced to allow for safe, manual memory management, it turned out to be useful for other problems as well: For example concurrency, hardware access and automated reasoning all profit from the strong guarantees of safe Rust. The consequences for the latter will be explained in the next subsection.
+
+% Rust accomplishes this by introducing three types of access permissions for a variable, which are associated with every scope\footnote{In modern Rust, this model was generalized to cover more cases, but the idea is still valid}:
+% \begin{enumerate}
+%   \item The scope \textit{owns} the variable. This guarantees, that no other scope has access to any part of the variable and allows the scope to create references to (part of) the variable. The owner is responsible for freeing the object, which generally happens once the scope is left.
+%   \item The scope (immutably) \textit{borrows} the variable. This guarantees, that as long as the variable is used, its \textit{value will not change} and allows the scope to further lend the variable to other scoped.
+%   \item The scope \textit{mutably borrows} the variable. This guarantees, that there are no other active references to any part of the memory of the variable.
+% \end{enumerate}
+
+% A value may at most be used once, at which point the old variable can no longer be accessed and the new value becomes the owner. This process is called ownership transfer. 
+
+% A consequence of these rules it, that at any time, every piece of memory has a unique and compile-time known owner. There are no reference cycles.
+
+
+\subsection{Insights into Rust as a Verification Target}
+
+Rust justifies a new approach to verification, because it is possible to take advantage of guarantees provided by Rust's ownership system. 
+
+% Rust is split into two languages: safe and unsafe Rust. Like most type systems, Rust's type and ownership system is conservative, meaning any (safe) Rust program that type checks, will not crash due to memory safety or type errors. Unsafe Rust gives the programmer the ability to expand the programs accepted by Rust outside that known-safe subset.
+
+
+Rust features a few exceptional design decisions that profoundly influence the design of verification systems for it. The following paragraphs will elaborate on this.
+
+
+\paragraph*{Opaque Generics} Rust does not provide a way to check a generic parameter for its instantiation. This means that we cannot extract any additional information from a generic parameter \code{T}. A function from \code{T} to \code{T} can therefor only be the identity function.
+Wadler \cite{wadler_theorems_1989} shows, that it is possible to derive facts about the behaviour of such polymorphic functions.
+
+In contrast, languages with instance-of-checks allow an implementation of a polymorphic function to distinguish between different instances of the generic parameter, precluding this extensive reasoning.
+
+\paragraph*{Explicit Mutable Access} A consequence of the ownership rules is, that a function can only mutate (part of) the state, that is passed to it as a parameter. There is no global state and there is no implicit access to an object instance. Thus any intention of mutating state must already be expressed in the function signature, which makes the specification of this mutation quite natural.
+
+\paragraph*{Minimal subtyping} In contrast to object oriented languages, Rust has no user-extendable notion of subtyping. 
+Rust does have a notion of subtyping for its permission system, which serves the purpose of coercing mutable references \code{\&mut T} to immutable references \code{\& T} etc. where needed. Because of the limited, well-known scope, these subtyping relations create no ambiguity with a refinement type system.
+
+\paragraph*{No overloaded functions}
+
+\paragraph*{What Rust does not solve} Even though Rust simplifies reasoning about mutability and aliasing of mutable data, Rust does not eliminate the need to reason about multiple references to mutable data. For example, Listing \ref{lst:alias-mut} shows how \code{cell}'s type is influenced by changes to \code{r}. This does not mean, that the ownership rule  \textit{mutability XOR aliasing} are broken: Even though both \code{cell} and \code{r} are mutable, but only one is active.
+
+\begin{listing}[ht]
+  \begin{minted}{rust}
+    let mut cell = 2;
+    let r = &mut cell;
+    r+= 1;
+    cell += 1;
+    assert!(cell, 3)
+  \end{minted}
+  \caption{Example of an apparent violation of ownership rules}
+  \label{lst:alias-mut}
+\end{listing}
+
+\section{Rustc}
+
+Since the implementation interacts with Rustc, the reference implementation of a Rust compiler, this section will summarize the relevant parts of Rustc mainly based on the Rustc dev guide \cite{noauthor_overview_nodate}.
+
+Rustc offers an APIs for writing compiler plugins, which can access the intermediate languages of Rust at different stages during the compilation and allows the plugin to emit warnings and errors. 
+At a high level, rustc is built with stages, that incrementally lower the source code to an executable binary. Rustc has multiple stages and associated data structures. 
+Relevant for the thesis are the first few stages: Firstly the AST, which is a representation of the source code after lexing and parsing, 
+
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=0.7\linewidth]{./rustc-stages.pdf}
+	\caption{Diagram providing an overview of the Rustc Compiler Stages}
+	\label{fig:rust-stages}
+\end{figure}
+
+Figure \ref{fig:rust-stages} shows the the main compiler stages of Rustc and the associated data structure. The first data structure, that is extracted from the source code is the AST (short for abstract syntax tree), which is the result of parsing and expanding macros. 
+Based on the AST, the high-level intermediate representation (short HIR) is created by resolving the names and desugaring some language constructs. The HIR contains accurate source labels, which map all nodes in the HIR to their source code locations. 
+The HIR is then used as the basis for type checking returning the typed high-level intermediate representation (short THIR), which annotates every node with its type. THIR also lowers some additional constructs like automatic dereferencing and overloading and more. In contrast to the previous representations, "[t]he THIR only represents bodies, i.e. <<executable code>>; this includes function bodies [..]. Consequently, the THIR has no representation for items like \code{struct}s or \code{trait}s." \cite[p. 1]{noauthor_thir_nodate}
+THIR will then be used to create the mid-level IR by drastically simplifying the language: The tree structure with complex expression of the THIR is turned in to a control-flow graph (short CFG) with basic blocks containing simple (i.e. non-nested) expressions.
+
+Finally Rustc uses external tools \- like llvm \- to generate executable files and link them.
+
+
+
+\chapter{Empirical Analysis of Use-Cases} \label{ch:analysis} 
 
 Before designing a system for Rust, it makes sense to gain some understanding of how Rust is used. For this purpose we will look at two key features of Rust, that influence how an approachable verification should look like.
-Firstly \code{unsafe} Rust with similar guarantees to C would make verification and specification significantly harder. But if the use of \code{unsafe} is limited, like intended by the language designers, it would allow us to focus on the save part of Rust and leave the verification of \code{unsafe} Rust to more complex verification systems.
-Secondly with mutability being the main difference to the traditional domain fof Refinement Types, showing the need for covering this area and to what degree of approachability it interesting.
+Firstly \code{unsafe} Rust with similar lack of guarantees to C would make verification and specification significantly harder. But if the use of \code{unsafe} is limited, like intended by the language designers, it would allow us to focus on the save part of Rust and leave the verification of \code{unsafe} Rust to more complex verification systems, like Prusti \cite{astrauskas_leveraging_2019}.
+Secondly with mutability being the main difference to the traditional domain of Refinement Types, estimating the need for covering this language feature is interesting. The prevalence of mutability should also inform the acceptable level of user effort.
 
-There are two fundamental questions, that analysing existing rust code should answer: 
+Thus, the use-case analysis should answer the following questions about Rust code:
 \begin{enumerate}
-  \item \label{enum:hypothesis-unsafe-rare} How rare are uses of \code{unsafe}
-  \item \label{enum:hypothesis-unsafe-lib} How much effort is acceptable when specifying \code{unsafe} code?
-  \item \label{enum:hypothesis-mut} How common are mutable variables and references in Rust?
+  \item How rare are uses of \code{unsafe}?
+  \item How much effort is acceptable when specifying \code{unsafe} code?
+  \item How common are mutable variables and references in Rust?
+  \item How much effort is acceptable when specifying mutable variables and references in Rust?
 \end{enumerate}
 
 To check these assumptions an analysis of existing Rust code was performed. As a basis for the analysis, the Rust package registry \href{https://www.crates.io}{crates.io} was used. It contains the source code for both Rust libraries as well as various applications written in Rust (e.g. ripgrep). 
@@ -357,115 +539,7 @@ For this thesis the following conclusion can be drawn:
   \item Mutable parameters are used less frequently justifying a higher specification effort, but their specification must still be possible.
 \end{itemize}
 
-\chapter{Foundations}
-
-This chapter will introduce 
-
-
-\section{Refinement Types}
-
-The type system, that this thesis will adapt, is based on the Refinement Type system described by Vazou et al. \cite{vazou_abstract_2013} and Rondon et al. \cite{rondon_liquid_2008}. 
-The central idea of Refinement Types is adding predicates to a language's type: For example, a type \code{i32} might be refined with the predicate $v > 0$. The refined type is written as $\left\{ v : \text{i32} \mid v > 0 \right\}$. In terms of semantics this means, that any inhabitant of that type must also satisfy the predicate. 
-
-The notion of refinements in embedded into the base language using subtyping: A refined type $\tau$ is a subtype of $\tau'$ if $\tau$'s predicate implies the predicate of $\tau'$ (in the current typing context $\Gamma$).
-As is common with subtyping systems, the subtype can then be used in the place where the super type is expected.
-The following rule shows how subtyping is handled by Liquid types \cite[p. 6]{rondon_liquid_2008}:
-
-\begin{equation*}
-  \inferrule*
-    {\text{SMT-Valid}(\llbracket \Gamma \rrbracket \wedge \llbracket e_1 \rrbracket \Rightarrow \llbracket e_2 \rrbracket)}
-    {\Gamma \vdash \left\{ v : b \mid e_1 \right\} \preceq \left\{ v: b \mid e_2 \right\}}
-\end{equation*}
-
-Refinement Types are related to dependent types, distinguished by the limited expressiveness of the type. Refinement types trade off expressiveness for automatic type checking. Allowed formulas are chosen from a SMT decidable logic. 
-Rondon et al. \cite{rondon_liquid_2008} chose the EUFA as the logic fragment, meaning a propositionaly logic with the theories of equality, uninterpreted functions and linear arithmetic.
-
-
-\section{Rust}
-
-The Rust programming language, first conceived of by Graydon Hoare, is multi-paradigm programming language, that draws inspiration from functional and imperative programming languages. The core forms a set of features usually found in functional programming languages: Functions, closures, algebraic data types, type classes (called traits in Rust) and pattern matching, immutability are all common place in Rust.
-But what is unusual is, that Rust extends this base with optional mutability of data and references. The Rust programming language is design to closed control the amount of mutability and what it can effect. To this end, Rust incorporates the notion of affine types into its type system (called ownership system in Rust).
-Rust took inspiration from a research language called Cyclone introduced by Grossman et al. \cite{grossman_region-based_nodate}.
-Among other things, the ownership system is used to handle memory management, safe concurrency and simplifies reasoning about program behaviour.
-The next paragraph will explain how the ownership system works.
-
-\paragraph{Aliasing XOR Mutabillity} The key behind Rusts ownership system is, that for every variable at every point during the execution, that variable can either aliased or mutable, but never both at the same time.
-
-Rust accomplished this by introducing three types of access permissions for a variable, which are associated with every scope\footnote{In modern Rust, this model was generalized to cover more cases, but the idea is still valid}:
-\begin{enumerate}
-  \item The scope \textit{owns} the variable. This guarantees, that no other scope has access to any part of the variable and allows the scope to create references to (part of) the variable.
-  \item The scope (immutably) \textit{borrows} the variable. This guarantees, that as long as the variable is used, its \textit{value will not change} and allows the scope to further lend the variable to other scoped.
-  \item The scope \textit{mutably borrows} the variable. This guarantees, that there are no other active references to any part of the memory of the variable.
-\end{enumerate}
-
-A consequence of these rules it, that at any time, every piece of memory has a unique and compile-time known owner. There are no reference cycles.
-
-This makes both aliasing as well as mutability quite tame:
-If a variable is aliased, it must be immutable and as a result, represents just a value (like in pure functional languages).
-If a variable is mutable, it can not be aliased and as a result, any effect of the mutation is well known and locally visible.
-
-\subsection{The Case for Rust as a Target Language}
-
-
-Rust justifies a new approach to mutable verification, because it is possible to take advantage of guarantees provided by (safe) Rust's ownership system. 
-
-Rust is split into two languages: safe and unsafe Rust. Like most type systems, Rust's type and ownership system is conservative, meaning any (safe) Rust program that type checks, will not crash due to memory safety or type errors. Unsafe Rust gives the programmer the ability to expand the programs accepted by Rust outside that known-safe subset.
-
-In this thesis, we will only consider safe Rust, which is the subset of Rust most programmers interact with (see section \ref{ss:unsafe-rust}).
-
-Rust features a few unusual design decisions that profoundly influence the design of verification systems for it. The following paragraphs will elaborate on this.
-
-
-\paragraph*{Opaque Generics} Rust does not provide a way to check a generic parameter for its instantiation. This means that we cannot extract any additional information from a generic parameter \code{T}. A function from \code{T} to \code{T} can therefor only be the identity function.
-Wadler \cite{wadler_theorems_1989} shows, that it is possible to derive facts about the behaviour of such polymorphic functions.
-
-In contrast, languages with instance-of-checks allow an implementation of a polymorphic function to distinguish between different instances of the generic parameter, precluding this extensive reasoning.
-
-\paragraph*{Explicit Mutable Access} A consequence of the ownership rules is, that a function can only mutate (part of) the state, that is passed to it as a parameter. There is no global state and there is no implicit access to an object instance. Thus any intention of mutating state must already be expressed in the function signature, which makes the specification of this mutation quite natural.
-
-\paragraph*{Minimal subtyping} In contrast to object oriented languages, Rust has no user-extendable notion of subtyping. 
-Rust does have a notion of subtyping for its permission system, which serves the purpose of coercing mutable references \code{\&mut T} to immutable references \code{\& T} etc. where needed. Because of the limited, well-known scope, these subtyping relations create no ambiguity with a refinement type system.
-
-\paragraph*{No overloaded functions}
-
-\paragraph*{What Rust does not solve} Even though Rust simplifies reasoning about mutability and aliasing of mutable data, Rust does not eliminate the need to reason about multiple references to mutable data. For example, Listing \ref{lst:alias-mut} shows how \code{cell}'s type is influenced by changes to \code{r}. This does not mean, that the ownership rule  \textit{mutability XOR aliasing} are broken: Even though both \code{cell} and \code{r} are mutable, but only one is active.
-
-\begin{listing}[ht]
-  \begin{minted}{rust}
-    let mut cell = 2;
-    let r = &mut cell;
-    r+= 1;
-    cell += 1;
-    assert!(cell, 3)
-  \end{minted}
-  \caption{Example of an apparent violation of ownership rules}
-  \label{lst:alias-mut}
-\end{listing}
-
-\section{Rustc}
-
-Since the implementation of the proposed interacts with Rustc, the reference implementation of a Rust compiler, this section will summarize the relevant parts of Rustc mainly based on the Rustc dev guide \cite{noauthor_overview_nodate}
-
-Rustc offers an APIs for writing compiler plugins, which can access the intermediate languages of Rust at different stages during the compilation and allows the plugin to emit warnings and errors. 
-At a high level, rustc is built with stages, that incrementally lower the source code to an executable binary. Rustc has multiple stages and associated data structures. 
-Relevant for the thesis are the first few stages: Firstly the AST, which is a representation of the source code after lexing and parsing, 
-
-\begin{figure}[h]
-	\centering
-	\includegraphics[width=0.7\linewidth]{./rustc-stages.pdf}
-	\caption{Diagram providing an overview of the Rustc Compiler Stages}
-	\label{fig:rust-stages}
-\end{figure}
-
-Figure \ref{fig:rust-stages} shows the the main compiler stages of Rustc and the associated data structure. The first data structure, that is extracted from the source code is the AST (short for abstract syntax tree), which is the result of parsing and expanding macros. 
-Based on the AST, the high-level intermediate representation (short HIR) is created by resolving the names and desugaring some language constructs. The HIR contains accurate source labels, which map all nodes in the HIR to their source code locations. 
-The HIR is then used as the basis for type checking returning the typed high-level intermediate representation (short THIR), which annotates every node with its type. THIR also lowers some additional constructs like automatic dereferencing and overloading and more. In contrast to the previous representations, "[t]he THIR only represents bodies, i.e. <<executable code>>; this includes function bodies [..]. Consequently, the THIR has no representation for items like \code{struct}s or \code{trait}s." \cite[p. 1]{noauthor_thir_nodate}
-THIR will then be used to create the mid-level IR by drastically simplifying the language: The tree structure with complex expression of the THIR is turned in to a control-flow graph (short CFG) with basic blocks containing simple (i.e. non-nested) expressions.
-
-Finally Rustc uses external tools \- like llvm \- to generate executable files and link them.
-
-
-\chapter{The MiniCorten Language}
+\chapter{The MiniCorten Language} \label{ch:language} 
 
 Rust's main disadvantage as a target language it its size: There is a lot of syntax and semantics that would need to be accounted. A lot of it even incidental to the verification. To reduce the complexity and amount of work, that needs to be done, we will focus on a subset of Rust described in this section.
 
@@ -621,7 +695,7 @@ where $$(\sigma' \oplus \sigma)(x) =
 
 The \textsc{SS-Call} rule does not scope the variables from the callee to the caller. This is actually fine, because by definition variable names are distinct. Therefore only the arguments need to be replaced in the resulting state.
 
-\chapter{The Refinement Type System}
+\chapter{The Refinement Type System} \label{ch:type-system}
 
 
 \section{Features}
@@ -1172,7 +1246,7 @@ For practical use, it would make sense to relax the distinction between logic va
 
 In some cases, the programmer might want to choose an invariant for a variable, that any assigned value has to satisfy. In terms of the type system, this would not be challenging, only requiring 
 
-\chapter{Implementation: CortenC}
+\chapter{Implementation: CortenC} \label{ch:implementation}
 
 The type system described in the previous chapter was implemented to test the practical feasibility of our approach.
 There are a few differences and details between the type system described above and the implementation CortenC (short for Corten Checker) that will be highlighted in this chapter.
@@ -1359,7 +1433,7 @@ Because the SMT call returned \code{unsat}, the subtype relation is valid and th
 %   -[x] side-effectful expressions
 % - [x] z3 example prompt
 
-\chapter{Evaluation}
+\chapter{Evaluation} \label{ch:evaluation}
 
 In this chapter Corten will be tested on a selection of examples to test the practicality.
 
@@ -1532,7 +1606,7 @@ The \code{client} just needs to make sure, that the proof of \code{c} is stored 
 - Expend Corten by using external tools to verify unsafe
 - use assert to tell Corten what to assume and external tool what to verify
 
-\chapter{Related Work}
+\chapter{Related Work} \label{ch:related-work}
 
 There currently does not exist an implementation of refinement types for Rust.
 
@@ -1550,7 +1624,7 @@ Alternative verification approaches also exists: For example RustHorn\cite{matsu
 
 The notion of Abstract Refinement Types that this thesis is based on is defined by Vazou et al. \cite{vazou_abstract_2013}. The basic idea is to allow the programmer to "refine" language types with predicates from a decidable logic. The type system has a notion of subtyping for refined types, where one type is a subtype of another if one predicate implies the other.
 
-\label{subsec:related-work-mutability} \subsection{Alternative Approaches for Handling Mutability}
+\subsection{Alternative Approaches for Handling Mutability} \label{subsec:related-work-mutability} 
 
 Of course the design space permits choosing other tradeoffs. For example, Rondon et al. \cite{rondon_low-level_2010} chooses 
   - only interdependence in single record using fold mechanism
@@ -1560,7 +1634,7 @@ this is not the only way to deal with mutability:
 
 \section{Comparison to Flux}
 
-\chapter{Conclusion \& Future Work}
+\chapter{Conclusion \& Future Work} \label{ch:conclusion}
 
 The goal of this thesis is to show, that Refinement Types can be idiomatically adapted to languages with unique mutable references. 
 The thesis has show, that CortenC can type check Refinement Types in Rust, enforcing properties over mutable data and references and that these types fit idiomatically into Rust, if an inference system was added to CortenC.

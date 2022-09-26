@@ -258,30 +258,41 @@ Astrauskas et al. also found, that "however, with 21.3\% of crates containing so
 
 When checking unsafely for our use case, it makes sense to further distinguish between libraries and executables crates: Libraries are intended to be used by other Rust programs: Usage of unsafe in libraries may not be as problematic as in executables, because libraries are written once but used by many applications, justifying higher verification effort. 
 
-In our analysis we found, that firstly crates.io contains significantly more libraries than binaries\footnote{Libraries and Executables are distinguished by checking if they contain \code{bin} or \code{lib} target or one of the corresponding files according to the cargo naming convention.} (see Figure \ref{fig:crate_types}). 
-And secondly libraries are much more likely to use \code{unsafe} Rust. Table shows the result of our analysis. Where uses of \code{unsafe} are counted and grouped by crate type (see Table \ref{tab:unsafe-uses-by-crate}).
-The data in the table includes all crates except the outlier \code{windows-0.32.0}, which alone contains \numprint{233608} uses of \code{unsafe}. Nearly $2 / 3$ of all other library uses of \code{unsafe} combined.
-Looking at the distribution of unsafe uses in Figure \ref{fig:unsafe-hist}, we can see, that this is an exception: Most other libraries do not use that much unsafe statements. We can also see, that even if a executable crate uses \code{unsafe}, it uses few.
 
+In our analysis we found, that firstly crates.io contains significantly more libraries than binaries\footnote{Libraries and Executables are distinguished by checking if they contain \code{bin} or \code{lib} target or one of the corresponding files according to the cargo naming convention.} (see Figure \ref{fig:crate_types}). 
+And secondly libraries are much more likely to use \code{unsafe} Rust.
+
+
+Figure \ref{fig:unsafe-scatter} gives an overview over how \code{unsafe} sections are distributed in the crates.
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=0.99\linewidth, clip, trim={0.2cm 0.2cm 0.2cm 0.2cm}]{../scatter-occurences-vs-loc.png}
+	\caption{Figure showing the distribution of \code{unsafe} sections vs. the total amount of unsafe LOC in each crate}
+	\label{fig:unsafe-scatter}
+\end{figure}
+
+ Table \ref{tab:unsafe-uses-by-crate} shows the result of our analysis: The total number of unsafe uses in an order of magnitude higher.
+The data in the table includes all crates except the outlier \code{windows-0.32.0}, which alone contains \numprint{233608} uses of \code{unsafe}. Nearly $2 / 3$ of all other library uses of \code{unsafe} combined.
+Looking at the distribution of unsafe uses in Figure \ref{fig:unsafe-hist}, we can see, that this is an exception: Most other libraries do not use that much unsafe statements. We can also see, that even if a executable crate uses \code{unsafe}, it uses few. Note the difference in x- and y-axis scaling: No executable contains more than 63 occurrences on \code{unsafe} blocks, but more than 10\% of libraries contain more than 63 \code{unsafe} sections.
+On average, a library contains about 63 \code{unsafe} sections, while crates with binaries contain on average about 6 \code{unsafe} sections.
 
 
 \begin{figure}[h]
 	\centering
-	\includegraphics[width=0.7\linewidth, clip, trim={0.5cm 0.5cm 0.5cm 0.5cm}]{../crate_types.pdf}
+	\includegraphics[width=0.5\linewidth, clip, trim={1cm 1cm 2cm 0.5cm}]{../crate_types.pdf}
 	\caption{Percentage of Crates, that Contain Libraries, Executables or Both}
 	\label{fig:crate_types}
 \end{figure}
 
 \begin{table}[h]
 \centering
-\begin{tabular}{l | r}
-  & Number of Unsafe Uses \\
-  Crate Type &  \\
-  \hline
- Library & \numprint{382997} \\
- Both & \numprint{7720} \\
- Binary & \numprint{930} \\
- n/a & \numprint{215} \\
+\begin{tabular}{l | r | r | r}
+  & No. Crates & Total No. of Unsafe Sections & Total Unsafe LOC \\
+ Crate contains & & &  \\
+ \hline
+ Library & \numprint{9707} & \numprint{382997} & \numprint{2166213} \\
+ Both & \numprint{1224} & \numprint{7720} & \numprint{51004} \\
+ Binary & \numprint{951} & \numprint{940} & \numprint{5873} \\
  \end{tabular}
 \caption{Number of Unsafe Uses by Crate Category}
 \label{tab:unsafe-uses-by-crate}
@@ -291,8 +302,8 @@ Looking at the distribution of unsafe uses in Figure \ref{fig:unsafe-hist}, we c
 
 \begin{figure}[h]
 	\centering
-	\includegraphics[width=0.99\linewidth, clip, trim={0.2cm 0.2cm 0.2cm 0.2cm}]{../unsafe_counts_by_crate_type.pdf}
-	\caption{Cumulative, logarithmic histogram of the amount of \code{unsafe} uses in each category}
+	\includegraphics[width=0.99\linewidth, clip, trim={0.2cm 0.2cm 0.2cm 0.2cm}]{../unsafe-occurences-vs-no-crates.pdf}
+	\caption{Cumulative, Logarithmic Histogram of the Amount of \code{unsafe} Uses in each Category}
 	\label{fig:unsafe-hist}
 \end{figure}
 

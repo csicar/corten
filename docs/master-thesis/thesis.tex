@@ -287,7 +287,7 @@ For that purpose, Rust offers a different kind of value transfer called \textit{
     let result = greet(&a); // Lend \code{a} to \code{greet}
     println!(a.name); // No error
   \end{minted}
-  \caption{Example demonstrating borrowing: \code{greet(a)} transfers ownership of \code{a} to \code{greet}}
+  \caption{Example demonstrating borrowing: \code{greet(\&a)} lends \code{a} to \code{greet}}
   \label{lst:ownership-immut-borrow}
 \end{listing}
 
@@ -302,7 +302,7 @@ Thus, Rust ensures, that for every variable at every point during the execution,
 
 
 \begin{listing}[ht]
-  \begin{minted}{rust}
+  \begin{minted}[texcomments]{rust}
     fn age(user: &mut User) {
       (*user).age = user.age + 1;
     }
@@ -355,8 +355,6 @@ In contrast, languages with instance-of-checks allow an implementation of a poly
 \paragraph*{Minimal subtyping} In contrast to object oriented languages, Rust has no user-extendable notion of subtyping. 
 Rust does have a notion of subtyping for its permission system, which serves the purpose of coercing mutable references \code{\&mut T} to immutable references \code{\& T} etc. where needed. Because of the limited, well-known scope, these subtyping relations create no ambiguity with a refinement type system.
 
-\paragraph*{No overloaded functions}
-
 \paragraph*{What Rust does not solve} Even though Rust simplifies reasoning about mutability and aliasing of mutable data, Rust does not eliminate the need to reason about multiple references to mutable data. For example, Listing \ref{lst:alias-mut} shows how \code{cell}'s type is influenced by changes to \code{r}. This does not mean, that the ownership rule  \textit{mutability XOR aliasing} are broken: Even though both \code{cell} and \code{r} are mutable, but only one is active.
 
 \begin{listing}[ht]
@@ -398,7 +396,7 @@ Finally Rustc uses external tools \- like llvm \- to generate executable files a
 \chapter{Empirical Analysis of Use-Cases} \label{ch:analysis} 
 
 Before designing a system for Rust, it makes sense to gain some understanding of how Rust is used. For this purpose we will look at two key features of Rust, that influence how an approachable verification should look like.
-Firstly \code{unsafe} Rust with similar lack of guarantees to C would make verification and specification significantly harder. But if the use of \code{unsafe} is limited, like intended by the language designers, it would allow us to focus on the save part of Rust and leave the verification of \code{unsafe} Rust to more complex verification systems, like Prusti \cite{astrauskas_leveraging_2019}.
+Firstly \code{unsafe} Rust, with a similar lack of guarantees to C, would make verification and specification significantly harder. But if the use of \code{unsafe} is limited, like intended by the language designers, it would allow us to focus on the save part of Rust and leave the verification of \code{unsafe} Rust to more complex verification systems, like Prusti \cite{astrauskas_leveraging_2019}.
 Secondly with mutability being the main difference to the traditional domain of Refinement Types, estimating the need for covering this language feature is interesting. The prevalence of mutability should also inform the acceptable level of user effort.
 
 Thus, the use-case analysis should answer the following questions about Rust code:
@@ -409,7 +407,7 @@ Thus, the use-case analysis should answer the following questions about Rust cod
   \item How much effort is acceptable when specifying mutable variables and references in Rust?
 \end{enumerate}
 
-To check these assumptions an analysis of existing Rust code was performed. As a basis for the analysis, the Rust package registry \href{https://www.crates.io}{crates.io} was used. It contains the source code for both Rust libraries as well as various applications written in Rust (e.g. ripgrep). 
+To check these assumptions an analysis of existing Rust code was performed\footnote{The source code is available at \url{https://gitlab.com/csicar/crates-analysis/}}. As a basis for the analysis, the Rust package registry \href{https://www.crates.io}{crates.io} was used. It contains the source code for both Rust libraries as well as various applications written in Rust (e.g. ripgrep). 
 
 We analyzed all published Rust crates (Rust's version packages) on February 2nd 2022 on crates.io with at least 10 versions\footnote{The limit of 10 versions is used to eliminate inactive and placeholder packages}, which totals \numprint{11882} crates, containing \numprint{228263} files with a combined code-base size of over 64 million lines of Rust code (without comments and white space lines)\footnote{Calculated with \texttt{cloc}}. 
 
@@ -438,14 +436,13 @@ Our data seems to confirm this: \numprint{8044} of the \numprint{11882} crates (
 
 Astrauskas et al. also found, that "however, with 21.3\% of crates containing some unsafe statements and – out of those crates – 24.6\% having an unsafe statement ratio of at least 20\%, we cannot claim that developers use unsafe Rust sparingly, i.e., they do not always follow the first principle of the Rust hypothesis." \cite[p. 14]{astrauskas_how_2020}
 
-When checking unsafely for our use case, it makes sense to further distinguish between libraries and executables crates: Libraries are intended to be used by other Rust programs: Usage of unsafe in libraries may not be as problematic as in executables, because libraries are written once but used by many applications, justifying higher verification effort. 
+Although true, when analyzing unsafety for our use case, it makes sense to further distinguish between libraries and executables crates: Libraries are intended to be used by other Rust programs: Usage of unsafe in libraries may not be as problematic as in executables, because libraries are written once but used by many applications, justifying higher verification effort. 
+
+In our analysis we found, that expectedly crates.io contains significantly more libraries than binaries\footnote{Libraries and Executables are distinguished by checking if they contain \code{bin} or \code{lib} target or one of the corresponding files according to the cargo naming convention.}: About \numprint{81.7}\% of crates contained just a library, \numprint{10.3}\% contained just an executable target and \numprint{10.3}\% contained both. 
+We also found, that libraries are much more likely to use \code{unsafe} Rust.
 
 
-In our analysis we found, that firstly crates.io contains significantly more libraries than binaries\footnote{Libraries and Executables are distinguished by checking if they contain \code{bin} or \code{lib} target or one of the corresponding files according to the cargo naming convention.} (see Figure \ref{fig:crate_types}). 
-And secondly libraries are much more likely to use \code{unsafe} Rust.
-
-
-Figure \ref{fig:unsafe-scatter} gives an overview over how \code{unsafe} sections are distributed in the crates.
+\Cref{fig:unsafe-scatter} gives an overview over how \code{unsafe} sections are distributed in the crates.
 \begin{figure}[h]
 	\centering
 	\includegraphics[width=0.99\linewidth, clip, trim={0.2cm 0.2cm 0.2cm 0.2cm}]{../scatter-occurences-vs-loc.png}
@@ -453,18 +450,18 @@ Figure \ref{fig:unsafe-scatter} gives an overview over how \code{unsafe} section
 	\label{fig:unsafe-scatter}
 \end{figure}
 
- Table \ref{tab:unsafe-uses-by-crate} shows the result of our analysis: The total number of unsafe uses in an order of magnitude higher.
+\Cref{tab:unsafe-uses-by-crate} shows the result of our analysis: The total number of unsafe uses in an order of magnitude higher.
 The data in the table includes all crates except the outlier \code{windows-0.32.0}, which alone contains \numprint{233608} uses of \code{unsafe}. Nearly $2 / 3$ of all other library uses of \code{unsafe} combined.
-Looking at the distribution of unsafe uses in Figure \ref{fig:unsafe-hist}, we can see, that this is an exception: Most other libraries do not use that much unsafe statements. We can also see, that even if a executable crate uses \code{unsafe}, it uses few. Note the difference in x- and y-axis scaling: No executable contains more than 63 occurrences on \code{unsafe} blocks, but more than 10\% of libraries contain more than 63 \code{unsafe} sections.
+Looking at the distribution of unsafe uses in Figure \ref{fig:unsafe-ecdf}, we can see, that this is an exception: Most other libraries do not use that much unsafe statements. We can also see, that even if a executable crate uses \code{unsafe}, it uses few. Note the difference in x- and y-axis scaling: No executable contains more than 63 occurrences on \code{unsafe} blocks, but more than 10\% of libraries contain more than 63 \code{unsafe} sections.
 On average, a library contains about 63 \code{unsafe} sections, while crates with binaries contain on average about 6 \code{unsafe} sections.
 
 
-\begin{figure}[h]
-	\centering
-	\includegraphics[width=0.5\linewidth, clip, trim={1cm 1cm 2cm 0.5cm}]{../crate_types.pdf}
-	\caption{Percentage of Crates, that Contain Libraries, Executables or Both}
-	\label{fig:crate_types}
-\end{figure}
+% \begin{figure}[h]
+% 	\centering
+% 	\includegraphics[width=0.5\linewidth, clip, trim={1cm 1cm 2cm 0.5cm}]{../crate_types.pdf}
+% 	\caption{Percentage of Crates, that Contain Libraries, Executables or Both}
+% 	\label{fig:crate_types}
+% \end{figure}
 
 \begin{table}[h]
 \centering
@@ -484,10 +481,11 @@ On average, a library contains about 63 \code{unsafe} sections, while crates wit
 
 \begin{figure}[h]
 	\centering
-	\includegraphics[width=0.99\linewidth, clip, trim={0.2cm 0.2cm 0.2cm 0.2cm}]{../unsafe-occurences-vs-no-crates.pdf}
+	\includegraphics[width=0.99\linewidth, clip, trim={0.2cm 0.2cm 0.2cm 0.2cm}]{../ecdf-occurences-and-log-vs-no-crates.pdf}
 	\caption{Cumulative, Logarithmic Histogram of the Amount of \code{unsafe} Uses in each Category}
-	\label{fig:unsafe-hist}
+	\label{fig:unsafe-ecdf}
 \end{figure}
+
 
 
 \label{sec:analysis-mutability} \section{Mutability}
@@ -495,7 +493,7 @@ On average, a library contains about 63 \code{unsafe} sections, while crates wit
 Finally we will analyse how common mutable variables and references are used in Rust. 
 The frequency of usage will inform the acceptable level of specification effort.
 
-To analyse the dataset for usage pattern, we search the dataset for certain syntactical structures to infer mutability information about the following various AST items:
+To analyse the dataset for usage patterns, we search the dataset for certain syntactical structures to infer mutability information about the following AST items:
 \begin{itemize}
 	\item \textbf{Local Variable Definitions} can be tracked with high confidence. They occur in function bodies and take the form: \code{let mut a = <expr>}
 	\item \textbf{Parameters}, which are considered immutable if they are passed as immutable references or owned. They take the syntactic form: \code{mut a: i32} or \code{b: \&mut i32}
@@ -506,20 +504,14 @@ To analyse the dataset for usage pattern, we search the dataset for certain synt
 
 A total of around 52 million of these items were found in the dataset.
 
-Figure~\ref{fig:mutabillity_by_category} shows the ratio of mutable to immutable items. For each syntactical category, the percentages are given relative to different objects:
-
-\begin{enumerate}
-  \item Total: number of occurrences
-  \item Function: number of unique functions. I.e. 76.54\% of functions have a immutable parameter.
-  \item File: number of unique files
-\end{enumerate}
+\Cref{fig:mutabillity_percentages} shows the ratio of mutable to immutable items. For each syntactical category, the percentages are relative to the total number of occurrences in the dataset.
 
 
 \begin{figure}[h]
 	\centering
-	\includegraphics[width=0.9\linewidth, clip, trim={0.5cm 6cm 0.5cm 6cm}]{../mutability_by_category.pdf}
-	\caption{Ratio of Immutable to Mutable Versions of Different AST Items. Items are Counted by Unique Occurrences}
-	\label{fig:mutabillity_by_category}
+	\includegraphics[width=0.9\linewidth, clip, trim={0.5cm 0.5cm 0.5cm 0.5cm}]{../mutability_by_category.pdf}
+	\caption{Ratio of Immutable to Mutable Items of Different AST Nodes. Ratio is Relative to Total Number Of Occurrences}
+	\label{fig:mutabillity_percentages}
 \end{figure}
 
 Unfortunately not there are some areas, where the syntactic analysis is not sufficient. Namely the analysis of function calls and arguments, which is mainly caused by the uncertainty of mutability of complex arguments.
@@ -1670,5 +1662,20 @@ On the other hand expanding the expressiveness of the type system would also be 
 %% ----------------
 \appendix
 
+
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=0.99\linewidth, clip, trim={0.2cm 0.2cm 0.2cm 0.2cm}]{../unsafe-occurences-vs-no-crates.pdf}
+	\caption{Cumulative, Logarithmic Histogram of the Amount of \code{unsafe} Uses in each Category}
+	\label{fig:unsafe-hist}
+\end{figure}
+
+
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=0.99\linewidth, clip, trim={0.2cm 0.2cm 0.2cm 0.2cm}]{../hist-mutability.pdf}
+	\caption{Logarithmic Histogram of the Number of Crates that contain n \% immutable / mutable items}
+	\label{fig:mutability-hist}
+\end{figure}
 
 \end{document}

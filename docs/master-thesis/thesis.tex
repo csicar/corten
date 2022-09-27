@@ -33,9 +33,31 @@
 \usepackage[nameinlink]{cleveref}
 
 % \usepackage[scaled=.78]{beramono}
+% \usepackage[scaled=.92]{sourcesanspro}
+
 % \usepackage{tgcursor}
 % \usepackage{cascadia-code}
+% \setmonofont[]{cascadia}
+
+% \usepackage{fontspec}
+% \usepackage[zerostyle=d]{newtxtt}
+% \usepackage[scaled=.5,proportional,lightcondensed]{zlmtt}
+% \usepackage{fontspec}
+% \setmonofont{Fira Code}[
+%   Contextuals=Alternate  % Activate the calt feature
+% ]
+% \setmonofont{Latin Modern 
+% \usepackage{nimbusmononarrow}
+% \usepackage[nomath]{lmodern}
+
+% \setmonofont[scaled=0.8]{Comic Mono}
+% \setmonofont{Noto Sans Mono}
+\usepackage[scale=0.87]{sourcecodepro}
+% \usepackage{inconsolata}
+
+% % Looks good:
 % \usepackage{DejaVuSansMono}
+% \setmonofont{DejaVu Sans Mono}
 % \usepackage[]{lmodern}
 
 
@@ -1500,7 +1522,7 @@ Thanks to Corten's modular approach, handling recursive functions is strait forw
 
 
 \begin{listing}[ht]
-  \begin{minted}[autogobble, texcomments]{rust}
+  \begin{minted}[autogobble, texcomments, fontsize=\footnotesize]{rust}
     fn fib(n: ty!{ nv: i32 | nv >= 0}) -> ty!{ v: i32 | v >= nv * nv } {
       if n >= 2 {
           let n1 = n - 1; let n2 = n - 2;
@@ -1625,6 +1647,110 @@ Of course the design space permits choosing other tradeoffs. For example, Rondon
 this is not the only way to deal with mutability: 
 
 \section{Comparison to Flux}
+
+During the writing of the thesis, Lehmann et al. \cite{lehmann_flux_2022} published a preprint for a paper, that is especially relevant. Lehmann et al. describe a implementation of Liquid Types for Rust called Flux, covering the same solution and problem space to Corten. 
+For the purpose of plurality in design and implementation of such a system, is was decided to only read the paper after finishing the Corten type system.
+
+Flux distinguished between three different kinds of references: 
+Shared (immutable) references, mutable weak (unique) references and strong references.
+
+\begin{listing}[ht]
+  \begin{minipage}[t]{0.48\linewidth}
+    
+    \begin{minted}[autogobble, fontsize=\footnotesize]{rust}
+    #[lr::sig(fn(i32<@n>) 
+      -> bool<0 < n>)]
+    fn is_pos(n: i32) -> bool {
+      if 0 < n { true } else { false }
+    }
+
+    #[lr::sig(fn(i32<@x>) 
+      -> bool{v: x <= x && 0 <= v>)]
+    fn add(x: i32) -> i32 {
+      if x < 0 { -x } else { x }
+    }
+    \end{minted}
+  \end{minipage}
+  \begin{minipage}[t]{0.48\linewidth}
+    \begin{minted}[autogobble, fontsize=\footnotesize]{rust}
+    fn is_pos(n: ty!{ n : i32}) 
+      -> ty!{ v: bool | v == 0 < n } {
+      if 0 < n { true as ... } else { false }
+    }
+
+    fn add(x: ty!{ x: i32}) 
+      -> ty!{ v: i32 | x <= x && 0 <= v } {
+      if x < 0 { -x as ... } else { x }
+    }
+    \end{minted}
+  \end{minipage}
+  
+  \caption{Example demonstrating the Ownership System: \code{greet(a)} transfers ownership of \code{a} to \code{greet}}
+  \label{lst:compare-flux-fundamentals}
+\end{listing}
+
+- Flux: explicit variable bind \code{@x}. Corten: every logic var implicitly
+- Flux: separate attribute. Corten: embed in types
+- Flux same observations: Exclusive Ownership => strong updates
+- Flux distinguish between strong and mut references
+  - Corten: same, but mut passing references explicit modification
+
+
+To demonstrate the difference in the handling of strong updates, consider the signatures of incrementing and decrementing functions of a datatype \code{Nat}. The functions are fully specifications and ensure the invariant, that a natural number is a positive.
+
+\begin{listing}[ht]
+  \begin{minipage}[t]{0.48\linewidth}
+    
+    \begin{minted}[autogobble, fontsize=\footnotesize]{rust}
+    fn increment(&strg v : Nat<n>) -> ()
+      ensures *self: Nat<n+1>;
+    fn decrement(&strg v : Nat<n>) -> ()
+      requires n > 0
+      ensures *self: Nat<n-1>;
+    \end{minted}
+  \end{minipage}
+  \begin{minipage}[t]{0.48\linewidth}
+    \begin{minted}[autogobble, fontsize=\footnotesize]{rust}
+      fn increment(n: &mut ty!{
+       n1: Nat => n1 | n1 == n1+1 }
+      ) -> ();
+
+      fn decrement(n: &mut ty!{ 
+       v1: Nat | v1 > 0 => v2 | v2 == v1-1 }
+      ) -> ();
+    \end{minted}
+  \end{minipage}
+  
+  \caption{Comparison of specifying Type Changes Caused by a strong mutation. Flux on the left; Corten on the right}
+  \label{lst:compare-flux-strong-updates}
+\end{listing}
+
+Flux type system has the function body judgement $\Sigma, \Delta \mid K;T \vdash F$, which "checks if a function body is well typed under a global environment $\Sigma$" \cite[p. 11]{lehmann_flux_2022}
+
+$\Delta$ in Flux is analogous to to Corten's $\Phi$. Both contain the constraints on refinement variables and are initialized with the function preconditions. 
+Flux's $T$ maps locations to types, and serves a similar purpose to $\mu$ in Corten: Keeping track of the current properties, that are known for a location. Corten's type system does not associate constraints with locations with specific predicate, like Flux does, because in the typing rules of Corten, the origin of the constraint is irrelevant\footnote{interestingly our implementation, like Flux, does have that distinction to improve error messages}.
+
+Flux has a separate type syntax for references: $\&_{\text{mut}} \tau$ that denotes that the referenced location has type $\tau$. Corten uses a similar syntax for specifying mutable references, but in terms of the semantics delegates the type constraint to the referenced value and even disallows reference types to constrain th referenced type. Because the reference location can change during the program execution, constraining a reference can have many possible meanings and unintuitive consequences. Flux avoids this problem by restricting to weak references, which can not change their type.
+Presumably for the same reasons, Flux \- like Corten \- chose to forbid type specification on strong references, but their handling differs a bit: Even though strong reference destinations are specified with a similar syntax $\text{ptr}\left(l\right)$ (equivalent to $\&l$ in Corten), Corten allows multiple possible destinations to be specified. In that case, the reference may only be update weakly. 
+Importantly, Corten allows the type to change, meaning a reference can be unambiguous and therefore strongly updatable and later ambiguous in its target meaning only weakly updatable.
+
+Function signatures are expressed quite similarly. 
+Flux function signatures have the form $\forall \bar{v : \sigma}. \text{fn}\left(r ; \bar{x}. T_i\right) \to \rho_0.T_0$
+Consider the function decrease from \cref{lst:compare-flux-strong-updates}. In Flux the function signature would be encoded as:
+
+\[\forall n : \text{int}, \rho : \text{loc} 
+  \text{ fn}\left(n > 0, 
+    x.\{ \rho \mapsto \text{nat}_{\tau}\langle n \rangle, v \mapsto \text{prt}(\rho)\}
+    \rightarrow 
+    \rho_0. \{\rho_0 \mapsto \tau, \rho \mapsto \text{nat}_{\tau}\langle n - 1 \rangle \}
+    \right)
+\]
+
+Corten encode the function as:
+
+\[
+  fn 
+\]
 
 \chapter{Conclusion \& Future Work} \label{ch:conclusion}
 

@@ -7,7 +7,7 @@ use std::{
 use crate::{
     hir_ext::ExprExt,
     refinements::{rename_ref_in_expr, vars_in_expr},
-    smtlib_ext::{SmtResExt, SolverExt},
+    smtlib_ext::{extract_model_diagnostics, Parser, SmtResExt, SolverExt},
 };
 use hir::{ExprKind, HirId};
 use quote::quote;
@@ -383,14 +383,19 @@ where
                 syn::Expr::Lit(syn::ExprLit {
                     lit: syn::Lit::Bool(b),
                     ..
-                }) if b.value => {},
+                }) if b.value => {}
                 syn::Expr::Binary(syn::ExprBinary {
                     left,
                     op: syn::BinOp::Eq(_),
                     right,
                     ..
-                }) => { trace!("Found suspicious expression: {}, but will ignore in equivalence check", quote! { #expr }) },
-                syn::Expr::Binary(_) => {}, // other binary expression do not create equivalences
+                }) => {
+                    trace!(
+                        "Found suspicious expression: {}, but will ignore in equivalence check",
+                        quote! { #expr }
+                    )
+                }
+                syn::Expr::Binary(_) => {} // other binary expression do not create equivalences
                 syn::Expr::Lit(_) => todo!(),
                 syn::Expr::Paren(syn::ExprParen { expr: box expr, .. }) => {
                     equivalent_logic_vars_in_expr(equivalence_set, equivalent_pvars, expr)
@@ -647,11 +652,11 @@ where
 }
 
 #[instrument(skip_all, ret)]
-pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone, P>(
+pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone>(
     super_ctx: &RContext<'tcx, K>,
     sub_ctx: &RContext<'tcx, K>,
     tcx: &TyCtxt<'tcx>,
-    solver: &mut Solver<P>,
+    solver: &mut Solver<Parser>,
 ) -> anyhow::Result<()> {
     trace!(super_ctx=%(super_ctx.with_tcx(tcx)), sub_ctx=%(sub_ctx.with_tcx(tcx)), "check");
     solver
@@ -829,6 +834,9 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
     solver
         .comment(&format!("done checking is_sub_context! is sat: {}", is_sat))
         .into_anyhow()?;
+    let model = solver.get_model();
+    extract_model_diagnostics(solver);
+
     solver.pop(1).into_anyhow()?;
     if is_sat {
         Err(anyhow::anyhow!(
@@ -842,12 +850,12 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone,
 }
 
 #[instrument(skip_all, fields(%sub_ty, %super_ty))]
-pub fn require_is_subtype_of<'tcx, P>(
+pub fn require_is_subtype_of<'tcx>(
     sub_ty: &RefinementType<'tcx>,
     super_ty: &RefinementType<'tcx>,
     ctx: &RContext<'tcx>,
     tcx: &TyCtxt<'tcx>,
-    solver: &mut Solver<P>,
+    solver: &mut Solver<Parser>,
 ) -> anyhow::Result<()> {
     info!(
         "need to do subtyping judgement: {} ≼  {} in ctx {}",
@@ -898,6 +906,7 @@ pub fn require_is_subtype_of<'tcx, P>(
     solver
         .comment(&format!("done checking is_subtype_of! is sat: {}", is_sat))
         .into_anyhow()?;
+    extract_model_diagnostics(solver);
 
     solver.pop(2).into_anyhow()?;
     solver.comment(&"-".repeat(80)).into_anyhow()?;
@@ -926,8 +935,8 @@ pub trait SmtFmt {
 
 impl SmtFmt for hir::HirId {
     fn fmt_str<'tcx>(&self, tcx: &TyCtxt<'tcx>) -> String {
-        let node_str = tcx.hir().node_to_string(*self);
-        let span = tcx.hir().span(self.clone()).data();
+        let node_str = tcx.hir().name(*self);
+        let span = tcx.hir().span(*self).data();
         format!("{:?} {}", span, node_str)
     }
 }

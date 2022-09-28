@@ -43,7 +43,7 @@ fn test_type_of_lit() {
         .to_string(),
         |expr, tcx, local_ctx| {
             let conf = SmtConf::default_z3();
-            let mut solver = conf.spawn(()).unwrap();
+            let mut solver = conf.spawn(Parser).unwrap();
 
             let ctx = RContext::<hir::HirId>::new();
 
@@ -70,7 +70,7 @@ fn test_subtype_lit_pos() {
         .to_string(),
         |expr, tcx, local_ctx| {
             let conf = SmtConf::default_z3();
-            let mut solver = conf.spawn(()).unwrap();
+            let mut solver = conf.spawn(Parser).unwrap();
             solver.path_tee("/tmp/z3").unwrap();
             let ctx = RContext::<hir::HirId>::new();
             let (ty, ctx_after) =
@@ -97,7 +97,7 @@ fn test_subtype_lit_neg() {
         .to_string(),
         |expr, tcx, local_ctx| {
             let conf = SmtConf::default_z3();
-            let mut solver = conf.spawn(()).unwrap();
+            let mut solver = conf.spawn(Parser).unwrap();
             solver.path_tee("/tmp/z3").unwrap();
             let ctx = RContext::<hir::HirId>::new();
             let _ty = type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
@@ -120,7 +120,7 @@ fn test_subtype_lit_pos_nested() {
         .to_string(),
         |expr, tcx, local_ctx| {
             let conf = SmtConf::default_z3();
-            let mut solver = conf.spawn(()).unwrap();
+            let mut solver = conf.spawn(Parser).unwrap();
             solver.path_tee("/tmp/z3").unwrap();
             let ctx = RContext::<hir::HirId>::new();
 
@@ -349,20 +349,26 @@ fn test_assign_single() {
         .to_string(),
         |expr, tcx, local_ctx| {
             let conf = SmtConf::default_z3();
-            let mut solver = conf.spawn(()).unwrap();
+            let mut solver = conf.spawn(Parser).unwrap();
             solver.path_tee("/tmp/z3").unwrap();
             let ctx = RContext::<hir::HirId>::new();
 
-            let (ty, ctx_after) = type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
-            pretty::assert_eq!(ctx_after.with_tcx(&tcx).to_string(), unindent("
+            let (ty, ctx_after) =
+                type_of(expr, &tcx, &ctx, local_ctx, &mut solver, &mut Fresh::new()).unwrap();
+            pretty::assert_eq!(
+                ctx_after.with_tcx(&tcx).to_string(),
+                unindent(
+                    "
                 RContext {
                     // formulas
                     // types
                     <dangling> : ty!{ _0 : i32 | _0 == 3 }
                     <dangling> : ty!{ _1 : i32 | _1 == 4 }
-                    <fud.rs>:4:135: 4:140 (#0) local mut a (hir_id=HirId { owner: DefId(0:7 ~ rust_out[9149]::f), local_id: 4 }) : ty!{ _2 : i32 | _2 == 8 }
+                    <fud.rs>:4:135: 4:140 (#0) a : ty!{ _2 : i32 | _2 == 8 }
                 }
-                "));
+                "
+                )
+            );
             pretty::assert_eq!(ty.to_string(), "ty!{ _3 : i32 | _3 == 0 }");
             info!("expr has type {}", ty);
         },
@@ -1020,7 +1026,7 @@ mod fn_call {
 
     #[should_panic]
     #[test]
-    fn fibonacci() {
+    fn fibonacci_neg() {
         init_tracing();
         with_item_and_rt_lib(
             &quote! {
@@ -1057,9 +1063,9 @@ mod sub_context {
 
     use super::*;
 
-    fn mk_z3() -> Solver<()> {
+    fn mk_z3() -> Solver<Parser> {
         let conf = SmtConf::default_z3();
-        let mut solver = conf.spawn(()).unwrap();
+        let mut solver = conf.spawn(Parser).unwrap();
         solver
             .path_tee(format!("/tmp/z3-fn-{:?}.lisp", uuid::Uuid::new_v4()))
             .unwrap();
@@ -1730,6 +1736,29 @@ mod evaluation {
         .unwrap();
     }
 
+    #[should_panic]
+    #[test]
+    fn maximum_neg() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn max(a: ty!{ a: i32 }, b: ty!{ b: i32}) -> ty!{ v: i32 | v >= a && v >= b && (v == a || v == b) } {
+                    if a > b {
+                        a as ty!{ x: i32 | x >= a && x >= b && (x == a || x == b) }
+                    } else {
+                        a
+                    }
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= a && v >= b && (v == a || v == b) }");
+            },
+        )
+        .unwrap();
+    }
+
     #[test]
     fn clamp() {
         init_tracing();
@@ -1978,5 +2007,4 @@ mod evaluation {
         )
         .unwrap();
     }
-
 }

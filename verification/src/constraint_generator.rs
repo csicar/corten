@@ -5,6 +5,7 @@ use crate::refinement_context::RContext;
 use crate::refinement_context::TypeTarget;
 
 use crate::refinements::MutRefinementType;
+use crate::smtlib_ext::Parser;
 use crate::smtlib_ext::SmtResExt;
 
 use anyhow::anyhow;
@@ -171,7 +172,7 @@ where
             trace!(%expected_type, "expected function type ");
 
             let conf = SmtConf::default_z3();
-            let mut solver = conf.spawn(()).unwrap();
+            let mut solver = conf.spawn(Parser).unwrap();
             solver
                 .path_tee(format!("/tmp/z3-fn-{:?}.lisp", uuid::Uuid::new_v4()))
                 .unwrap();
@@ -201,12 +202,12 @@ where
 }
 
 #[instrument(skip_all)]
-pub fn transition_stmt<'a, 'b, 'c, 'd, 'tcx, P>(
+pub fn transition_stmt<'a, 'b, 'c, 'd, 'tcx>(
     stmts: &'a [hir::Stmt<'tcx>],
     tcx: &'b TyCtxt<'tcx>,
     ctx: &'c RContext<'tcx>,
     local_ctx: &'a TypeckResults<'tcx>,
-    solver: &mut Solver<P>,
+    solver: &mut Solver<Parser>,
     fresh: &mut Fresh,
 ) -> anyhow::Result<RContext<'tcx>>
 where
@@ -285,12 +286,12 @@ fn negate_predicate(pred: syn::Expr) -> anyhow::Result<syn::Expr> {
 
 /// Computes the type of [`expr`] and returns its type, together with the  `ctx` after its execution
 #[instrument(skip_all, fields(expr=?expr.pretty_print()))]
-pub fn type_of<'a, 'b, 'c, 'tcx, P>(
+pub fn type_of<'a, 'b, 'c, 'tcx>(
     expr: &'a Expr<'tcx>,
     tcx: &'b TyCtxt<'tcx>,
     ctx: &'c RContext<'tcx>,
     local_ctx: &'a TypeckResults<'tcx>,
-    solver: &mut Solver<P>,
+    solver: &mut Solver<Parser>,
     fresh: &mut Fresh,
 ) -> anyhow::Result<(RefinementType<'tcx>, RContext<'tcx>)>
 where
@@ -462,7 +463,8 @@ where
 
                     // used to make sure, that refinement variables in caller and callee don't overlap
                     let fresh_prefix = fresh.fresh_ident();
-                    let sanitizer: Box<dyn Fn(&str) -> String> = Box::new(|name| format!("{fresh_prefix}_{name}"));
+                    let sanitizer: Box<dyn Fn(&str) -> String> =
+                        Box::new(|name| format!("{fresh_prefix}_{name}"));
 
                     // get refinements for inputs
                     let mut expected_input_ctx = RContext::<hir::HirId>::new();

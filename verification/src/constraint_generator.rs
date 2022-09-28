@@ -14,6 +14,7 @@ use hir::LoopSource;
 use quote::format_ident;
 use rsmt2::SmtConf;
 use rsmt2::Solver;
+use rustc_ast::Mutability;
 use rustc_hir as hir;
 
 use quote::quote;
@@ -358,7 +359,7 @@ where
             let new_name = fresh.fresh_ident();
             let var_ty = ty_in_context.rename_binder(&new_name)?;
             let combined_predicate = match ty_in_context.base.kind() {
-                rustc_middle::ty::TyKind::Ref(_, _, _) => var_ty.predicate.clone(),
+                // rustc_middle::ty::TyKind::Ref(_, _, _) => var_ty.predicate.clone(),
                 _ => {
                     let new_pred = &var_ty.predicate;
                     let new_name = format_ident!("{}", &var_ty.binder);
@@ -459,6 +460,10 @@ where
                         .ok_or_else(|| anyhow!("function not found in typeck result"))?;
                     trace!(?fn_sig);
 
+                    // used to make sure, that refinement variables in caller and callee don't overlap
+                    let fresh_prefix = fresh.fresh_ident();
+                    let sanitizer: Box<dyn Fn(&str) -> String> = Box::new(|name| format!("{fresh_prefix}_{name}"));
+
                     // get refinements for inputs
                     let mut expected_input_ctx = RContext::<hir::HirId>::new();
                     let mut output_ctx = ctx.clone();
@@ -488,6 +493,9 @@ where
                                 (Ok(_), Ok(_)) => panic!("apparently {arg:?} can be parsed as mut refinement as well as immut refinement -> bug"),
                                 // immut type
                                 (Ok(refinement), Err(_)) => {
+                                    // sanitise names (make sure they do not overlap)
+                                    let refinement = refinement.rename_binders(&sanitizer)?;
+
                                     // Because mutable end-states may refer to immutable refinement binders
                                     // we need to add them to the end ctx.
                                     // Because immut types cannot chnge their predicates, the end state will need
@@ -506,6 +514,9 @@ where
                                 }
                                 // mut type
                                 (Err(_), Ok(mut_refinement)) => {
+                                    // sanitise names (make sure they do not overlap)
+                                    let mut_refinement = mut_refinement.rename_binders(&sanitizer)?;
+
                                     (mut_refinement.start, mut_refinement.end)
                                 }
                                 (Err(immut_err), Err(mut_err)) => {
@@ -543,8 +554,8 @@ where
                     trace!(expected_input_ctx=%expected_input_ctx.with_tcx(tcx));
                     trace!(output_ctx=%output_ctx.with_tcx(tcx));
                     is_sub_context(&expected_input_ctx, ctx, tcx, solver)?;
-
-                    Ok((expected_type, output_ctx))
+                    let sanitized_expected_type = expected_type.rename_binders(&sanitizer)?;
+                    Ok((sanitized_expected_type, output_ctx))
                 }
             }
         }
@@ -570,7 +581,7 @@ where
                 base: local_ctx.expr_ty(expr),
                 binder: ident,
                 predicate: parse_quote! {
-                    #sym == #new_name
+                    (#sym) == #new_name
                 },
             };
             trace!(%ty,"type of binary expr");
@@ -842,7 +853,7 @@ fn symbolic_execute<'a, 'b, 'c, 'tcx>(
         ExprKind::Box(_) => todo!(),
         ExprKind::ConstBlock(_) => todo!(),
         ExprKind::Array(_) => todo!(),
-        ExprKind::Call(_, _) => todo!(),
+        ExprKind::Call(_, _) => todo!("cannot symbolically execute function call"),
         ExprKind::MethodCall(_, _, _) => todo!(),
         ExprKind::Tup(_) => todo!(),
         ExprKind::Binary(Spanned { node: bin_op, .. }, left, right) => {

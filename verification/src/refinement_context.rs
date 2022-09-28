@@ -383,8 +383,14 @@ where
                 syn::Expr::Lit(syn::ExprLit {
                     lit: syn::Lit::Bool(b),
                     ..
-                }) if b.value => {}
-                syn::Expr::Binary(_) => todo!(),
+                }) if b.value => {},
+                syn::Expr::Binary(syn::ExprBinary {
+                    left,
+                    op: syn::BinOp::Eq(_),
+                    right,
+                    ..
+                }) => { trace!("Found suspicious expression: {}, but will ignore in equivalence check", quote! { #expr }) },
+                syn::Expr::Binary(_) => {}, // other binary expression do not create equivalences
                 syn::Expr::Lit(_) => todo!(),
                 syn::Expr::Paren(syn::ExprParen { expr: box expr, .. }) => {
                     equivalent_logic_vars_in_expr(equivalence_set, equivalent_pvars, expr)
@@ -855,7 +861,9 @@ pub fn require_is_subtype_of<'tcx, P>(
     ctx.encode_smt(solver, tcx)?;
 
     if ctx.lookup_decl_for_binder(&sub_ty.binder).is_none() {
-        solver.declare_const(&sub_ty.binder, "Int").into_anyhow()?;
+        ctx.encode_binder_decl(solver, sub_ty, tcx)?;
+        // let smt_ty = encode_type(&sub_ty.base);
+        // solver.declare_const(&sub_ty.binder,  smt_ty).into_anyhow()?;
     }
     solver
         .assert(refinements::encode_smt(&sub_ty.predicate, &|target| {

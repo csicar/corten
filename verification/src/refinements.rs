@@ -224,6 +224,17 @@ impl<'tcx> MutRefinementType<'tcx> {
             ))
         }
     }
+
+    pub fn rename_binders(
+        &self,
+        renamer: &impl Fn(&str) -> String,
+    ) -> anyhow::Result<MutRefinementType<'tcx>> {
+        Ok(MutRefinementType {
+           start: self.start.rename_binders(renamer)?,
+           end: self.end.rename_binders(renamer)?
+        })
+    }
+
 }
 
 pub fn rename_ref_in_expr(

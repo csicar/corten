@@ -1017,6 +1017,37 @@ mod fn_call {
         )
         .unwrap();
     }
+
+    #[should_panic]
+    #[test]
+    fn fibonacci() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn fib(n: ty!{ nv: i32 | nv >= 0}) -> ty!{ v: i32 | v >= nv * nv } {
+                    if n >= 2 {
+                        // n1, n2 needed for ANF
+                        let n1 = n - 1; // _6_nv 1
+                        let n2 = n - 2; // _7_nv 0
+
+                        let f1 = fib(n1); // _6_v 1
+                        let f2 = fib(n2); // _7_v 0
+                        // nv 2
+                        // f1, f2 needed for Symbolic Execution
+                        (f1 + f2) as ty!{ r : i32 | r >= nv * nv }
+                    } else {
+                        1
+                    }
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | 10 * v >= nv * nv }");
+            },
+        )
+        .unwrap();
+    }
 }
 
 /// Tests for `is_sub_context`
@@ -1738,16 +1769,17 @@ mod evaluation {
         init_tracing();
         with_item_and_rt_lib(
             &quote! {
-                fn fib(n: ty!{ nv: i32 | nv >= 0}) -> ty!{ v: i32 | v >= nv * nv } {
+                fn fib(n: ty!{ nv: i32 | nv >= 0}) -> ty!{ v: i32 | 10 * v >= nv * nv } {
                     if n >= 2 {
                         // n1, n2 needed for ANF
-                        let n1 = n - 1;
-                        let n2 = n - 2;
+                        let n1 = n - 1; // _6_nv 1
+                        let n2 = n - 2; // _7_nv 0
 
-                        let f1 = fib(n1);
-                        let f2 = fib(n2);
+                        let f1 = fib(n1); // _6_v 1
+                        let f2 = fib(n2); // _7_v 0
+                        // nv 2
                         // f1, f2 needed for Symbolic Execution
-                        (f1 + f2) as ty!{ r : i32 | r >= nv * nv }
+                        (f1 + f2) as ty!{ r : i32 | 10 * r >= nv * nv }
                     } else {
                         1
                     }
@@ -1756,7 +1788,7 @@ mod evaluation {
             .to_string(),
             |item, tcx| {
                 let ty = type_check_function(item, &tcx).unwrap();
-                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v >= nv * nv }");
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | 10 * v >= nv * nv }");
             },
         )
         .unwrap();
@@ -1817,7 +1849,7 @@ mod evaluation {
     }
 
     #[test]
-    fn complex_mutability() {
+    fn evaluation_swap() {
         init_tracing();
         with_item_and_rt_lib(
             &quote! {
@@ -1833,7 +1865,7 @@ mod evaluation {
 
                 fn client(
                     mut i: ty!{ i1 : i32 }, mut j: ty!{ j1 : i32 }
-                ) -> ty!{ v: i32 | v == 1 } {
+                ) -> ty!{ v: i32 | v == j1 - i1 } {
                     //println!("x: {x}, y: {y}");
                     // let mut i = 0;
                     // let mut j = 0;
@@ -1855,7 +1887,7 @@ mod evaluation {
                     // } else {
 
                     // };
-                    1
+                    *a - *b
                 }
             }
             .to_string(),
@@ -1863,7 +1895,7 @@ mod evaluation {
                 let ty = type_check_function(item, &tcx).unwrap();
                 match item.ident.name.as_str() {
                     "swap" => pretty::assert_eq!(ty.to_string(), "ty!{ v : () | true }"),
-                    "client" => pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == 1 }"),
+                    "client" => pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == j1 - i1 }"),
                     _ => panic!(),
                 }
             },
@@ -1893,4 +1925,58 @@ mod evaluation {
         )
         .unwrap();
     }
+
+    #[test]
+    fn pretend_vec() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                type IntVec = i32;
+
+                fn new() -> ty!{v: IntVec | v == 0 } {
+                    0
+                }
+
+                fn len(v : &mut ty!{ b: IntVec | true => a | a == b }) -> ty!{ r: i32 | r == b } {
+                    // let a = v;
+                    // let g = *a;
+                    *v
+                }
+
+                fn is_empty(v : &mut ty!{ v3 : i32 | true => v4 | v4 == v3 }) -> ty!{ e : bool | e == (v3 == 0) } {
+                    let l = len(v);
+                    l == 0
+                }
+
+                fn push(v : &mut ty!{ v1 : i32 | true => v2 | v2 == v1 + 1 }) -> ty!{ r : () } {
+                    *v = *v + 1; ()
+                }
+
+                fn pop(v : &mut ty!{ v1 : i32 | v1 > 0 => v2 | v2 == v1 - 1 }) -> ty!{ r : () } {
+                    *v = *v - 1; ()
+                }
+
+                fn client() -> ty!{ r : i32 | r == 1 } {
+                    let mut v = new();
+                    let empty = is_empty(&mut v);
+                    // if empty {
+                    //     push(&mut v);
+                    // } else {}
+                    push(&mut v);
+                    push(&mut v);
+                    pop(&mut v);
+                    // len(&mut v)
+                    v
+                }
+
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                // pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | v == 4 }")
+            },
+        )
+        .unwrap();
+    }
+
 }

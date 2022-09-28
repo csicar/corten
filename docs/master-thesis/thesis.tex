@@ -639,7 +639,7 @@ Most constructs are standard, the main difference being the addition of refineme
 
 The semantics are mostly standard. The main difference being that Rust and our simplified language enable most statements to be used in place of an expression. The value is determined by the last statement in the sequence. For example If-Expressions, sequences of statements and function all follow this rule: Their (return) value is determined by the last statement or expression in the sequence.
 
-The semantics loosely based on Jung's MiniRust.
+The semantics loosely based on Jung's MiniRust \cite{jung_minirust_2022}.
 
 Another difference between Rust and MiniCorten is of course the addition of refinement types.
 
@@ -1236,12 +1236,12 @@ The variable mapping in $\Gamma$ is generalized: $\mu : \text{Path} \to \text{LV
 
 \begin{gather*}
   \inferrule*[left=Var]
-    {\mu(p.x.y.z) = \alpha}
-    {\Gamma \vdash p.x.y.z : \{ \beta \mid \beta \doteq \alpha \} \Rightarrow \Gamma}
+    {\beta \text{ fresh} \\ \mu(p.x.y.z) = \alpha}
+    {\Gamma \vdash p.x.y.z : \{ \beta : b \mid \beta \doteq \alpha \} \Rightarrow \Gamma}
     \\
   \inferrule*[left=Assign-Strong]
     {\Gamma \vdash e : \tau}
-    {\Gamma \vdash p.x.y.z = e : \code{unit} \Rightarrow \Gamma[p.x.z.y \mapsto \tau]}
+    {\Gamma \vdash p.x.y.z = e \Rightarrow \Gamma[p.x.z.y \mapsto \tau]}
 \end{gather*}
 
 \subsection{Algebraic Data Types}
@@ -1535,12 +1535,12 @@ Thanks to Corten's modular approach, handling recursive functions is strait forw
 
 \begin{listing}[ht]
   \begin{minted}[fontsize=\footnotesize, autogobble, texcomments, fontsize=\footnotesize]{rust}
-    fn fib(n: ty!{ nv: i32 | nv >= 0}) -> ty!{ v: i32 | v >= nv * nv } {
+    fn fib(n: ty!{ nv: i32 | nv >= 0}) -> ty!{ v: i32 | 10 * v >= nv * nv } {
       if n >= 2 {
           let n1 = n - 1; let n2 = n - 2;
 
           let f1 = fib(n1); let f2 = fib(n2);
-          (f1 + f2) as ty!{ r : i32 | r >= nv * nv }
+          (f1 + f2) as ty!{ r : i32 | 10 * r >= nv * nv }
       } else {
           1
       }
@@ -1590,6 +1590,34 @@ For this purpose, CortenC provides the \code{relax\_ctx!} macro, that allows the
 
 \label{subsec:evaluation-complex-mutable-ref}\section{Complex Mutable References}
 
+\Cref{lst:evaluation-swap} shows, that CortenC can handle complex mutation patterns in a modular way. 
+The \code{swap} function replaces the value of x with y and vice versa. The specification states, that for any values \code{x1} and \code{y1} at the reference target of \code{x} and \code{y}, swap will update their values to satisfy the predicates \code{== y1} and \code{== x1}.
+Notable is, that CortenC can use these facts in the \code{client} function: For \code{*a} to resolve to the required type, we have to infer, that \code{b} is a reference to \code{j} with is associated with logic variable \code{j1} and \code{swap} ensures that the value referenced by \code{a} now references the value of \code{j1}. Therefore \code{a} must now refer to \code{j}, which is associated with logic variable \code{j1}.
+
+\begin{listing}[ht]
+  \begin{minted}[fontsize=\footnotesize, autogobble, texcomments]{rust}
+    fn swap(
+      x : &mut ty!{ x1: i32 | true => x2 | x2 == y1 },
+      y : &mut ty!{ y1: i32 | true => y2 | y2 == x1 }
+  )  -> ty!{ v: () }  {
+      let tmp = *x;
+      *x = *y;
+      *y = tmp;
+      ()
+  }
+
+  fn client(
+      mut i: ty!{ i1 : i32 }, mut j: ty!{ j1 : i32 }
+  ) -> ty!{ v: i32 | v == j1 - j1 } {
+      let mut a = &mut i;
+      let mut b = &mut j;
+      swap(a, b);
+      *a - *b
+  }
+  \end{minted}
+  \caption{Example demonstrating modularity and ease of specification for complex mutation patterns}
+  \label{lst:evaluation-swap}
+\end{listing}
 
 
 \section{Rephrasing built-ins in terms of Refinement Types}

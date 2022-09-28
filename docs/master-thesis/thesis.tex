@@ -576,7 +576,7 @@ There are two namespaces for identifiers: $x \in \text{PVar}$ for variables of p
     $func\_decl$ * : function declarations
   ;;
   func\_decl ::=
-    $ident$( $param$ * ) -> $ty$ \{ $stmt$ \}
+    $ident$( $param$ * ) -> $\tau$ \{ $s$ \}
   ;;
   $param$ ::= $x$ \ccolon  $\tau$
   ;;
@@ -593,15 +593,15 @@ There are two namespaces for identifiers: $x \in \text{PVar}$ for variables of p
   ;;
   $e$                                              : expression 
   ::=
-    $ident$                                         : variable reference
+    $x$                                         : variable reference
     | $lit$                                         : constant
-    | $expr$ + $expr$                               : addition
-    | * $ident$                                     : dereference
-    | \& $ident$                                    : immutable reference
-    | \&mut $ident$                                 : mutable reference
-    | $expr$ as $ty$                                : type relaxation
+    | $e \odot e$                                   : binary operation
+    | * $x$                                     : dereference
+    | \& $x$                                    : immutable reference
+    | \&mut $x$                                 : mutable reference
+    | $e$ as $\tau$                                : type relaxation
   ;;
-  $\tau$ : type ::= ty!\{ $logic\_ident$ \ccolon $base\_ty$ \cmid $pred$ \} : refinement type
+  $\tau$ : type ::= ty!\{ $\alpha$ \ccolon $b$ \cmid $\varphi$ \} : refinement type
   ;;
   $\varphi$ : pred ::=
     $ref\_pred$                                     : predicate for a reference type
@@ -612,23 +612,25 @@ There are two namespaces for identifiers: $x \in \text{PVar}$ for variables of p
     | $ref\_pred$ \cdisj $ref\_pred$         : mutable reference
   ;;
   $value\_pred$ ::=
-    $logic\_ident$                : variable
-  | $pred$ \&\& $pred$            : conjunction
-  | $pred$ \cdisj $pred$          : disjunction
-  | ! $pred$                      : negation
+    $\alpha$                                 : variable
+  | $v$                                      : literal
+  | $value\_pred \odot value\_pred$          : binary op
+  | ! $value\_pred$                          : negation
   ;;
   $b$: base\_ty ::=
     i32                     : integer
     | unit                  : unit type
     | bool                  : boolean
-    | \& $base\_ty$         : immutable reference
-    | \&mut $base\_ty$      : mutable reference
+    | \& $b$                : immutable reference
+    | \&mut $b$             : mutable reference
   ;;
   $v$: lit ::=
       0,1,...,n             : integer
     | true                  : boolean true
     | false                 : boolean false
     | ()                    : unit value
+  ;;
+  $\odot$: bin\_op ::= $\wedge$ | $\vee$ | $\geq$ | $+$ | $=$
 \end{bnfgrammar}
 
 Most constructs are standard, the main difference being the addition of refinement types, that consist of a logic variable $\alpha$, a base type $b$ (from the target language) and a predicate $\varphi$. Intuitively this means, that the value inhabiting that type satisfied the $\varphi$ in $\alpha$ represents the value. 
@@ -723,25 +725,26 @@ Corten is directly embedded in Rust using two macros. Firstly the macro \code{ty
 
 \subsection{Decidable, Conservative Subtyping}
 
-The idea 
-Having a decidable subtyping system is essential to making it feasible in practice: A developer expect type checking to be automatic and part of compilation without additional effort. There is no need for user interaction, if the SMT solver can automatically verify the program.
+Having a decidable subtyping system is essential to making it feasible in practice: A developer expects type checking to be automatic and part of compilation without additional effort. There is no need for user interaction, if the SMT solver can automatically verify the program.
 
 \subsection{Mutable Values}
 
-As section seen in \ref{sec:analysis-mutability}, mutable declarations are quite common in Rust. Therefore handling them is essential for Corten.
+As seen in \cref{sec:analysis-mutability}, mutable declarations are quite common in Rust. Therefore handling them is essential for Corten.
+To explain the problems that mutable values can cause, consider the problem seen in \cref{list:mutable-values}: Suppose the value given to \code{i} is known to be positive, which is expressed by the type $\{ v_1 : i32 \mid v_1 > 0\}$, then assigning a new value to \code{i} may change the type. Notably, the new value's type might depend on the old value, which is the case here: \code{i + 1} has type $\{ v_2 : i32 \mid v_2 = v_1 - 1\}$.
 Corten elected to treat predicates as immutable, meaning assigning to a variable will not change the old predicates, that was associated with the variable.
-Therefore assigning a new value to a variable will give that variable a new type, but \- crucially \- keep the logic variable in the typing context, which means that types of other variables can still refer to it. Logic variables, that are (no longer) associated with a program variable, are called dangling variables.
+Therefore assigning a new value to a variable will give that variable a new type, but \- crucially \- keep the logic variable in the typing context, which means that types of other variables can still refer to it. Logic variables, that are no longer associated with a program variable (like $v_1$), are called unassociated variables.
 That means, that the number of predicates in the context increases with every new value assignment.
-In the example, the typing context at the end of the function body contains $v_1$, $v_2$ and their predicates and the association of \code{i} to $v_2$.
+In the example, the typing context initially contains the predicate $v_1 > 0$ and the association of $\{i \mapsto v_1\}$. After the assignment, the predicate $v_2 = v_1 + 1$ is \textit{added} to the context and the association is \textit{changed} to $\{i \mapsto v_2\}$
+% In the example, the typing context at the end of the function body contains $v_1$, $v_2$ and their predicates and the association of \code{i} to $v_2$.
 
 There are other approaches for handling changing values in refinement types, which will be described and compared in \ref{subsec:related-work-mutability}.
 
 
 \begin{listing}[ht]
   \begin{minted}[fontsize=\footnotesize, texcomments]{rust}
-    fn inc() -> ty!{ v: i32 | v == 3 } {
-        let mut i = 2;       // i : $\{ v_1 : i32 \mid v_1 == 2 \}$
-        i = i + 1;           // i : $\{ v_2 : i32 \mid v_2 == v_1 + 1 \}$
+    fn decr() -> ty!{ v: i32 | v >= 0 } {
+        let mut i = ...;    // i : $\{ v_1 : i32 \mid v_1 > 0 \}$
+        i = i - 1;          // i : $\{ v_2 : i32 \mid v_2 == v_1 - 1 \}$
         i
     }
   \end{minted}
@@ -751,24 +754,19 @@ There are other approaches for handling changing values in refinement types, whi
 
 \label{subsec:mutable-references}\subsection{Mutable References}
 
-The key difference to Refinement Type Systems for functional languages to Rust it the pervasive use of mutation. Therefore the most important feature of Corten it the support for mutation and also mutable references.
+Besides the mutation of values, mutable references are also common in Rust, which is underpinned by the analysis, which found more than 10\% of parameters to be mutable.
+% The key difference to Refinement Type Systems for functional languages to Rust it the pervasive use of mutation. Therefore the most important feature of Corten it the support for mutation and also mutable references.
 
-Corten has two ways of dealing with assignment to mutable references: If the reference destination is known, the destination's type will be updated with the assigned values type (i.e. strong update). If there are multiple possible reference destinations, Corten will require the assigned value to satisfy the predicates of all possible destinations (i.e. weak updates). This is a standard approach (For example \cite{kloos_asynchronous_2015}), but more precise in Rust: The set of possible destinations only grows, when it depends on the execution of an optional control flow path. This means most of the time, strong updates are possible and weak updates are only needed if the reference destination is actually dynamic (i.e. dependent on the execution) \footnote{It would also be possible to encode the path condition in the reference type, but this was decided against for the stated goal of simplicity for the user}
+Corten has two ways of dealing with assignment to mutable references: If the reference destination is known, the destination's type will be updated with the assigned values type (i.e. strong update). If there are multiple possible reference destinations, Corten will require the assigned value to satisfy the predicates of all possible destinations (i.e. weak updates). This is a standard approach (e.g. \cite{kloos_asynchronous_2015}), but more precise in Rust: The set of possible destinations only grows, when it depends on the execution of an optional control flow path. This means most of the time, strong updates are possible and weak updates are only needed if the reference destination is actually dynamic (i.e. dependent on the execution) \footnote{It would also be possible to encode the path condition in the reference type, but this was decided against for the stated goal of simplicity for the user}
 
-The problem with mutable references is possibility of aliasing. Aliasing is problematic, because it might create interdependencies between the types of different variables: If one variable is changed, it might effect wether another variable is typed correctly. In listing \ref{lst:mutation-strong} the return value \code{a} is effected by changes done to a different variable \code{a}. Conservative approximation requires, that all possible effects must be tracked.
+The problem with mutable references is possibility of aliasing. Aliasing is problematic, because it might create interdependencies between the types of different variables: If one variable is changed, it might affect wether another variable is typed correctly. In \cref{lst:mutation-strong} the return value \code{a} is affected by changes done to a different variable \code{a}. Conservative approximation requires, that all possible effects must be tracked.
 
-- <dangling>, monotonically increasing $\varphi$
-
-Corten can accurately track references by phrasing them as predicates.
-In the example, in \code{b = \&mut a}, \code{\&mut a} will have inferred type \code{\{ r : \&mut | r == \& a \}}, meaning any value of this type can at most refer to to the variable called \code{y}.
+The key idea is, that reference types constrains the reference target, while the value owner's type constrains the value.
+Because of the ownership system, Corten can accurately track references, which are phrased as predicates.
+In the example, \code{b = \&mut a} and \code{\&mut a} will have inferred type \code{\{ r : \&mut | r == \& a \}}, meaning any inhabitant of this type can at most refer to the variable called \code{y}.
 When a new value is assigned to \code{*b}, the type system will look at the typing context to find out what \code{b} might refer to. In this case \code{a} is the \textit{only} possible target und we can therefore \textit{update} its type. I.e. in type system, \code{*b = 0} will change the type of \code{a} to \code{\{ s : i32 | s == 0 \}}, but the type of \code{b} stays the same (because it still refers to the same location). We call this kind of assignment a strong assignment, as it can change the type. 
 
-This is sensible, because in Rust's ownership system, \code{a} must be the unique owner of the memory belonging to \code{a}. 
-A more involved example is given in the evaluation \ref{subsec:evaluation-complex-mutable-ref}
-
-Note, that the type can only be changed because we know exactly what \code{b} refers to. If there is ambiguity about the destination of a reference, strong updates are no longer possible.
-
-
+This is sensible, because in Rust's ownership system, \code{a} must be the unique owner of the memory belonging to \code{a}, meaning no other value predicate can be affected by the change.
 
 \begin{listing}[ht]
   \begin{minted}[fontsize=\footnotesize, texcomments]{rust}
@@ -785,14 +783,12 @@ Note, that the type can only be changed because we know exactly what \code{b} re
   \label{lst:mutation-strong}
 \end{listing}
 
+Note, that the type can only be changed because we know exactly what \code{b} refers to. If there is ambiguity about the destination of a reference, strong updates are no longer possible.
+
 To support these use cases, Corten also supports weak updates, which can not change types, but allow assigning to ambiguous reference destinations.
-The example \ref{lst:mutation-weak} demonstrates how ambiguity about the reference destination may emerge: Depending on the if condition, \code{res} could refer to either \code{y} or \code{z}.
+\Cref{lst:mutation-weak} demonstrates how ambiguity about the reference destination may emerge: Depending on the if condition, \code{res} could refer to either \code{y} or \code{z}.
 Naturally, we can weaken the reference type to \code{ty!\{ r1 : \&mut i32 | r1 == \&y || r1 == \&z \}}, meaning \code{res} could refer to either \code{y} or \code{z}.
 Because the destination is ambiguous, assigning to \code{*res} can not change the type of \code{y} or \code{z}, which is the case if the type of the assigned value is at least as specific as the types of all possible reference destinations.
-
-- importance of tracing return of mutable references
-
-
 
 \begin{listing}[ht]
   \begin{minted}[fontsize=\footnotesize, texcomments]{rust}
@@ -814,6 +810,9 @@ Because the destination is ambiguous, assigning to \code{*res} can not change th
   \caption{Example demonstrating weak updates}
   \label{lst:mutation-weak}
 \end{listing}
+
+An intricacy about conservative reference tracking are functions, that return references. In Rust this is possible, if the reference was passed as an argument: The function signature \code{fn f(a : \&mut T, b : \&mut T) -> \&mut T} would allow \code{f} to return either a reference to \code{a} or \code{b}. For the callee knowing where the returned value points to, is important because the type of dereferencing it depends on that knowledge. Consequently, for the return type to be conservative, it must state every possible reference destination.
+
 
 \label{subsec:path-sensitivify}\subsection{Path Sensitivity}
 
@@ -849,7 +848,7 @@ Firstly, the type system is path sensitive, meaning that the type system is awar
         a
     }
   \end{minted}
-  \caption{Example of changes to \code{a}'s value effecting its type}
+  \caption{Example of changes to \code{a}'s value affecting its type}
   \label{lst:strong-updates}
 \end{listing}
 
@@ -914,7 +913,13 @@ For this purpose, Corten provides a mechanism for the programmer to instruct Cor
 
 \section{Function Declaration Type Checking}
 
-The following sections will introduce the type checking rules of Corten, starting with the rule for checking function declarations.
+The following sections will introduce the type checking rules of Corten, starting with the rule for checking function declarations. We assume the program has passed the Rust type checking rules, meaning (non-refined) type- and ownership-checking was successful.
+
+\begin{definition}[Typing Context $\Gamma = (\mu, \Phi)$]
+  is the typing context, consisting of a partial function $\mu : \text{PVar} \rightharpoonup \text{LVar}$ used for tracking the current logic variable associated with a program variables and a set of predicates $\Phi$, which constrains the logic variables in the image of $\mu$.
+\end{definition}
+
+
 Without loss of generality, we assume arguments are ordered by their type: First immutable / owned arguments and then mutable arguments.
 
 When handling mutable references in parameters some subtleties need to be considered. The function can change both the referenced \textit{value} as well as the reference \textit{location}. To describe the referenced value is normally done using the $\{ \alpha \mid \alpha \doteq \&b\}$ syntax. The question arises: If $\alpha$ was the logic variable for a parameter, what should be the analog for $b$? In contrast to local variables, there is no variable representing the referenced value for parameters. As seen in section \ref{subsec:mutable-references}, using the dereference operator would come with a lot of complications.
@@ -929,7 +934,6 @@ Instead we introduce $arg^i_n$, a special variable denoting the initial abstract
     }
     {\code{fn } f(a_1 : \{ \alpha_1 \mid \varphi^\alpha_1 \}, \dots, b_1 : \{ \beta_1 \mid \varphi^\beta_1 \Rightarrow \gamma_1 \mid \varphi^\gamma_1\}) \to \tau \{ \bar s; s_{res} \}}
 \end{gather*}
-
 
 \section{Sub-Typing Rule: $\Gamma \vdash \tau \preceq \tau'$}
 
@@ -982,13 +986,13 @@ The domain restriction ensures, that the sub-context does not contain additional
     {l \text{ fresh} \\ \text{base\_ty}(v) = b}
     {\Gamma \vdash v: \{ l : b \mid l \doteq v\} }
   %
-  \\
+  \quad
   \inferrule*[left=Var]
     {\alpha \text{ fresh} \\ \mu(x) = \beta}
-    {\Gamma = (\mu, \Phi)\vdash x : \{ \alpha : b \mid \beta \doteq \alpha \} }
+    {(\mu, \Phi)\vdash x : \{ \alpha : b \mid \beta \doteq \alpha \} }
   %
   \\
-  \inferrule*[left=Var-Ref]
+  \inferrule*[left=Var-Deref]
     {\Gamma \vdash y : \tau \\ \Gamma \vdash x : \{ \beta : \&b \mid \beta \doteq \&y \}}
     {\Gamma \vdash *x : \tau }
   %
@@ -999,9 +1003,14 @@ The domain restriction ensures, that the sub-context does not contain additional
       \\ \mu(x_1) = \alpha
       \\ \mu(x_2) = \beta
     }
-    {\Gamma \vdash x_1 + x_2 : \{ \gamma: b \mid \gamma \doteq \alpha + \beta \} }
+    {\Gamma \vdash x_1 \cdot x_2 : \{ \gamma: b \mid \gamma \doteq \alpha \cdot \beta \} }
   %
   \\
+  \inferrule*[left=Ref]
+    {\star}
+    {\Gamma \vdash \&x : \{ \alpha : \&b \mid \alpha \doteq \&x\}}
+  %
+  \quad
   \inferrule*[left=Intro-Sub]
     {
       \Gamma \vdash e : \tau
@@ -1018,24 +1027,25 @@ We write:
 \begin{itemize}
   \item  $\Gamma, c$ for $(\mu, \Phi \wedge c)$
   \item $\Gamma[a \mapsto \alpha]$ for $(\mu[a \mapsto \alpha], \Phi)$
+  \item $\Gamma(x)$ for $\mu(x)$
 \end{itemize}
 
 \begin{gather*}
   \inferrule*[left=If]
     {
-      \Gamma \vdash \mu(x) : \text{bool} \Rightarrow \Gamma
-      \\ \Gamma, \mu(x) \doteq \code{true} \vdash s_t \Rightarrow \Gamma'
-      \\ \Gamma, \mu(x) \doteq \code{false} \vdash s_e \Rightarrow \Gamma'
+      \Gamma \vdash \Gamma(x) : \text{bool} \Rightarrow \Gamma
+      \\ \Gamma, \Gamma(x) \doteq \code{true} \vdash s_t \Rightarrow \Gamma'
+      \\ \Gamma, \Gamma(x) \doteq \code{false} \vdash s_e \Rightarrow \Gamma'
     }
     {\Gamma \vdash \text{if } x \text{ then }s_t\text{ else } s_e \Rightarrow \Gamma'}
   %
   \\
   \inferrule*[left=While]
     {
-      \Gamma_I, \mu(x) \doteq \code{true} \vdash s \Rightarrow \Gamma_I'
-      \\ \Gamma_I', \mu(x) \doteq \code{true} \preceq \Gamma_I
+      \Gamma_I, \Gamma_I(x) \doteq \code{true} \vdash s \Rightarrow \Gamma_I'
+      \\ \Gamma_I' \preceq \Gamma_I
     }
-    {\Gamma_I \vdash \texttt{while } x \{ s \} \Rightarrow \Gamma_I,\mu(x) \doteq \code{false}}
+    {\Gamma_I \vdash \texttt{while } x \{ s \} \Rightarrow \Gamma_I,\Gamma_I(x) \doteq \code{false}}
   %
   \\
   \inferrule*[left=Seq]
@@ -1048,21 +1058,21 @@ We write:
   \\
   \inferrule*[left=Decl]
     {
-      \Gamma \vdash e :  \{ \beta \mid \varphi \}
+      \Gamma \vdash e :  \{ \beta : b \mid \varphi \}
     }
-    {\Gamma \vdash \code{let } x = e  \Rightarrow \Gamma'[ x \mapsto \beta], \varphi}
+    {\Gamma \vdash \code{let } x = e  \Rightarrow \Gamma[ x \mapsto \beta], \varphi}
   %
-  \\
+  \quad
   \inferrule*[left=Assign]
-    {\Gamma \vdash e : \{ \beta \mid \varphi \}}
-    {\Gamma \vdash x = e \Rightarrow \Gamma' [x \mapsto \beta], \varphi}
+    {\Gamma \vdash e : \{ \beta : b \mid \varphi \}}
+    {\Gamma \vdash x = e \Rightarrow \Gamma[x \mapsto \beta], \varphi}
   %
   \\
   \inferrule*[left=Assign-Strong]
     {
       \Gamma \vdash e : \{ \beta \mid \varphi \}
-      \\ \Gamma \vdash x: \{ \alpha : \& b \mid \varphi \}
-      \\ \Gamma, \varphi \vdash \alpha \text{ must reference } y
+      \\ \Gamma \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y \}
+      % \\ \Gamma, \psi \vdash \alpha \text{ must reference } y
     }
     {\Gamma \vdash *x = e \Rightarrow \Gamma [y \mapsto \beta], \varphi}
   %
@@ -1070,14 +1080,12 @@ We write:
   \inferrule*[left=Assign-Weak]
     {
       \Gamma \vdash e : \tau 
-      \\ \Gamma \vdash x: \{ \alpha : \& b \mid \varphi \}
-      \\ \Gamma, \varphi \vdash \alpha \text{ could reference } y_1 \vee \dots \vee y_n
-      % \\ \Gamma' \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y_1 \vee \dots \vee \alpha \doteq \&y_n \}
-      \\ \Gamma \vdash \tau \preceq \{ \beta_1 \mid \varphi_1 \}
-      \\ \Gamma[x \mapsto \beta_1], \varphi_1 \preceq \Gamma
-      \\\\ \dots
-      \\\\
+      \\ \Gamma \vdash x : \{ \alpha : \& b \mid \alpha \doteq \&y_1 \vee \dots \vee \alpha \doteq \&y_n \}
+      \\\\ \Gamma \vdash \tau \preceq \{ \beta_1 \mid \varphi_1 \}
+      \\     \dots  
       \\ \Gamma \vdash \tau \preceq \{ \beta_n \mid \varphi_n \}
+      \\\\ \Gamma[x \mapsto \beta_1], \varphi_1 \preceq \Gamma
+      \\ \dots 
       \\ \Gamma[x \mapsto \beta_n], \varphi_n \preceq \Gamma
       }
     {\Gamma \vdash *x = e \Rightarrow \Gamma}
@@ -1550,7 +1558,7 @@ Of course there exists a closed formula computing the same result: $n \cdot (n +
 
 This example is quite challenging, because of interdependencies between \code{i} and \code{sum} in the invariant as well as the old value of \code{i} and old values of \code{sum} in the loop body. 
 
-To proof, that the invariant holds after each loop body execution, we need the exact information, that \code{i} was incremented by one and \code{sum} by \code{i} as well as the knowledge, that \code{i} and \code{sum} satisfied the predicates. Corten solves this problem by treating predicates as immutable and retaining "dangling" predicates (i.e. no longer associated with a program variable).
+To proof, that the invariant holds after each loop body execution, we need the exact information, that \code{i} was incremented by one and \code{sum} by \code{i} as well as the knowledge, that \code{i} and \code{sum} satisfied the predicates. Corten solves this problem by treating predicates as immutable and retaining unassociated predicates (i.e. no longer associated with a program variable).
 
 The second challenge is establishing the loop invariant in the first place: Relaxing the type of \code{i} from $= 0$ to $\leq nv$ is only valid, because we know relaxing the type of \code{sum} from $= 0$ to $ 2 * sv == iv * (iv + 1)$ is valid if $iv = 0$ and vice versa: To update the type of \code{sum} first, we need the knowledge, that $iv = 0$, but once we relax the type of \code{i}, \code{i} gets a new logic variable, which is distinct from the logic variable used in the type of \code{sum}. Thus the loop invariant needs to be established atomically.
 
@@ -1576,7 +1584,7 @@ For this purpose, CortenC provides the \code{relax\_ctx!} macro, that allows the
     sum
   }
   \end{minted}
-  \caption{Example loops with complex loop invariants and value updates effecting the invariant}
+  \caption{Example loops with complex loop invariants and value updates affecting the invariant}
   \label{lst:gauss}
 \end{listing}
 

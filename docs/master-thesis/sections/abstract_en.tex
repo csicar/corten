@@ -13,8 +13,8 @@
 \Abstract
 
 Software correctness is a central goal for software development.
-One way to improve correctness is using strong and descriptive types and verifying them with type systems.
-In particular Refinement Types demonstrated, that even with a verification system that is restricted to a decidable logic, intricate properties can be expressed and verified in a lightweight and gradual way.
+One way to improve correctness is using strong and descriptive types, that express correctness properties as types, and verifying their compatibility with the programs by using type systems.
+In particular Refinement Types demonstrated, that even with a verification system that is restricted to a decidable logic, intricate properties can be expressed in a lightweight and gradual way and verified automatically.
 However existing approaches for adapting Refinement Types from functional to imperative languages proved hard without compromising on at least one of core features of Refinement Types.
 % I argue that a base language restricted to unique mutable references will make
 This thesis aims to design a Refinement Type system without such compromises by taking advantage of Rust's restriction to unique mutable references.

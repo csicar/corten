@@ -98,7 +98,7 @@
 \author{Carsten Csiky}
 
 %% Title (and possibly subtitle) of the thesis
-\title{Title of the Thesis}
+\title{LiquidRust: Refinement Types for Imperative Languages with Ownership}
 
 %% Type of the thesis 
 \thesistype{Master's Thesis}
@@ -201,7 +201,7 @@
 \chapter{Introduction}
 
 % With increasing reliance on increasingly complex software, ensuring correctness of programs is a vital concern to software development.
-With increasing amount and reliance of software, ensuring the correctness of programs is a vital concern for the future of software development.
+With increasing amount and reliance on software, ensuring the correctness of programs is a vital concern for the future of software development.
 Although research in this area has made good progress, most approaches are not accessible enough for general adoption by the developers. Especially in light of a predicted shortage of developers\cite{breaux_2021_2021-1}, it is not sufficient to require developers to undergo year-long training in specialized and complex verification methods to ensure the correctness of their software. It is therefore crucial to integrate with their existing tooling and workflows to ensure the future high quality of software.
 One avenue for improving accessability for functional verification is extending the expressiveness of the type system to cover more of the correctness properties.
 Using type systems for correctness was traditionally prevalent in purely functional languages where evolving states are often represented by evolving types, offering approachable and gradual adoption of verification methods. Tracing evolving states in the type system would be especially useful for languages with mutability, since substantial parts of the behaviour of the program is expressed as mutation of state. In particular Rust seems like a promising target language, because mutability is already tracked precisely and thus promising functional verification for relatively minimal effort on the programmer's part.
@@ -214,7 +214,7 @@ The type system is sound and effective in the identified use-cases.
 A feasibility study on minimal examples of challenging use cases shows how useful the proposed verification system is. 
 %For use cases that could not be covered by the proposed additions, the reason will be investigated.
 
-Specifying or verifying complete Rust modules or the entire Rust language is not the goal of the thesis. In particular \code{unsafe} Rust will not be taken into account in specification nor implementation. Implementing Liquid Type inference in also not a goal of the thesis.
+Specifying or verifying complete Rust modules or the entire Rust language is not the goal of the thesis. In particular \code{unsafe} Rust will not be taken into account in specification nor implementation. Implementing Liquid Type inference is also not a goal of the thesis.
 
 The accompanying implementation extends the Rust compiler, enables automatic parsing of the refinement type language and automated type checking of a subset of Rust, as well as limited inference and error reporting. 
 The thesis also gives a description of the syntax and semantics of the subset of Rust as well as the refinement type system.
@@ -246,7 +246,7 @@ The semantics of our subset of Rust are discussed in \cref{ch:language}.
 The type system, that this thesis will adapt, is based on the Refinement Type system described by Vazou et al. \cite{vazou_abstract_2013} and Rondon et al. \cite{rondon_liquid_2008}. 
 The central idea of Refinement Types is adding predicates to a language's type: For example, a type \code{i32} might be refined with the predicate $v > 0$. The refined type is written as $\left\{ v : \text{i32} \mid v > 0 \right\}$. In terms of semantics this means, that any inhabitant of that type must also satisfy the predicate. 
 
-The notion of refinements in embedded into the base language using subtyping: A refined type $\tau$ is a subtype of $\tau'$ if $\tau$'s predicate implies the predicate of $\tau'$ (in the current typing context $\Gamma$).
+The notion of refinements is embedded into the base language using subtyping: A refined type $\tau$ is a subtype of $\tau'$ if $\tau$'s predicate implies the predicate of $\tau'$ (in the current typing context $\Gamma$).
 As is common with subtyping systems, the subtype can then be used in the place where the super type is expected.
 The following rule shows how subtyping is handled by Liquid types \cite[p. 6]{rondon_liquid_2008}:
 
@@ -263,7 +263,7 @@ Rondon et al. \cite{rondon_liquid_2008} chose the EUFA as the logic fragment, me
 \section{Rust}
 
 The Rust programming language \cite{matsakis_rust_2014}, is a multi-paradigm systems programming language, originally developed by Graydon Hoare at Mozilla Research.
-Even though Rust is quite young, the first stable release published in 2015, it has attracted interest in a wide area of applications and organization. It is used everything from Volvo building embedded software for cars \cite{foufas_why_2022} to Western Digital implementing a NVMe driver for Linux in Rust \cite{larabel_lpc_2022} and of course the Rust compiler it self.
+Even though Rust is quite young, the first stable release published in 2015, it has attracted interest in a wide area of applications and organization. It is used everywhere from Volvo building embedded software for cars \cite{foufas_why_2022} to Western Digital implementing a NVMe driver for Linux in Rust \cite{larabel_lpc_2022} and of course the Rust compiler it self.
 It draws inspiration from functional and imperative programming languages. The core forms a set of features usually found in functional programming languages: Functions, closures, algebraic data types, type classes (called traits in Rust) and pattern matching, immutability are all common place in Rust.
 However, Rust is also influenced by C: Rust extends its ML base with optional mutability of data and references and manual memory management. Many design decisions of Rust can be explained by Rust's ambitions to offer safe and clear ML-like abstractions without compromising on performance compared to C.
 For example, Rust elected to use manual memory management like C, which guarantees faster and predictable execution times when compared to garbage collection. Crucial, Rust does not compromise on safety to accomplish this: To this end, Rust incorporates the notion of affine types into its type system (called \textit{ownership system} in Rust). This additional type system guarantees, 
@@ -318,7 +318,7 @@ Borrowing, just like pointers, entail the risk of dangling pointers. Rust protec
 
 
 Mutable references can exacerbate the problem, which leads to the key insight of Rust: 
-Memory unsafe can arise from the the presence of two reference where a least one is mutable.
+Memory unsafety can arise from the mere presence of two references where at least one is mutable.
 Thus, Rust ensures, that for every variable at every point during the execution, that variable can either aliased or mutable, but never both at the same time. 
 \Cref{lst:ownership-mut-borrow} demonstrates that Rust will not accept a problem where aliased and mutable access is possible at a time. To resolve the issue, the mutable reference should be borrows after the call to \code{greet}.
 
@@ -374,8 +374,10 @@ In contrast, languages with instance-of-checks allow an implementation of a poly
 
 \paragraph*{Explicit Mutable Access} A consequence of the ownership rules is, that a function can only mutate (part of) the state, that is passed to it as a parameter. There is no global state and there is no implicit access to an object instance. Thus any intention of mutating state must already be expressed in the function signature, which makes the specification of this mutation quite natural.
 
-\paragraph*{Minimal subtyping} In contrast to object oriented languages, Rust has no user-extendable notion of subtyping. 
-Rust does have a notion of subtyping for its permission system, which serves the purpose of coercing mutable references \code{\&mut T} to immutable references \code{\& T} etc. where needed. Because of the limited, well-known scope, these subtyping relations create no ambiguity with a refinement type system.
+\paragraph*{Minimal subtyping} In contrast to object oriented languages, Rust has no user-extendable notion of object subtyping. 
+Rust does have a notion of subtyping for its permission system, which serves the purpose of coercing mutable references \code{\&mut T} to immutable references \code{\& T} etc. where needed. 
+At the type level Rust also has a concept of subtyping for \code{traits}.
+Because of the limited, well-known scope, these subtyping relations create no ambiguity with a refinement type system.
 
 \paragraph*{What Rust does not solve} Even though Rust simplifies reasoning about mutability and aliasing of mutable data, Rust does not eliminate the need to reason about multiple references to mutable data. For example, \cref{lst:alias-mut} shows how \code{cell}'s type is influenced by changes to \code{r}. This does not mean, that the ownership rule  \textit{mutability XOR aliasing} are broken: Even though both \code{cell} and \code{r} are mutable, but only one is active.
 
@@ -383,9 +385,9 @@ Rust does have a notion of subtyping for its permission system, which serves the
   \begin{minted}[fontsize=\footnotesize, autogobble]{rust}
     let mut cell = 2;
     let r = &mut cell;
-    r+= 1;
+    *r+= 1;
     cell += 1;
-    assert!(cell, 3)
+    assert_eq!(cell, 3);
   \end{minted}
   \caption{Example of an apparent violation of ownership rules}
   \label{lst:alias-mut}
@@ -468,11 +470,13 @@ We also found, that libraries are much more likely to use \code{unsafe} Rust.
 \begin{figure}[h]
 	\centering
 	\includegraphics[width=0.99\linewidth, clip, trim={0.2cm 0.2cm 0.2cm 0.2cm}]{../scatter-occurences-vs-loc.png}
-	\caption{Figure showing the distribution of \code{unsafe} sections vs. the total amount of unsafe LOC in each crate}
+	\caption{Scatter plot of a point representing creates, relating the number of unsafe occurrences to the number of unsafe LOC}
 	\label{fig:unsafe-scatter}
 \end{figure}
+\todo{Plots in Figure 3.1 sind ein bisschen klein
+- Außerdem ist in Figure 3.1 vielleicht eher die durchschnittliche unsafe-Block-Größe interessant? Dann bräuchte die y-Achse keine Log-Skala}
 
-\Cref{tab:unsafe-uses-by-crate} shows the result of our analysis: The total number of unsafe uses in an order of magnitude higher.
+\Cref{tab:unsafe-uses-by-crate} shows the result of our analysis: The total number of unsafe uses in an order of magnitude higher for binaries compared to libraries.
 The data in the table includes all crates except the outlier \code{windows-0.32.0}, which alone contains \numprint{233608} uses of \code{unsafe}. Nearly $2 / 3$ of all other library uses of \code{unsafe} combined.
 Looking at the distribution of unsafe uses in Figure \ref{fig:unsafe-ecdf}, we can see, that this is an exception: Most other libraries do not use that much unsafe statements. We can also see, that even if a executable crate uses \code{unsafe}, it uses few. Note the difference in x- and y-axis scaling: No executable contains more than 63 occurrences on \code{unsafe} blocks, but more than 10\% of libraries contain more than 63 \code{unsafe} sections.
 On average, a library contains about 63 \code{unsafe} sections, while crates with binaries contain on average about 6 \code{unsafe} sections.
@@ -536,7 +540,7 @@ A total of around 52 million of these items were found in the dataset.
 	\label{fig:mutabillity_percentages}
 \end{figure}
 
-Unfortunately not there are some areas, where the syntactic analysis is not sufficient. Namely the analysis of function calls and arguments, which is mainly caused by the uncertainty of mutability of complex arguments.
+Unfortunately there are some areas, where the syntactic analysis is not sufficient. Namely the analysis of function calls and arguments, which is mainly caused by the uncertainty of mutability of complex arguments.
 Luckily the data from function definitions and parameters can complete the picture: About 80\% of parameters are immutable and between about 10 and 20\% of parameters are mutable. And less than 10\% of functions have mutable parameters at all.
 When it comes to local variables, Rust users are more liberal in their use of mutability:
 About 30\% of local variables are defined mutable.

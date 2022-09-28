@@ -1497,6 +1497,8 @@ Of course an incorrect implementation will produce a type judgement error. If, f
     local a : ty!{ a : i32 | true }
     local b : ty!{ b : i32 | true }
   }
+  For example this assignment, satisfies the sub type, but not the super type:
+    { _1 = 0, b = 1, a = 0 }
   \end{minted}
   \caption{Example of an error message created by CortenC}
   \label{lst:eval-max-error}

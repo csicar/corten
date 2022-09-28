@@ -1730,6 +1730,7 @@ Flux type system has the function body judgement $\Sigma, \Delta \mid K;T \vdash
 $\Delta$ in Flux is analogous to to Corten's $\Phi$. Both contain the constraints on refinement variables and are initialized with the function preconditions. 
 Flux's $T$ maps locations to types, and serves a similar purpose to $\mu$ in Corten: Keeping track of the current properties, that are known for a location. Corten's type system does not associate constraints with locations with specific predicate, like Flux does, because in the typing rules of Corten, the origin of the constraint is irrelevant\footnote{interestingly our implementation, like Flux, does have that distinction to improve error messages}.
 
+
 Flux has a separate type syntax for references: $\&_{\text{mut}} \tau$ that denotes that the referenced location has type $\tau$. Corten uses a similar syntax for specifying mutable references, but in terms of the semantics delegates the type constraint to the referenced value and even disallows reference types to constrain th referenced type. Because the reference location can change during the program execution, constraining a reference can have many possible meanings and unintuitive consequences. Flux avoids this problem by restricting to weak references, which can not change their type.
 Presumably for the same reasons, Flux \- like Corten \- chose to forbid type specification on strong references, but their handling differs a bit: Even though strong reference destinations are specified with a similar syntax $\text{ptr}\left(l\right)$ (equivalent to $\&l$ in Corten), Corten allows multiple possible destinations to be specified. In that case, the reference may only be update weakly. 
 Importantly, Corten allows the type to change, meaning a reference can be unambiguous and therefore strongly updatable and later ambiguous in its target meaning only weakly updatable.
@@ -1754,7 +1755,8 @@ The rule \textsc{T-Def} initializes the context to
 Corten would generate an initial context $\Gamma = (\mu, \Phi)$ with $\mu = \{n \mapsto \&arg_0, arg_0 \mapsto v_1\}$, $\Phi = \{v_1 > 0\}$ and expected return type $\{ v_r : () \mid \text{true}\}$ and end context $\mu' = \{arg_0 \mapsto v_2\}$,
 $\Phi' = \{v_2 \doteq v_1 - 1, v_1 > 0\}$.
 
-What Corten calls a sub-context relation, is referred to as context inclusion in Flux. Flux is significantly more conservative with its rules: Only allowing permutations (\textsc{C-Perm}), removal (\textsc{C-Weaken}) of predicates and subtyping of just individual types (\textsc{C-Sub}) and only if they can be separated (\textsc{C-Frame}), meaning they do not depend on other predicates.
+What Corten calls a sub-context relation, is referred to as context inclusion in Flux.
+Though Flux is significantly more conservative with its rules: Only allowing permutations (\textsc{C-Perm}), removal (\textsc{C-Weaken}) of predicates and subtyping of just individual types (\textsc{C-Sub}) and only if they can be separated (\textsc{C-Frame}), meaning they do not depend on other predicates.
 Flux should thusly is seems that Flux, can only show inclusion for a subset of what the logic and theories allow.
 As an example consider the sets displayed in \cref{fig:flux-context-space}, which are described by the constraints super-context $x > y - 1 \wedge x > y + 1$, which allows $x$ to vary from $y$ by at most $1$. A sensible sub-context would be $x=y$, which satisfies the constraints, but there is no possible proof for this fact.
 Because Corten delegates sub-context checking to SMT, handling these dependencies is no problem.
@@ -1766,12 +1768,21 @@ Because Corten delegates sub-context checking to SMT, handling these dependencie
 	\label{fig:flux-context-space}
 \end{figure}
 
+The subtyping rules are quite similar. To the degree applicable, \textsc{S-Exists} is analogous to \textsc{$\preceq$-Ty}.
+
 Another difference is the choice of target language: Flux chose $\lambda_{\text{Rust}}$ by Jung et al. \cite{jung_rustbelt_2018} as a basis for the formalization, which expresses the semantics in a continuation passing style over a language based on Rustc's MIR. 
 On the other hand Corten based the formalization on a language based on Rustc's HIR and semantics expressed in a small-spec semantic. 
 
 The corresponding implementations also use the MIR and HIR respectively. The advantages and disadvantages are discussed in \cref{ch:implementation}. Flux takes advantage of the MIR to cover a greater variety of control-flow scenarios.
+Lehmann et al. also found, that "the refinement annotations [..] do not appear in Rust's MIR" \cite[p. 17]{lehmann_flux_2022}, which poses a challenge for the implementation.
 
-To the degree applicable, the subtyping rules are equivalent. \textsc{S-Exists} is equivalent to \textsc{$\preceq$-Ty}
+Lastly Lehmann et al. evaluate Flux against Prusti proofing properties like "the absence of index-overflow error in a suite of vector-manipulating programs." \cite[p. 2]{lehmann_flux_2022}
+Lehmann et al. found, that the liquid type inference system is powerful enough to infer necessary invariants for this use case, partly because "loop invariants express either simple inequalities or tedious bookkeeping" \cite[p. 21]{lehmann_flux_2022}
+In these cases Prusti still required invariants to be specified, which Lehmann et al. party attribute to the fact, for every unchanged mutable reference, the invariant needs to state that the reference was not modified. By using \code{mut}, but not \code{strg} references, Flux could avoid that problem.
+Even though Corten does not share the the strong references mechanism with Flux, the argument still applies: Corten would also not require additional invariants for the unchanging mutable references.
+Because Corten does not support vectors (yet), a direct comparison is not possible.
+
+
 
 \chapter{Conclusion \& Future Work} \label{ch:conclusion}
 

@@ -40,21 +40,24 @@
 \RequirePackage[utf8]{inputenc}
 
 % serif type: Linux Libertine
-\RequirePackage{libertine}
+\RequirePackage[semibold]{libertine}
 % Linux Libertine in math mode
 \RequirePackage[libertine]{newtxmath}
 
 % grotesque type: Adobe Source Sans Pro
-\RequirePackage[scaled=.92]{sourcesanspro}
+% \RequirePackage[scaled=.92]{sourcesanspro}
 
 % monospace type: Bera Mono
 \RequirePackage[scaled=.78]{beramono}
 % \usepackage{inconsolata}
 % \RequirePackage{tgcursor}
 % \RequirePackage{cascadia-code}
+% \RequirePackage[nomath]{lmodern}
+
 
 % semi-bold type (for subsections and paragraphs)
-\newcommand*{\sbdefault}{sb}
+\newcommand*{\sbdefault}{b}
+% \newcommand*{\sbdefault}{sb} % not working for some reason
 \DeclareRobustCommand{\sbseries}{%
   \not@math@alphabet\sbseries\relax
   \fontseries\sbdefault\selectfont}
@@ -66,7 +69,7 @@
 \addtokomafont{paragraph}{\sbseries}
 
 % microtype for nicer typography
-\RequirePackage[protrusion=false, expansion=false]{microtype} % csicar: modified: both set to `false' to work with tectonic
+% \RequirePackage[protrusion=true, expansion=true]{microtype} % csicar: modified: both set to `false' to work with tectonic
 
 % commands for code and model keywords in text
 \newcommand{\code}[1]{\texttt{\hyphenchar\font45\relax #1}}

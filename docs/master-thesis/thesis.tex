@@ -280,7 +280,7 @@ The ownership system is an implementation of affine types. It uniquely associate
 The owner of a Rust object is the binding, that is responsible for freeing the object. In the listing \ref{lst:ownership-transfer}, first \code{a} is the owner of the \code{User} object. An object may only be used once, at which point it is consumed and ownership is transferred to its new binding. In the example \code{greet(user)} uses \code{a} and transferring ownership to \code{greet}. At the end of \code{greet}, there is no new owner, as a result the user object is freed.
 
 \begin{listing}[ht]
-  \begin{minted}[texcomments]{rust}
+  \begin{minted}[fontsize=\footnotesize, texcomments]{rust}
     struct User { name: String, age: u32 }
 
     fn greet(user: User) -> String { // \code{greet} takes ownership for \code{user}
@@ -299,7 +299,7 @@ On closer inspection, handing over the ownership of \code{a} to \code{greet} is 
 For that purpose, Rust offers a different kind of value transfer called \textit{references}, which have similar execution semantics to pointers. Because creating a reference does not transfer the ownership of the pointee, is is called a \textit{borrow}. Listing \ref{lst:ownership-immut-borrow} rephrases \code{greet} to only take a borrow of the user, instead of taking ownership. Because \code{user} is not owned by \code{greet}, it is not permitted to extract \code{user.name} (of Type \code{String}), instead only borrows to the name are allowed. 
 
 \begin{listing}[ht]
-  \begin{minted}[texcomments]{rust}
+  \begin{minted}[fontsize=\footnotesize, texcomments]{rust}
     fn greet(user: &User) -> String { // \code{greet} borrows \code{user}
       let name_ref : &String = &user.name; // borrow \code{name} from \code{user}
       format!("Hi {}", name_ref)
@@ -324,7 +324,7 @@ Thus, Rust ensures, that for every variable at every point during the execution,
 
 
 \begin{listing}[ht]
-  \begin{minted}[texcomments]{rust}
+  \begin{minted}[fontsize=\footnotesize, texcomments]{rust}
     fn age(user: &mut User) {
       (*user).age = user.age + 1;
     }
@@ -377,10 +377,10 @@ In contrast, languages with instance-of-checks allow an implementation of a poly
 \paragraph*{Minimal subtyping} In contrast to object oriented languages, Rust has no user-extendable notion of subtyping. 
 Rust does have a notion of subtyping for its permission system, which serves the purpose of coercing mutable references \code{\&mut T} to immutable references \code{\& T} etc. where needed. Because of the limited, well-known scope, these subtyping relations create no ambiguity with a refinement type system.
 
-\paragraph*{What Rust does not solve} Even though Rust simplifies reasoning about mutability and aliasing of mutable data, Rust does not eliminate the need to reason about multiple references to mutable data. For example, Listing \ref{lst:alias-mut} shows how \code{cell}'s type is influenced by changes to \code{r}. This does not mean, that the ownership rule  \textit{mutability XOR aliasing} are broken: Even though both \code{cell} and \code{r} are mutable, but only one is active.
+\paragraph*{What Rust does not solve} Even though Rust simplifies reasoning about mutability and aliasing of mutable data, Rust does not eliminate the need to reason about multiple references to mutable data. For example, \cref{lst:alias-mut} shows how \code{cell}'s type is influenced by changes to \code{r}. This does not mean, that the ownership rule  \textit{mutability XOR aliasing} are broken: Even though both \code{cell} and \code{r} are mutable, but only one is active.
 
 \begin{listing}[ht]
-  \begin{minted}{rust}
+  \begin{minted}[fontsize=\footnotesize, autogobble]{rust}
     let mut cell = 2;
     let r = &mut cell;
     r+= 1;
@@ -734,7 +734,7 @@ There are other approaches for handling changing values in refinement types, whi
 
 
 \begin{listing}[ht]
-  \begin{minted}[texcomments]{rust}
+  \begin{minted}[fontsize=\footnotesize, texcomments]{rust}
     fn inc() -> ty!{ v: i32 | v == 3 } {
         let mut i = 2;       // i : $\{ v_1 : i32 \mid v_1 == 2 \}$
         i = i + 1;           // i : $\{ v_2 : i32 \mid v_2 == v_1 + 1 \}$
@@ -767,7 +767,7 @@ Note, that the type can only be changed because we know exactly what \code{b} re
 
 
 \begin{listing}[ht]
-  \begin{minted}[texcomments]{rust}
+  \begin{minted}[fontsize=\footnotesize, texcomments]{rust}
     fn client() -> ty!{ v: i32 | v == 4 } {
         let a = 2;       // a : $\{ v_1 : i32 \mid v_1 == 2 \}$
         let b = &mut a;  // b : $\{ v_2 : &i32 \mid v_2 == &a \}$
@@ -791,7 +791,7 @@ Because the destination is ambiguous, assigning to \code{*res} can not change th
 
 
 \begin{listing}[ht]
-  \begin{minted}[texcomments]{rust}
+  \begin{minted}[fontsize=\footnotesize, texcomments]{rust}
     fn weak_updates(x : ty!{ x1 : i32 }) -> ty!{ v : i32 | v > 2 * x1 + 10 } {
       let mut y = x as ty!{ y1 : i32 | y1 >= x1 };
       let mut z = x + 10 as ty!{ z1 : i32 | z1 >= x1 + 10 };
@@ -816,7 +816,7 @@ Because the destination is ambiguous, assigning to \code{*res} can not change th
 Firstly, the type system is path sensitive, meaning that the type system is aware of necessary XXX that need to be passed for an expression to be evaluated. For example listing \ref{lst:max-path-sensitive} shows a function computing the maximum of its inputs. In the then branch, $a$ is only a maximum of $a$ and $b$, because the condition $a > b$ implies it. Corten will symbolically evaluate the condition and store it in its typing context.
 
 \begin{listing}[ht]
-  \begin{minted}{rust}
+  \begin{minted}[fontsize=\footnotesize]{rust}
     fn max(a : ty!{ av: i32 }, b: ty!{ bv: i32 })
         -> ty!{ v: i32 | v >= av && v >= bv} {
         if a > b {
@@ -838,7 +838,7 @@ Firstly, the type system is path sensitive, meaning that the type system is awar
 \label{subsec:strong-type-updates}\subsection{Strong Type Updates}
 
 \begin{listing}[ht]
-  \begin{minted}{rust}
+  \begin{minted}[fontsize=\footnotesize]{rust}
     fn strong_updates(b: ty!{ bv: i32 | bv > 0}) -> ty!{ v: i32 | v > 2} {
         let mut a = 2;
         a = a + b;
@@ -858,7 +858,7 @@ For a verification system to be scalable, it needs to be able modularize a proof
 Notice, that all of the type information about \code{y} is preserved when \code{inc(x)} is called. There are no further annotations needed to type check this program. This is possible, because in safe Rust, any (externally observable) mutation done by a function must be part of the function signature. Corten expands on this, by enabling the user specify exactly how a referenced value is mutated.
 
 \begin{listing}[ht]
-  \begin{minted}{rust}
+  \begin{minted}[fontsize=\footnotesize]{rust}
     fn inc(a: &mut ty!{ a1: i32 => a2 | a2 == a1 + 1 }) {
       *a = *a + 1;
     }
@@ -889,7 +889,7 @@ If \code{sum} is updated first, we can establish its type, but once \code{i} is 
 }.
 
 \begin{listing}[ht]
-  \begin{minted}[autogobble]{rust}
+  \begin{minted}[fontsize=\footnotesize, autogobble]{rust}
     let sum = 0;
     let i = 0;
     
@@ -1293,7 +1293,7 @@ There are additional short forms of these macro calls, which where cut from the 
 Note that, because the \code{ty!} macro takes the place of a Rust type, normal IDE features, like "Goto Type Definition" still work on the base types without any adaptation.
 
 \begin{listing}[ht]
-  \begin{minted}[autogobble]{rust}
+  \begin{minted}[fontsize=\footnotesize, autogobble]{rust}
   pub type Refinement<
     T,                      // Rust type
     const B: &'static str,  // Logic Variable
@@ -1340,7 +1340,7 @@ These function utilize \code{require\_is\_sub\_context} and \code{require\_is\_s
 The following paragraph will give an example for how these SMT solver requests look like.
 
 \begin{listing}[ht]
-  \begin{minted}[autogobble, texcomments]{rust}
+  \begin{minted}[fontsize=\footnotesize, autogobble, texcomments]{rust}
   fn type_check_function(
     function: &hir::Item,
     tcx: &TyCtxt,
@@ -1386,7 +1386,7 @@ The following paragraph will give an example for how these SMT solver requests l
 \paragraph{Simple Example}
 
 \begin{listing}[ht]
-  \begin{minted}[autogobble, texcomments]{rust}
+  \begin{minted}[fontsize=\footnotesize, autogobble, texcomments]{rust}
   fn inc(a : ty!{ n : i32 | n > 0}) -> ty!{v : i32 | v > 1} {
     let b = 1;
     a + b
@@ -1405,7 +1405,7 @@ Because the SMT call returned \code{unsat}, the subtype relation is valid and th
 
 
 \begin{listing}[ht]
-  \begin{minted}[autogobble]{lisp}
+  \begin{minted}[fontsize=\footnotesize, autogobble]{lisp}
   (declare-datatypes () ((Unit unit)))
   ; <Context>
     ; decl for <fud.rs>:79:73: 79:74 (#0) local b
@@ -1457,7 +1457,7 @@ The first example will show how a the \code{max} function can be implemented and
 
 
 \begin{listing}[ht]
-  \begin{minted}[autogobble, texcomments]{rust}
+  \begin{minted}[fontsize=\footnotesize, autogobble, texcomments]{rust}
   fn max(a: ty!{ a: i32 }, b: ty!{ b: i32}) 
     -> ty!{ v: i32 | v >= a && v >= b && (v == a || v == b) } {
     if a > b {
@@ -1474,7 +1474,7 @@ The first example will show how a the \code{max} function can be implemented and
 Of course an incorrect implementation will produce a type judgement error. If, for example, the else branch returned \code{a} instead of \code{b}, the system would return the error shown in listing \ref{lst:eval-max-error}. The exact location of where the error occurred is also the current implementation does not expose this data yet.
 
 \begin{listing}[ht]
-  \begin{minted}[autogobble]{text}
+  \begin{minted}[fontsize=\footnotesize, autogobble]{text}
   Subtyping judgement failed: 
   ty!{ _1 : i32 | true && _1 == a } is not a sub_ty of 
   ty!{ v : i32 | v >= a && v >= b && (v == a || v == b) } 
@@ -1495,7 +1495,7 @@ Path sensitivity is not limited to the return value: Effect on the type context 
 Note, that when typing \code{client}, CortenC needs to match \code{\&mut x} with \code{a} and thusly \code{x} with \code{s} to correctly handle the effects of calling \code{clamp}. Because of this reason, function calls require all arguments to be variables or reference to variables. This is not a restriction of the type system, but a simplification for the implementation.
 
 \begin{listing}[ht]
-  \begin{minted}[autogobble, texcomments]{rust}
+  \begin{minted}[fontsize=\footnotesize, autogobble, texcomments]{rust}
   fn clamp(
       a: &mut ty!{ a1: i32 | true => s | (s <= max) && (s == a1 || s == max) }, 
       max: ty!{ max: i32 }
@@ -1522,7 +1522,7 @@ Thanks to Corten's modular approach, handling recursive functions is strait forw
 
 
 \begin{listing}[ht]
-  \begin{minted}[autogobble, texcomments, fontsize=\footnotesize]{rust}
+  \begin{minted}[fontsize=\footnotesize, autogobble, texcomments, fontsize=\footnotesize]{rust}
     fn fib(n: ty!{ nv: i32 | nv >= 0}) -> ty!{ v: i32 | v >= nv * nv } {
       if n >= 2 {
           let n1 = n - 1; let n2 = n - 2;
@@ -1553,7 +1553,7 @@ The second challenge is establishing the loop invariant in the first place: Rela
 For this purpose, CortenC provides the \code{relax\_ctx!} macro, that allows the programmer to change the type of multiple variables at a time, as long as the previous state \textit{as a whole} implies the newly chosen predicates.
 
 \begin{listing}[ht]
-  \begin{minted}[autogobble, texcomments]{rust}
+  \begin{minted}[fontsize=\footnotesize, autogobble, texcomments]{rust}
   fn gauss(n: ty!{ nv : i32 | nv > 0 }) 
   -> ty!{ v : i32 | 2 * v == nv * (nv + 1) } {
     let mut i = 0;
@@ -1590,7 +1590,7 @@ The \code{client} just needs to make sure, that the proof of \code{c} is stored 
 
 
 \begin{listing}[ht]
-  \begin{minted}[autogobble, texcomments]{rust}
+  \begin{minted}[fontsize=\footnotesize, autogobble, texcomments]{rust}
   fn panic() -> ty!{ v : () | false } {
       while(true) { () }
   }
@@ -1657,7 +1657,7 @@ Shared (immutable) references, mutable weak (unique) references and strong refer
 \begin{listing}[ht]
   \begin{minipage}[t]{0.48\linewidth}
     
-    \begin{minted}[autogobble, fontsize=\footnotesize]{rust}
+    \begin{minted}[fontsize=\footnotesize, autogobble, fontsize=\footnotesize]{rust}
     #[lr::sig(fn(i32<@n>) 
       -> bool<0 < n>)]
     fn is_pos(n: i32) -> bool {
@@ -1672,7 +1672,7 @@ Shared (immutable) references, mutable weak (unique) references and strong refer
     \end{minted}
   \end{minipage}
   \begin{minipage}[t]{0.48\linewidth}
-    \begin{minted}[autogobble, fontsize=\footnotesize]{rust}
+    \begin{minted}[fontsize=\footnotesize, autogobble, fontsize=\footnotesize]{rust}
     fn is_pos(n: ty!{ n : i32}) 
       -> ty!{ v: bool | v == 0 < n } {
       if 0 < n { true as ... } else { false }
@@ -1701,7 +1701,7 @@ To demonstrate the difference in the handling of strong updates, consider the si
 \begin{listing}[ht]
   \begin{minipage}[t]{0.48\linewidth}
     
-    \begin{minted}[autogobble, fontsize=\footnotesize]{rust}
+    \begin{minted}[fontsize=\footnotesize, autogobble, fontsize=\footnotesize]{rust}
     fn increment(&strg v : Nat<n>) -> ()
       ensures *self: Nat<n+1>;
     fn decrement(&strg v : Nat<n>) -> ()
@@ -1710,7 +1710,7 @@ To demonstrate the difference in the handling of strong updates, consider the si
     \end{minted}
   \end{minipage}
   \begin{minipage}[t]{0.48\linewidth}
-    \begin{minted}[autogobble, fontsize=\footnotesize]{rust}
+    \begin{minted}[fontsize=\footnotesize, autogobble, fontsize=\footnotesize]{rust}
       fn increment(n: &mut ty!{
        n1: Nat => n1 | n1 == n1+1 }
       ) -> ();
@@ -1738,19 +1738,40 @@ Function signatures are expressed quite similarly.
 Flux function signatures have the form $\forall \bar{v : \sigma}. \text{fn}\left(r ; \bar{x}. T_i\right) \to \rho_0.T_0$
 Consider the function decrease from \cref{lst:compare-flux-strong-updates}. In Flux the function signature would be encoded as:
 
-\[\forall n : \text{int}, \rho : \text{loc} 
+\[\forall n : \text{int}, \rho : \text{loc}.
   \text{ fn}\left(n > 0, 
-    x.\{ \rho \mapsto \text{nat}_{\tau}\langle n \rangle, v \mapsto \text{prt}(\rho)\}
+    x.\{ \rho \mapsto \text{nat}_{\tau}\langle n \rangle, x \mapsto \text{prt}(\rho)\}
     \rightarrow 
-    \rho_0. \{\rho_0 \mapsto \tau, \rho \mapsto \text{nat}_{\tau}\langle n - 1 \rangle \}
+    \rho_0. \{\rho_0 \mapsto (), \rho \mapsto \text{nat}_{\tau}\langle n - 1 \rangle \}
     \right)
 \]
 
-Corten encode the function as:
+The rule \textsc{T-Def} initializes the context to 
+  $\Delta = (n > 0, v : \text{loc}, n : \text{int})$
+  , $K = (x \mapsto \text{prt}(\rho), \rho \mapsto \text{nat}_{\tau}\langle n \rangle)$
+  and the expected return value $T_0 = \{\rho_0 \mapsto (), \rho \mapsto \text{nat}_{\tau}\langle n - 1 \rangle \}$
 
-\[
-  fn 
-\]
+Corten would generate an initial context $\Gamma = (\mu, \Phi)$ with $\mu = \{n \mapsto \&arg_0, arg_0 \mapsto v_1\}$, $\Phi = \{v_1 > 0\}$ and expected return type $\{ v_r : () \mid \text{true}\}$ and end context $\mu' = \{arg_0 \mapsto v_2\}$,
+$\Phi' = \{v_2 \doteq v_1 - 1, v_1 > 0\}$.
+
+What Corten calls a sub-context relation, is referred to as context inclusion in Flux. Flux is significantly more conservative with its rules: Only allowing permutations (\textsc{C-Perm}), removal (\textsc{C-Weaken}) of predicates and subtyping of just individual types (\textsc{C-Sub}) and only if they can be separated (\textsc{C-Frame}), meaning they do not depend on other predicates.
+Flux should thusly is seems that Flux, can only show inclusion for a subset of what the logic and theories allow.
+As an example consider the sets displayed in \cref{fig:flux-context-space}, which are described by the constraints super-context $x > y - 1 \wedge x > y + 1$, which allows $x$ to vary from $y$ by at most $1$. A sensible sub-context would be $x=y$, which satisfies the constraints, but there is no possible proof for this fact.
+Because Corten delegates sub-context checking to SMT, handling these dependencies is no problem.
+
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=0.5\linewidth]{../context-space.png}
+	\caption{Figure showing a value space, where inclusion can not be shown}
+	\label{fig:flux-context-space}
+\end{figure}
+
+Another difference is the choice of target language: Flux chose $\lambda_{\text{Rust}}$ by Jung et al. \cite{jung_rustbelt_2018} as a basis for the formalization, which expresses the semantics in a continuation passing style over a language based on Rustc's MIR. 
+On the other hand Corten based the formalization on a language based on Rustc's HIR and semantics expressed in a small-spec semantic. 
+
+The corresponding implementations also use the MIR and HIR respectively. The advantages and disadvantages are discussed in \cref{ch:implementation}. Flux takes advantage of the MIR to cover a greater variety of control-flow scenarios.
+
+To the degree applicable, the subtyping rules are equivalent. \textsc{S-Exists} is equivalent to \textsc{$\preceq$-Ty}
 
 \chapter{Conclusion \& Future Work} \label{ch:conclusion}
 

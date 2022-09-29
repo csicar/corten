@@ -190,6 +190,7 @@
 
 \listoffigures
 \listoftables
+\listoflistings
 
 %% -----------------
 %% |   Main part   |
@@ -217,9 +218,9 @@ A feasibility study on minimal examples of challenging use cases shows how usefu
 Specifying or verifying complete Rust modules or the entire Rust language is not the goal of the thesis. In particular \code{unsafe} Rust will not be taken into account in specification nor implementation. Implementing Liquid Type inference is also not a goal of the thesis.
 
 The accompanying implementation extends the Rust compiler, enables automatic parsing of the refinement type language and automated type checking of a subset of Rust, as well as limited inference and error reporting. 
-The thesis also gives a description of the syntax and semantics of the subset of Rust as well as the refinement type system.
+% The thesis also gives a description of the syntax and semantics of the subset of Rust as well as the refinement type system.
 
-The contributions of this thesis are:
+The main contributions of this thesis are:
 \begin{enumerate}
   \item Automatic empirical analysis of the usage of mutability and unsafe in Rust using syntactic information
   \item Extension to the Rust type system to allow for refinement type specifications
@@ -228,7 +229,7 @@ The contributions of this thesis are:
 \end{enumerate}
 
 The thesis if structured as follows: 
-\cref{ch:foundations} will give an overview of the foundation the thesis build upon.
+\Cref{ch:foundations} will give an overview of the foundation the thesis build upon.
 Thereafter in \cref{ch:analysis} an empirical analysis of \code{unsafe} and mutability uses is performed to gain an understanding of how Rust is used.
 \Cref{ch:language} defines the subset of Rust, that will be the basis for the type system.
 Next \cref{ch:type-system} explains the actual type system and type checking, as well as justifying its correctness, followed by chapter \cref{ch:implementation}, which will provide additional information about how the type system was implemented.
@@ -262,7 +263,7 @@ Rondon et al. \cite{rondon_liquid_2008} chose the EUFA as the logic fragment, me
 
 \section{Rust}
 
-The Rust programming language \cite{matsakis_rust_2014}, is a multi-paradigm systems programming language, originally developed by Graydon Hoare at Mozilla Research.
+The Rust programming language \cite{matsakis_rust_2014} is a multi-paradigm systems programming language, originally developed by Graydon Hoare at Mozilla Research.
 Even though Rust is quite young, the first stable release published in 2015, it has attracted interest in a wide area of applications and organization. It is used everywhere from Volvo building embedded software for cars \cite{foufas_why_2022} to Western Digital implementing a NVMe driver for Linux in Rust \cite{larabel_lpc_2022} and of course the Rust compiler it self.
 It draws inspiration from functional and imperative programming languages. The core forms a set of features usually found in functional programming languages: Functions, closures, algebraic data types, type classes (called traits in Rust) and pattern matching, immutability are all common place in Rust.
 However, Rust is also influenced by C: Rust extends its ML base with optional mutability of data and references and manual memory management. Many design decisions of Rust can be explained by Rust's ambitions to offer safe and clear ML-like abstractions without compromising on performance compared to C.
@@ -1708,13 +1709,11 @@ The \code{client} just needs to make sure, that the proof of \code{c} is stored 
 
 \chapter{Related Work} \label{ch:related-work}
 
-There currently does not exist an implementation of refinement types for Rust.
-
 Relevant papers originate from two lines of work. Firstly additions to refinement types for mutability, asynchronous execution etc. and secondly other verification frameworks for Rust.
 
 For example, Lanzinger \cite{lanzinger_property_2021} successfully adapted refinement types to Java, which allows the user to check, that property types described by java annotations hold true throughout the program. At this point in time, specification and verification is limited to immutable (\code{final}) data.
 
-Kloos et al. \cite{kloos_asynchronous_2015} extended refinement types to mutable and asynchronous programs. The paper explores how changes to possibly aliased memory cells can be tracked throughout a OCaml program. For that purpose the types are extended by a set of requirements on memory objects, which track distinctness and refined types of these memory cells. In contrast to OCaml, Rust already guarantees that mutable memory is not aliased and in particular \textit{all mutable memory locations must be accessible by a variable name in the current context}, which offers substantial advantages in terms of simplicity to specification and verification of Rust programs.
+
 
 Refinement types are also used in other applications. For example Graf et al. \cite{graf_lower_2020} use refinement types to check the exhaustiveness of pattern matching rules over complex (G)ADT types in Haskell. To check the exhaustiveness of patterns in Liquid Rust with ADTs may require similar approaches.
 
@@ -1722,7 +1721,6 @@ In terms of alternative verification approaches, Prusti\cite{astrauskas_leveragi
 
 Alternative verification approaches also exists: For example RustHorn\cite{matsushita_rusthorn_2020} employs constrained horn clauses based verification to Rust. Particularity relevant for this thesis is the novel formalization for mutable references used in the paper. The authors stipulate that mutable references should be specified by a pre- and post-state from before a reference is borrowed to after it is returned.
 
-The notion of Abstract Refinement Types that this thesis is based on is defined by Vazou et al. \cite{vazou_abstract_2013}. The basic idea is to allow the programmer to "refine" language types with predicates from a decidable logic. The type system has a notion of subtyping for refined types, where one type is a subtype of another if one predicate implies the other.
 
 \subsection{Alternative Approaches for Handling Mutability} \label{subsec:related-work-mutability} 
 
@@ -1731,6 +1729,34 @@ Of course the design space permits choosing other tradeoffs. For example, Rondon
   - 
 
 this is not the only way to deal with mutability: 
+
+\paragraph*{Rust verification}
+
+Given Rust's ownership system and predestined position as language for writing future safety critical software, Rust has sparked interest in the software verification field. There are several papers with a variety of approaches.
+
+
+Ullrich \cite{ullrich_simple_nodate} translates Rust's MIR to the theorem prover / dependently typed language Lean (\cite{de_moura_lean_2015}), forgoing automation, but offering a clean modelling and extensive coverage of the Rust language.
+\paragraph*{Refinement Types}
+
+Refinement Types were originally developed for verification in functional languages by Freeman and Pfenning \cite{freeman_refinement_1991}, who define a subtyping relation for ML types on a lattice of possible union and intersection of types and check them using a system called tree automata. 
+Xi and Pfenning \cite{xi_dependent_1999} rephrase this notion subtype refinement as a restricted dependent type, where the constraints less expressive than the base language, making automatic verification attainable. They show, that type checking is decidable (relative to a decidable domain), but inference is not.
+
+Taking advantage of the advances in SMT solvers, Rondon et al. \cite{rondon_liquid_2008} devised a type system, that combines the ideas of refinement subtyping and restricted dependent types with the novel inference system to create a path sensitive and decidable type inference system.
+
+Vazou et al. \cite{vazou_abstract_2013} extend the refinement language to allow for uninterpreted predicates to be placed in the refinement predicate, which retain the decidability of type checking, while at the same time offering significant benefits to expressiveness. 
+
+\paragraph*{Refinement Types and Mutability} 
+
+Rondon et al. \cite{rondon_low-level_2010} extend Liquid Types to a reduced subset of C featuring mutable aliased pointers. Their type system CSolve extends Refinement Types to enable verification of low-level program with pointer arithmetic.
+Bakst and Jhala \cite{bakst_predicate_2016} present a type system based on Refinement Types named Alias Refinement Types, which combines alias types with Refinement Types.
+Both approaches focus on a C-like target language that provides little guarantees, which is not conducive to reasoning about aliasing, necessitating ad-hoc mechanisms to control aliasing.
+
+Recognizing the fact, Sammler et al. \cite{sammler_refinedc_2021} devise an ownership type system for C used, that is combined with a Refinement Types. 
+Besides automatic verification, their type system can also translate their proofs to Coq, following the approach of RustBelt.
+RefinedC ownership model differs from Rust.
+
+Kloos et al. \cite{kloos_asynchronous_2015} extended refinement types to mutable and asynchronous programs. The paper explores how changes to possibly aliased memory cells can be tracked throughout a OCaml program. For that purpose the types are extended by a set of requirements on memory objects, which track distinctness and refined types of these memory cells. In contrast to OCaml, Rust offers extensive guarantees, which offers substantial advantages in terms of simplicity to specification and verification of Rust programs.
+
 
 \section{Comparison to Flux} \label{sec:flux}
 

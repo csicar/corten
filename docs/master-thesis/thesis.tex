@@ -1102,22 +1102,23 @@ We write:
 \end{gather*}
 
 
+%%%% OLD Must ref rule
 
 % The rule $\Gamma \vdash \alpha \text{ could reference } y_1 \vee \dots \vee y_n$ stipulates, that the context $\Gamma$ permits $\alpha$ to refer to at most $y_1 \vee \dots \vee y_n$, but no other variables. 
-The  $\Gamma \vdash \alpha \text{ must reference } y$ rule stipulates, that the context $\Gamma$ requires $\alpha$ to refer to exactly $y$. it is necessary to follow basic indirections from equality constraints, that other rules (like \textsc{Fn-Call} or \textsc{Var}) introduce. Because of the how limited the subset of the predicate language used for references is, even a very basic, conservative approximation is adequate for this purpose: 
-A fixpoint construction of an equivalence class containing all logic variables equal to $\alpha$ is incrementally constructed. If any of these variables reference $y$, then $\alpha$ must reference $y$.
-Of course a more sophisticated approach is also possible: Dispatching a request to SMT, that asserts, that $\alpha$ references some (unconstrained) $y$ and that there is second $y'$ with this a property. Retrieving the value for $y$ from SMT is the result of the rule application.
+% The  $\Gamma \vdash \alpha \text{ must reference } y$ rule stipulates, that the context $\Gamma$ requires $\alpha$ to refer to exactly $y$. it is necessary to follow basic indirections from equality constraints, that other rules (like \textsc{Fn-Call} or \textsc{Var}) introduce. Because of the how limited the subset of the predicate language used for references is, even a very basic, conservative approximation is adequate for this purpose: 
+% A fixpoint construction of an equivalence class containing all logic variables equal to $\alpha$ is incrementally constructed. If any of these variables reference $y$, then $\alpha$ must reference $y$.
+% Of course a more sophisticated approach is also possible: Dispatching a request to SMT, that asserts, that $\alpha$ references some (unconstrained) $y$ and that there is second $y'$ with this a property. Retrieving the value for $y$ from SMT is the result of the rule application.
 
-\begin{gather*}
-  \inferrule*[left=Must-Ref]
-    {\exists y. \forall \alpha, \beta, \dots. \Phi \to \alpha \doteq \&y 
-    \\ \vDash \Phi \to \alpha \doteq \&y
-      \\ 
-      \vDash \Phi \wedge \alpha \doteq \&y  \wedge \alpha \doteq \&y' \to y \doteq y'
-    }
-    {(\mu, \Phi) \vdash \alpha \text{ must reference } y}
-\end{gather*}
-\todo{In think the first precondition and second precondition should serve the same purpose. Second one should be nicer and correct}
+% \begin{gather*}
+%   \inferrule*[left=Must-Ref]
+%     {\exists y. \forall \alpha, \beta, \dots. \Phi \to \alpha \doteq \&y 
+%     \\ \vDash \Phi \to \alpha \doteq \&y
+%       \\ 
+%       \vDash \Phi \wedge \alpha \doteq \&y  \wedge \alpha \doteq \&y' \to y \doteq y'
+%     }
+%     {(\mu, \Phi) \vdash \alpha \text{ must reference } y}
+% \end{gather*}
+% \todo{In think the first precondition and second precondition should serve the same purpose. Second one should be nicer and correct}
 
 
 
@@ -1326,7 +1327,8 @@ Note that, because the \code{ty!} macro takes the place of a Rust type, normal I
         $crate::Refinement< $base_ty, {stringify! { $i }}, {stringify! { $pred }}>
     };
     ($i:ident : $base_ty:ty | $pred:expr => $i2: ident | $pred2:expr) => {
-        $crate::MutRefinement< $base_ty, {stringify! { $i }}, {stringify! { $pred }}, {stringify! { $i2 }}, {stringify! { $pred2 }}>
+        $crate::MutRefinement< $base_ty, 
+          {stringify! { $i }}, {stringify! { $pred }}, {stringify! { $i2 }}, {stringify! { $pred2 }}>
     };
     // -- snip --
   }
@@ -1621,6 +1623,48 @@ Notable is, that CortenC can use these facts in the \code{client} function: For 
   \label{lst:evaluation-swap}
 \end{listing}
 
+\section{Pseudo Vectors}
+
+The next example will demonstrate, that CortenC would be able to specify and verify the absence of index-out-of-bounds errors on vectors. To this end, \cref{lst:evaluation-vec} the type alias \code{IntVec} is introduced, where its value represents the vector length.
+The functions below are part of the interface of vectors and ensure, that the length is never negative.
+
+If \code{pop} was called on a vector, that could not be shown to have sufficient length, CortenC would reject the program.
+
+\begin{listing}[ht]
+  \begin{minted}[fontsize=\footnotesize, autogobble, texcomments]{rust}
+    type IntVec = i32;
+
+    fn new() -> ty!{v: IntVec | v == 0 } {
+        0
+    }
+
+    fn len(v : &mut ty!{ b: IntVec => a | a == b }) -> ty!{ r: i32 | r == b } {
+        *v
+    }
+
+    fn is_empty(v : &mut ty!{ v1 : i32 => v2 | v2 == v1 }) 
+      -> ty!{ e : bool | e == (v1 == 0) } {
+        let l = len(v); l == 0
+    }
+
+    fn push(v : &mut ty!{ v1 : i32 => v2 | v2 == v1 + 1 }) -> ty!{ r : () } {
+        *v = *v + 1; ()
+    }
+
+    fn pop(v : &mut ty!{ v1 : i32 | v1 > 0 => v2 | v2 == v1 - 1 }) -> ty!{ r : () } {
+        *v = *v - 1; ()
+    }
+
+    fn client() -> ty!{ r : i32 | r == 1 } {
+        let mut v = new();
+        push(&mut v); push(&mut v); pop(&mut v); push(&mut v); pop(&mut v);
+        len(&mut v)
+    }
+  \end{minted}
+  \caption{Example demonstrating modularity and ease of specification for complex mutation patterns}
+  \label{lst:evaluation-vec}
+\end{listing}
+
 
 \section{Rephrasing built-ins in terms of Refinement Types}
 
@@ -1688,7 +1732,7 @@ Of course the design space permits choosing other tradeoffs. For example, Rondon
 
 this is not the only way to deal with mutability: 
 
-\section{Comparison to Flux}
+\section{Comparison to Flux} \label{sec:flux}
 
 During the writing of the thesis, Lehmann et al. \cite{lehmann_flux_2022} published a preprint for a paper, that is especially relevant. Lehmann et al. describe a implementation of Liquid Types for Rust called Flux, covering the same solution and problem space to Corten. 
 For the purpose of plurality in design and implementation of such a system, is was decided to only read the paper after finishing the Corten type system.

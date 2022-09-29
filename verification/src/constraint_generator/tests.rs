@@ -1967,12 +1967,10 @@ mod evaluation {
                 }
 
                 fn len(v : &mut ty!{ b: IntVec | true => a | a == b }) -> ty!{ r: i32 | r == b } {
-                    // let a = v;
-                    // let g = *a;
                     *v
                 }
 
-                fn is_empty(v : &mut ty!{ v3 : i32 | true => v4 | v4 == v3 }) -> ty!{ e : bool | e == (v3 == 0) } {
+                fn is_empty(v : &mut ty!{ v1 : i32 | true => v2 | v2 == v1 }) -> ty!{ e : bool | e == (v1 == 0) } {
                     let l = len(v);
                     l == 0
                 }
@@ -1987,15 +1985,12 @@ mod evaluation {
 
                 fn client() -> ty!{ r : i32 | r == 1 } {
                     let mut v = new();
-                    let empty = is_empty(&mut v);
-                    // if empty {
-                    //     push(&mut v);
-                    // } else {}
                     push(&mut v);
                     push(&mut v);
                     pop(&mut v);
-                    // len(&mut v)
-                    v
+                    push(&mut v);
+                    pop(&mut v);
+                    len(&mut v)
                 }
 
             }

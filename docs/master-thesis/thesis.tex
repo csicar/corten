@@ -974,7 +974,7 @@ The domain restriction ensures, that the sub-context does not contain additional
 \[
   \inferrule*[left=$\preceq$-Ctx]
     {
-      \text{SMT-Valid}(\Phi'[\mu'(\alpha) \triangleright \mu(\alpha)\ \mid \alpha \in \text{dom}(\mu)] \implies \Phi)
+      \text{SMT-Valid}(\Phi'[\mu'(\alpha) \triangleright \mu(\alpha)\ \mid \alpha \in \text{img}(\mu)] \implies \Phi)
       \\ \text{dom}(\mu) \subseteq \text{dom}(\mu')
     }
     {(\Phi, \mu) \preceq (\Phi', \mu')}
@@ -1087,21 +1087,29 @@ We write:
       \\\\ \Gamma \vdash \tau \preceq \{ \beta_1 \mid \varphi_1 \}
       \\     \dots  
       \\ \Gamma \vdash \tau \preceq \{ \beta_n \mid \varphi_n \}
-      \\\\ \Gamma[x \mapsto \beta_1], \varphi_1 \preceq \Gamma
+      \\\\ \Gamma \vdash y_i : \{ \beta_1 \mid \varphi_1 \}
       \\ \dots 
-      \\ \Gamma[x \mapsto \beta_n], \varphi_n \preceq \Gamma
+      \\ \Gamma \vdash y_i : \{ \beta_i \mid \varphi_i \}
       }
     {\Gamma \vdash *x = e \Rightarrow \Gamma}
+  % %
+  % \\
+  % \inferrule*[left=Fn-Call]
+  %   {
+  %     \text{subst} = ...
+  %     \\
+  %     \\ (\mu[subst], \alpha \doteq \mu(a) \wedge \dots \wedge \varphi_{\alpha} \wedge\dots) \preceq (\mu, \Phi)
+  %     \\ f : (\{ \alpha \mid \varphi_{\alpha} \} \Rightarrow \{ \alpha' \mid \varphi'_{\alpha} \}, \dots) \to \tau
+  %   }
+  %   {(\mu, \Phi) \vdash \code{let res} = f(a, \dots, \code{\&mut} b, \dots) \Rightarrow (\mu[a \mapsto \alpha', \dots, subst^{-1}], \Phi \wedge \varphi'_{\alpha} \wedge \dots)}
   %
   \\
   \inferrule*[left=Fn-Call]
     {
-      \text{subst} = ...
-      \\
-      \\ (\mu[subst], \alpha \doteq \mu(a) \wedge \dots \wedge \varphi_{\alpha} \wedge\dots) \preceq (\mu, \Phi)
-      \\ f : (\{ \alpha \mid \varphi_{\alpha} \} \Rightarrow \{ \alpha' \mid \varphi'_{\alpha} \}, \dots) \to \tau
+     (\mu, \Phi) \preceq (\mu, \Phi \wedge, \overline{x_i \doteq a_i \wedge \varphi_i}, \overline{y_j \doteq b_i \wedge \psi_j})
+     \\ \Sigma \vdash f(\overline{a_i : \{ \alpha_i : l_i \mid \varphi_i \}}, \overline{b_j : \{ \beta_j : l_j \mid \psi_j \Rightarrow \beta_j' \mid \psi_j'\}})
     }
-    {(\mu, \Phi) \vdash \code{let res} = f(a, \dots, \code{\&mut} b, \dots) \Rightarrow (\mu[a \mapsto \alpha', \dots, subst^{-1}], \Phi \wedge \varphi'_{\alpha} \wedge \dots)}
+    {(\mu, \Phi) \vdash \code{let res} = f(\overline{x_i}, \overline{\&mut y_j}) => \mu[\overline{x_i \mapsto \alpha_i}, \overline{y_j \mapsto \beta_j}], \Phi \wedge \overline{\phi_i} \wedge \overline{\psi_j} \wedge \overline{\psi_i}}
 \end{gather*}
 
 
@@ -1776,7 +1784,13 @@ Given Rust's ownership system and predestined position as language for writing f
 
 
 Ullrich \cite{ullrich_simple_nodate} translates Rust's MIR to the theorem prover / dependently typed language Lean (\cite{de_moura_lean_2015}), forgoing automation, but offering a clean modelling and extensive coverage of the Rust language.
+
+A key observation made by Ullrich is, that with Rust's ownership system, mutable references can be encoded as a linear state monad, meaning a mutable reference parameter can be translated in to a immutable initial value and a returned value representing the mutated type. Corten's syntax for mutable refinement parameters is inspired by this fact.
+
 \paragraph*{Refinement Types}
+
+- bmc
+- kani
 
 Refinement Types were originally developed for verification in functional languages by Freeman and Pfenning \cite{freeman_refinement_1991}, who define a subtyping relation for ML types on a lattice of possible union and intersection of types and check them using a system called tree automata. 
 Xi and Pfenning \cite{xi_dependent_1999} rephrase this notion subtype refinement as a restricted dependent type, where the constraints less expressive than the base language, making automatic verification attainable. They show, that type checking is decidable (relative to a decidable domain), but inference is not.

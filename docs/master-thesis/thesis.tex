@@ -30,6 +30,7 @@
 % \usepackage{csquotes}
 \usepackage{ stmaryrd }
 \usepackage{stackengine,scalerel}
+\usepackage{mathtools}
 \usepackage[nameinlink]{cleveref}
 
 % \usepackage[scaled=.78]{beramono}
@@ -60,19 +61,20 @@
 % \setmonofont{DejaVu Sans Mono}
 % \usepackage[]{lmodern}
 
+\usepackage[]{todo}
+% \usepackage[colorinlistoftodos,prependcaption,textsize=tiny]{todonotes}
 
-\usepackage[colorinlistoftodos,prependcaption,textsize=tiny]{todonotes}
-
-\newcommandx{\unsure}[2][1=]{\todo[linecolor=red,backgroundcolor=red!25,bordercolor=red,#1]{#2}}
-\newcommandx{\change}[2][1=]{\todo[linecolor=blue,backgroundcolor=blue!25,bordercolor=blue,#1]{#2}}
-\newcommandx{\info}[2][1=]{\todo[linecolor=OliveGreen,backgroundcolor=OliveGreen!25,bordercolor=OliveGreen,#1]{#2}}
-\newcommandx{\improvement}[2][1=]{\todo[linecolor=Plum,backgroundcolor=Plum!25,bordercolor=Plum,#1]{#2}}
+% \newcommandx{\unsure}[2][1=]{\todo[linecolor=red,backgroundcolor=red!25,bordercolor=red,#1]{#2}}
+% \newcommandx{\change}[2][1=]{\todo[linecolor=blue,backgroundcolor=blue!25,bordercolor=blue,#1]{#2}}
+% \newcommandx{\info}[2][1=]{\todo[linecolor=OliveGreen,backgroundcolor=OliveGreen!25,bordercolor=OliveGreen,#1]{#2}}
+% \newcommandx{\improvement}[2][1=]{\todo[linecolor=Plum,backgroundcolor=Plum!25,bordercolor=Plum,#1]{#2}}
 
 % \newcommand{\code}[1]{\texttt{#1}} 
 
 \newcommand{\mtext}[1]{$\text{#1}$}
 \newcommand{\tuple}[2]{\langle #1 \mid #2 \rangle}
 \newcommand{\bbracket}[1]{\llbracket #1 \rrbracket}
+\newcommand{\tr}[0]{\triangleright}
 
 \DeclareMathOperator{\rref}{ref}
 
@@ -1127,12 +1129,6 @@ We write:
 
 As usual, we consider the three properties (see Pierce \cite[p. 95, p.167]{pierce_types_2002}) of a type system when assessing the correctness of MiniCorten:
 
-\begin{definition}[State Conformance]
-  A state $\sigma$ is conformant with respect to a typing context $\Gamma = (\mu, \varphi)$ (written as $\sigma : \Gamma$), iff:
-  $$\vDash \left(\bigwedge_{x \in \text{Var}} \mu(x) \doteq \sigma(x)\right) \to \varphi$$
-   I.e. the execution's value assignments imply the type refinements
-\end{definition}
-
 \begin{definition}
   Progress:
     If $t$ is closed and well-typed, then $t$ is a value or $t \leadsto t'$, where $t'$ is a value.
@@ -1142,18 +1138,56 @@ As usual, we consider the three properties (see Pierce \cite[p. 95, p.167]{pierc
   If $\Gamma \vdash e : \tau \Rightarrow \Gamma$ and $e \leadsto e'$, then $\Gamma \vdash e' : \tau \Rightarrow \Gamma$
 \end{definition}
 
-The state conformance rule differs from the usual rule in two ways. Firstly we consider the runtime value instead of the runtime type. Secondly there needs to be one set of variable assignments that satisfies all predicates in $\Gamma$.
-
 Because MiniCorten is based on Rust, we will assume, that progress, as well as preservation for the base-types. This includes preservation of type- and ownership-safety. Thus it is sufficient to prove, that assuming these properties hold, preservation of the refinement types is holds.
 
 
-\begin{lemma}[Conformance of Evaluation]
-  If $\sigma : \Gamma$ and $\bbracket{e} \sigma = v$ then $\vDash \varphi \to \bbracket{e} \Gamma$ 
+\begin{definition}[State Conformance]
+  A state $\sigma$ is conformant with respect to a typing context $\Gamma = (\mu, \varphi)$ (written as $\sigma : \Gamma$), iff:
+  $$
+    \varphi[\mu(x) \triangleright \bbracket{\sigma(x)} \mid x] \text{is satisfiable}
+  $$
+  I.e. a conformant type context does not contradict the execution state.
+\end{definition}
+
+The state conformance rule differs from the usual rule in two ways.
+
+\begin{lemma}[Conformance of Symbolic Execution]
+  If $\sigma : \Gamma$, $\Gamma \vdash \alpha \text{ fresh}$ then $\sigma[x \tr \bbracket{e} \sigma] : \Gamma[x \mapsto \alpha],(\alpha \doteq \llbracket e \rrbracket \Gamma)$
 \end{lemma}
-% ty!{ == a + b }
-% [[a =]]
 \begin{proof}
+  Given $\varphi[ \mu(x) \tr \bbracket{\sigma(x) \mid x}] \text{ SAT}$ show
+  $(\varphi \wedge \alpha \doteq \bbracket{e}\Gamma)[\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)}]$.
+  Let $\sigma' = \sigma[x \tr \bbracket{e} \sigma]$.
+  As a model we select $m' = m[\beta \tr \sigma(x)], \mu(x) = \beta$ and show that the proof obligation is satisfied for $m'$.
   
+  Split the goal on $\cdot \wedge \cdot$; if both sides are satisfied, then the prove in completed.
+  \begin{itemize}
+    \item[Part I]
+      \begin{align*}
+          \varphi[\mu(y) \tr \bbracket{\sigma(y)} \mid y]
+             &= \varphi[\mu(y) \tr \bbracket{\sigma(y)} \mid y \neq x][\mu(x) \tr \bbracket{\sigma(x)}]
+          \\ &= \varphi
+            [\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y \neq x]
+            [\alpha \tr \bbracket{e} \sigma]
+            [\mu(x) \tr \bbracket{\sigma(x)}]
+          \\ &= \varphi
+            [\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y \neq x]
+            [\mu[x\mapsto \alpha](x) \tr \bbracket{\sigma'(x)}]
+            [\mu(x) \tr \bbracket{\sigma(x)}]
+          \\ &= \varphi
+            [\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
+            [\mu(x) \tr \bbracket{\sigma(x)}]
+          \\
+        \\ m & \vDash \varphi
+          [\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
+          [\mu(x) \tr \bbracket{\sigma(x)}] 
+        \\ \text{ implies } 
+        \\m[\mu(x) \mapsto \bbracket{\varphi(x)}] & \vDash \varphi
+            [\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
+      \end{align*}
+    \item[Part II]
+      
+  \end{itemize}
 \end{proof}
 
 
@@ -1168,9 +1202,10 @@ Because MiniCorten is based on Rust, we will assume, that progress, as well as p
     Given $\sigma :: \Gamma$, $\Gamma \vdash x = e \Rightarrow \Gamma_2$
     show $\exists \Gamma_1, \sigma[ x \mapsto \llbracket e \rrbracket \sigma] : \Gamma_1 \wedge \Gamma_1 \vdash \code{unit} \Rightarrow \Gamma_2 $
 
-    Rule inversion over $\Gamma \vdash x = e \Rightarrow \Gamma_2$ gives $\Gamma \vdash e: \{ \alpha : b \mid \alpha \doteq \llbracket e \rrbracket \}$ and $\Gamma_2 = (\Gamma[x \mapsto \alpha], \alpha \doteq \llbracket e \rrbracket)$
+    Rule inversion over $\Gamma \vdash x = e \Rightarrow \Gamma_2$ yields $\Gamma \vdash e: \{ \alpha : b \mid \alpha \doteq \llbracket e \rrbracket \}$ and $\Gamma_2 = (\Gamma[x \mapsto \alpha], \alpha \doteq \llbracket e \rrbracket)$
 
-    For $\Gamma_1 = \Gamma_2$, $\sigma[x \mapsto \bbracket{e}\sigma ] : (\Gamma[x \mapsto \alpha], \alpha \doteq \llbracket e \rrbracket)$, $\alpha$ is fresh and therefore monotonicity applies.
+    With $\Gamma_1 = \Gamma_2$, the goal is: $\sigma[x \mapsto \bbracket{e}\sigma ] : (\Gamma[x \mapsto \alpha], \alpha \doteq \llbracket e \rrbracket)$
+    Using lemma XXX, yields the goal.
     
     % Let $v = \llbracket e \rrbracket \sigma$. 
     % For $\Gamma_1 = (\mu[x \mapsto v], \varphi)$
@@ -1190,7 +1225,7 @@ Because MiniCorten is based on Rust, we will assume, that progress, as well as p
 
     Rule inversion over $\Gamma \vdash c_1 ; c_2 \Rightarrow \Gamma_2$ yields $\Gamma \vdash c_1 \Rightarrow \Gamma_1$, $\Gamma_1 \vdash c_2 \Rightarrow \Gamma_2$
 
-    The preconditions for the third induction hypothesis are satisfied for $\Gamma_1$ delivers 
+    The preconditions for the third induction hypothesis are satisfied for $\Gamma_1$ and yield 
     $\exists \Gamma_1', \sigma' : \Gamma_1' \wedge \Gamma_1' \vdash c_1' \Rightarrow \Gamma_1$
 
     State conformance $\sigma' : \Gamma_1'$ follows directly from this.
@@ -1202,6 +1237,11 @@ Because MiniCorten is based on Rust, we will assume, that progress, as well as p
 
     Rule inversion over $\Gamma \vdash \code{unit}; c \Rightarrow \Gamma_2$ yields $\Gamma \vdash c \Rightarrow \Gamma_2$.
     Together with the second induction hypothesis this implies the goal.
+  \item \textsc{Case SS-If-T}:
+     Given $\llbracket x \rrbracket \sigma \doteq \code{true}$, $\Gamma \vdash \code{if $x$\{$s_t$\} else\{$s_e$\}} \Rightarrow \Gamma_2$, $\sigma : \Gamma$, show $\exists \Gamma_1, \sigma : \Gamma_1 \wedge \Gamma_1 \vdash s_t \Rightarrow \Gamma_2$
+    Rule inversion over $\Gamma \vdash \code{..} \Rightarrow \Gamma_2$ yields $\Gamma \vdash s_t \Rightarrow \Gamma_2$.
+    With $\Gamma_1 = \Gamma$ the goal is satisfied.
+  \item \textsc{Case SS-If-F}: analogous to \textsc{Case SS-If-T}
   \item \textsc{Case SS-Decl}: analogous to \textsc{Case SS-Assign}
   \item \textsc{Case Deref}
     $\sigma(x) = v$, $e' = v$, $\sigma' = \sigma$

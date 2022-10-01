@@ -200,7 +200,7 @@
 
 \mainmatter
 
-
+\iftrue % shorten
 \chapter{Introduction}
 
 % With increasing reliance on increasingly complex software, ensuring correctness of programs is a vital concern to software development.
@@ -1131,7 +1131,7 @@ We write:
 % \end{gather*}
 % \todo{In think the first precondition and second precondition should serve the same purpose. Second one should be nicer and correct}
 
-
+\fi
 
 \section{Soundness of the Type System}
 
@@ -1169,8 +1169,9 @@ The state conformance rule differs from the usual rule in two ways.
   As a model we select $m' = m[\beta \tr \sigma(x)], \mu(x) = \beta$ and show that the proof obligation is satisfied for $m'$.
   
   Split the goal on $\cdot \wedge \cdot$; if both sides are satisfied, then the prove in completed.
-  \begin{itemize}
-    \item[Part I]
+  \begin{description}
+    \item[Part I] show: $m' \vDash \varphi
+    [\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]$
       \begin{align*}
           \varphi[\mu(y) \tr \bbracket{\sigma(y)} \mid y]
              &= \varphi[\mu(y) \tr \bbracket{\sigma(y)} \mid y \neq x][\mu(x) \tr \bbracket{\sigma(x)}]
@@ -1190,12 +1191,56 @@ The state conformance rule differs from the usual rule in two ways.
           [\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
           [\mu(x) \tr \bbracket{\sigma(x)}] 
         \\ \text{ implies } 
-        \\m[\mu(x) \mapsto \bbracket{\varphi(x)}] & \vDash \varphi
+        \\\underbrace{m[\mu(x) \mapsto \bbracket{\varphi(x)}]}_{= m'} & \vDash \varphi
             [\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
       \end{align*}
-    \item[Part II]
+    \item[Part II] show $m' \vDash (\alpha \doteq \bbracket{e}\Gamma)[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]$
       
-  \end{itemize}
+      Case distinction on $\alpha \doteq \bbracket{e}\Gamma$
+
+      \begin{description}
+        \item[Case true] show $m' \vDash \text{true}[\dots]$; trivial
+        \item[Case constraint] show:
+          $$ m' \vDash 
+            \underbrace{\alpha[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]}_{\bbracket{\sigma(x)}=\bbracket{e}\sigma}
+            \doteq 
+            \bbracket{e}\Gamma[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
+          $$
+          \begin{description}
+            \item[Case Constant] $e=v$ trivial
+            \item[Case Variable] $e=z$
+              \begin{description}
+                \item[Case $e=z=x$] 
+                  \begin{align*}
+                    &\bbracket{x}\Gamma[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
+                    \\ &= \mu(x)[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
+                    \\ &= \mu(x)[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y \neq x][\alpha \tr \bbracket{\sigma'(x)} ]
+                    \\ &\overset{\mathclap{\alpha \text{ fresh}}}{=} \mu(x) 
+                      \overset{\text{def. } m'}{=} \bbracket{\sigma(x)}
+                  \end{align*}
+                \item[Case $e = z \neq x$]
+                  \begin{align*}
+                    &\phantom{=} \bbracket{z}\Gamma[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
+                    \\ &= \mu(z)[\mu[x\mapsto \alpha](z) \tr \bbracket{\sigma'(z)}]
+                    \\ &\overset{\mathclap{\text{def. } z}}{=} \mu(z)[\mu(z) \tr \bbracket{\sigma'(z)}]
+                    \\ &=\bbracket{\sigma(z)} = \bbracket{z}\sigma
+                  \end{align*}
+              \end{description}
+            \item[Case Binary Operation] $e = x_1 \odot x_2$
+              \begin{description}
+                \item[Case $x_1=x$, $x_2 \neq x$] (without loss of generality)
+                \begin{align*}
+                     &\phantom{=} \bbracket{x \odot x_2}[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
+                  \\ &=\bbracket{x \odot x_2}\Gamma[\mu(x_2)\tr \bbracket{\sigma'(x_2)}][\mu[x \mapsto \alpha](x) \tr \bbracket{\sigma'(x)}]
+                  \\ &=\bbracket{\mu(x) \odot \mu(x_2)}[\mu(x_2)\tr \bbracket{\sigma'(x_2)}][\alpha \tr \bbracket{\sigma'(x)}]
+                  \\ &=\bbracket{\mu(x) \odot \mu(x_2)}[\mu(x_2)\tr \bbracket{\sigma(x_2)}]
+                  \\ &=\bbracket{\sigma(x) \odot \sigma(x_2)} \underset{Inv.}{\overset{Rule}{=}} \bbracket{e}\sigma
+                \end{align*}
+                \item[Case] $x_1\neq x, x_2 \neq x$, \textbf{Case} $x_1 = x, x_2 = x$ and \textbf{Case} $x_1 \neq x, x_2 = x$ analogous
+              \end{description}
+          \end{description}
+      \end{description}
+  \end{description}
 \end{proof}
 
 
@@ -1246,7 +1291,8 @@ The state conformance rule differs from the usual rule in two ways.
     Rule inversion over $\Gamma \vdash \code{unit}; c \Rightarrow \Gamma_2$ yields $\Gamma \vdash c \Rightarrow \Gamma_2$.
     Together with the second induction hypothesis this implies the goal.
   \item \textsc{Case SS-If-T}:
-     Given $\llbracket x \rrbracket \sigma \doteq \code{true}$, $\Gamma \vdash \code{if $x$\{$s_t$\} else\{$s_e$\}} \Rightarrow \Gamma_2$, $\sigma : \Gamma$, show $\exists \Gamma_1, \sigma : \Gamma_1 \wedge \Gamma_1 \vdash s_t \Rightarrow \Gamma_2$
+     Given $\llbracket x \rrbracket \sigma \doteq \code{true}$, $\Gamma \vdash \code{if $x$\{$s_t$\}else\{$s_e$\}} \Rightarrow \Gamma_2$, $\sigma : \Gamma$, show $\exists \Gamma_1, \sigma : \Gamma_1 \wedge \Gamma_1 \vdash s_t \Rightarrow \Gamma_2$
+    
     Rule inversion over $\Gamma \vdash \code{..} \Rightarrow \Gamma_2$ yields $\Gamma \vdash s_t \Rightarrow \Gamma_2$.
     With $\Gamma_1 = \Gamma$ the goal is satisfied.
   \item \textsc{Case SS-If-F}: analogous to \textsc{Case SS-If-T}
@@ -1270,6 +1316,7 @@ The state conformance rule differs from the usual rule in two ways.
   ...?
 \end{proof}
 
+\iftrue % shorten
 \label{sec:extensions} \section{Extensions}
 
 
@@ -1970,7 +2017,7 @@ On one hand covering more language features, like records or algebraic data type
 
 On the other hand expanding the expressiveness of the type system would also be interesting: Introducing abstract predicates would allow a whole new set of properties to be specified. In particular developing a model of concurrency patterns could be a great application for them in Rust.
 
-
+\fi
 
 %% content
 

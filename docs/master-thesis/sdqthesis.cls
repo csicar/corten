@@ -150,6 +150,7 @@
 \newcommand{\thereviewertwo}{}
 \newcommand{\theadvisorone}{}
 \newcommand{\theadvisortwo}{}
+\newcommand{\theadvisorthree}{}
 \newcommand{\theeditstart}{}
 \newcommand{\theeditend}{}
 
@@ -161,6 +162,7 @@
 \newcommand{\reviewertwo}[1]{\renewcommand{\thereviewertwo}{#1}}
 \newcommand{\advisorone}[1]{\renewcommand{\theadvisorone}{#1}}
 \newcommand{\advisortwo}[1]{\renewcommand{\theadvisortwo}{#1}}
+\newcommand{\advisorthree}[1]{\renewcommand{\theadvisorthree}{#1}}
 
 \newcommand{\editingtime}[2]{%
 \renewcommand{\theeditstart}{#1}%
@@ -177,11 +179,14 @@
 \theinstitute\\[2em]
 \begin{tabular}{l l}
   \ifcurrentbaselanguage{English}{Reviewer}{Erstgutachter}: & \thereviewerone\\
-  \ifcurrentbaselanguage{English}{Second reviewer}{Zweitgutachter}: & \thereviewertwo\\
-  \ifcurrentbaselanguage{English}{Advisor}{Betreuender Mitarbeiter}: &  \theadvisorone\\
+  % \ifcurrentbaselanguage{English}{Second reviewer}{Zweitgutachter}: & \thereviewertwo\\
+  \ifcurrentbaselanguage{English}{Advisors}{Betreuender Mitarbeiter}: &  \theadvisorone\\
   % if there is no second advisor, do not output this line
   \ifthenelse{\equal{\theadvisortwo}{}}{}{%
-  \ifcurrentbaselanguage{English}{Second advisor}{Zweiter betreuender Mitarbeiter}: & \theadvisortwo\\
+    \ifcurrentbaselanguage{English}{}{Zweiter betreuender Mitarbeiter} & \theadvisortwo\\
+  }
+  \ifthenelse{\equal{\theadvisorthree}{}}{}{%
+    \ifcurrentbaselanguage{English}{}{Zweiter betreuender Mitarbeiter} & \theadvisorthree\\
   }
 \end{tabular}
 \vskip2em

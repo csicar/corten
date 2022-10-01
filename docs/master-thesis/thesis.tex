@@ -32,7 +32,7 @@
 \usepackage{stackengine,scalerel}
 \usepackage{mathtools}
 \usepackage[nameinlink]{cleveref}
-
+\usepackage{xparse}
 % \usepackage[scaled=.78]{beramono}
 % \usepackage[scaled=.92]{sourcesanspro}
 
@@ -76,13 +76,32 @@
 \newcommand{\bbracket}[1]{\llbracket #1 \rrbracket}
 \newcommand{\tr}[0]{\triangleright}
 
-\DeclareMathOperator{\rref}{ref}
-
-
-
 \newcommand{\ccolon}[0]{: }
 \newcommand{\cmid}[0]{| }
 \newcommand{\cdisj}[0]{|| }
+
+\DeclareMathOperator{\rref}{ref}
+
+\makeatletter
+\NewDocumentCommand{\rulelabel}{m}{%
+  \begingroup
+  \protected@edef\@currentlabelname{Rule}%
+  \protected@edef\cref@currentlabel{%
+    [][][]%
+    #1
+  }
+  \label[typerule]{rule:#1}%
+  \endgroup  
+}
+\makeatother
+
+\crefname{typerule}{}{}
+\Crefname{typerule}{}{}
+
+% \newcommand{\tyrule}[4]{\ensuremath{
+%   \infer
+% }}
+
 
 
 \newtheorem{theorem}{Theorem}[section]
@@ -121,7 +140,8 @@
 %% The advisors are PhDs or Postdocs
 \advisorone{Dr. Mattias Ulbrich}
 %% The second advisor can be omitted
-\advisortwo{M.Sc. Florian Lanzinger, M.Sc. Sebastian Graf}
+\advisortwo{Sebastian Graf, M.Sc.}
+\advisorthree{Florian Lanzinger, M.Sc}
 
 %% Please enter the start end end time of your thesis
 \editingtime{4.4.2022}{4.10.2022}

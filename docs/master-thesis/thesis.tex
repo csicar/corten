@@ -223,6 +223,7 @@
 \iftrue % shorten
 \chapter{Introduction}
 
+
 % With increasing reliance on increasingly complex software, ensuring correctness of programs is a vital concern to software development.
 With increasing amount and reliance on software, ensuring the correctness of programs is a vital concern for the future of software development.
 Although research in this area has made good progress, most approaches are not accessible enough for general adoption by the developers. Especially in light of a predicted shortage of developers\cite{breaux_2021_2021-1}, it is not sufficient to require developers to undergo year-long training in specialized and complex verification methods to ensure the correctness of their software. It is therefore crucial to integrate with their existing tooling and workflows to ensure the future high quality of software.
@@ -579,6 +580,7 @@ For this thesis the following conclusion can be drawn:
   \item Mutable variables are used very often and should therefore have very little associated specification effort.
   \item Mutable parameters are used less frequently justifying a higher specification effort, but their specification must still be possible.
 \end{itemize}
+\fi
 
 \chapter{The MiniCorten Language} \label{ch:language} 
 
@@ -692,30 +694,34 @@ The main difference is, that in Rust, every piece of data has a unique, known ow
 
 \begin{definition}[Small-Step Semantics of MiniCorten: $\tuple{e}{\sigma} \leadsto \tuple{e'}{\sigma'}$]
 
-\begin{gather*}
-  \inferrule*[left=SS-Assign]
+$$\begin{gathered}
+  \inferrule*[left=SS-Assign\rulelabel{SS-Assign}]
     {\star}
     {\tuple{x = e }{ \sigma } \leadsto \tuple{\code{unit} }{ \sigma[x \mapsto \bbracket{e}\sigma]}}
   \\
-  \inferrule*[left=SS-Decl]
+  \inferrule*[left=SS-Assign-Ref\rulelabel{SS-Assign-Ref}]
+    {\sigma(x) = \&y}
+    {\tuple{*x = e }{ \sigma } \leadsto \tuple{\code{unit} }{ \sigma[y \mapsto \bbracket{e}\sigma]}}
+  \\
+  \inferrule*[left=SS-Decl\rulelabel{SS-Decl}]
     {\star}
     {\tuple{\code{let } x = e}{\sigma} \leadsto \tuple{unit}{\sigma[ x \mapsto \bbracket{e}\sigma]}}
   \\
-  \inferrule*[left=SS-Seq-Inner]
+  \inferrule*[left=SS-Seq-Inner\rulelabel{SS-Seq-Inner}]
       {\tuple{e_1 }{ \sigma } \leadsto \tuple{e_1' }{ \sigma'}}
       {\tuple{e_1; e_2 }{ \sigma } \leadsto \tuple{e_1'; e_2 }{ \sigma'}}
-  \inferrule*[left=SS-Seq-N]
+  \inferrule*[left=SS-Seq-N\rulelabel{SS-Seq-N}]
     {\star}
     {\tuple{\code{unit}; e_2 }{ \sigma } \leadsto \tuple{e_2 }{ \sigma'}}
   \\
-  \inferrule*[left=SS-IF-T]
+  \inferrule*[left=SS-IF-T\rulelabel{SS-IF-T}]
     {\bbracket{x} \sigma = \code{true}}
     {\tuple{\code{if } x\ \{ s_t \} \code { else } \{ s_e \} }{\sigma} \leadsto \tuple{s_t}{\sigma}}
-  \inferrule*[left=SS-IF-F]
+  \inferrule*[left=SS-IF-F\rulelabel{SS-IF-F}]
     {\bbracket{x}\sigma = \code{false}}
     {\tuple{\code{if } x\ \{ s_t \} \code { else } \{ s_e \} }{\sigma} \leadsto \tuple{s_e}{\sigma}}
   \\
-  \inferrule*[left=SS-While]
+  \inferrule*[left=SS-While\rulelabel{SS-While}]
     {\star}
     {
       \tuple{ \code{while } e_c\ \{\ s_b \}}{\sigma}
@@ -723,10 +729,14 @@ The main difference is, that in Rust, every piece of data has a unique, known ow
       \tuple{ \code{if } e_c \{ s_b;  \code{while } e_c \{ s_b \} \} { \code{ else } } \{ \code{unit} \} }{\sigma}
     }
   \\
-  \inferrule*[left=SS-Call]
+  \inferrule*[left=SS-Relax\rulelabel{SS-Relax}]
+    {\star}
+    {\tuple{\code{relax\_ctx!\{ ... \}}}{\sigma} \leadsto \tuple{\code{unit}}{\sigma}}
+  \\
+  \inferrule*[left=SS-Call\rulelabel{SS-Call}]
     {\tuple{\Sigma(f)[arg_1 \triangleright x_1, \dots, arg_n \triangleright x_n]}{\sigma} \leadsto \tuple{v_r}{\sigma'} }
     {\tuple{f(x_1, \dots, x_2)}{\sigma} \leadsto \tuple{v_r}{\sigma' \oplus \sigma}}
-\end{gather*}
+\end{gathered}$$
 
 where $$(\sigma' \oplus \sigma)(x) =
   \begin{cases}
@@ -736,7 +746,8 @@ where $$(\sigma' \oplus \sigma)(x) =
   \end{cases}$$
 \end{definition}
 
-The \textsc{SS-Call} rule does not scope the variables from the callee to the caller. This is actually fine, because by definition variable names are distinct. Therefore only the arguments need to be replaced in the resulting state.
+
+The \cref{rule:SS-Call} rule does not scope the variables from the callee to the caller. This is actually fine, because by definition variable names are distinct. Therefore only the arguments need to be replaced in the resulting state.
 
 \chapter{The Refinement Type System} \label{ch:type-system}
 
@@ -934,7 +945,6 @@ If \code{sum} is updated first, we can establish its type, but once \code{i} is 
 
 For this purpose, Corten provides a mechanism for the programmer to instruct Corten to relax all variables at once \- named \code{relax\_ctx}. The syntax is similar to the refinement type syntax, but allows for multiple variables to be described at a time. The type system will check all refinement types at once, resulting in the successful type checking of the example.
 
-\fi
 \section{Type System}
 
 The following sections will introduce the type checking rules of Corten. We assume the program has passed the Rust type checking rules, meaning (non-refined) type- and ownership-checking was successful.
@@ -989,13 +999,13 @@ Before dispatching a request to the SMT solver, the supertype's logic variable i
 
 Note that, $\Gamma \vdash \tau \preceq \tau'$ can be rephrased in terms of $\Gamma \preceq \Gamma'$ by introducing a fresh variable with the predicates $\tau$ and $\tau'$. The rephrased form is equivalent, but rephrasing the sub context rule in terms of sub-typing is in general not possible: Because all constraints need to be satisfied at the same time when checking for sub-contexts, just checking each variable at a time would be a weaker proposition.
 
-\section{Sub-Context Rules: $\Gamma \preceq \Gamma'$}
+\begin{definition}[Sub-Context Rules: $\Gamma \preceq \Gamma'$]
 
 In contrast to other refinement type systems, Corten allows types in the context to refer to one another.
 For example a type specifications \code{a : \{ $\alpha$ : i32 | $\alpha$ > $\beta$\}, b:  \{ $\beta$: i32 | $\beta$ != $\alpha$\}} would be valid and result in the context $\Gamma = (\emptyset, \alpha \neq \beta \wedge \beta \geq \alpha)$. In the example, the value $0$ i a valid inhabitant of \code{a}'s type as long as $\code{b} \geq 1$.
 
 The rule \textsc{$\preceq$-Ctx} serves the purpose of allowing these interdependencies between predicates while still providing an applicable concept of subtyping: As long as the set of predicates in $\Gamma'$ imply the predicates for $\Gamma$, the sub-context relation is satisfied and $\Gamma'$ ($\Gamma$) is called the super-context (sub-context) respectively. 
-To be more precise: The rule needs to relate the predicates for each \textit{program} variable with the opposing predicates for that program variable. The substitution $\Phi'[\mu'(\alpha) \triangleright \mu(\alpha)\ \mid \alpha \in \text{dom}(\mu)] \implies \Phi$ forces the logic variable associated with \code{x} in $\Gamma'$ to be substituted by the logic variable $\mu(x)$ , which is associated with \code{x} in $\Gamma'$.
+To be more precise: The rule needs to relate the predicates for each \textit{program} variable with the opposing predicates for that program variable. The substitution $\Phi'[\mu'(\alpha) \triangleright \mu(\alpha)\ \mid \alpha \in \text{img}(\mu)]$ forces the logic variable associated with \code{x} in $\Gamma'$ to be substituted by the logic variable $\mu(x)$ , which is associated with \code{x} in $\Gamma'$.
 
 The domain restriction ensures, that the sub-context does not contain additional program variables, which would leave unconstrained variables in the antecedent
 
@@ -1007,14 +1017,16 @@ The domain restriction ensures, that the sub-context does not contain additional
     }
     {(\Phi, \mu) \preceq (\Phi', \mu')}
 \]
+\end{definition}
+
 
 \begin{definition}[Fresh Variable $\Gamma \vdash \alpha \text{ fresh}$]
 
 Corten requires that new logic variables are distinct from all others. The rule ensures that $\alpha$ is a free variable in $\Gamma = (\mu, \Phi)$:
-  $$\Gamma \vdash \alpha \text{ fresh} \text{ iff } \alpha \notin FV(\Phi)$$
+  $$\Gamma \vdash \alpha \text{ fresh} \text{ iff } \alpha \notin FV(\Phi) \cup img(\mu)$$
 \end{definition}
 
-\begin{definition}[Expression Constraint: $\alpha \simeq \bbracket{e}\Gamma$]
+\begin{definition}[Expression Constraint $\alpha \simeq \bbracket{e}\Gamma$]
 An expression constraint is used to restrict $\alpha$ to (as close to) the value of expression $e$. For instance, typing the expression \code{a + 3} should get the strongest type $\alpha == \alpha + 3$ where $\alpha$ is the logic variable for \code{a}.
 It could also be possible that an expression can not be directly translated, like operations not allowed by the logic. In that case, the expression will be conservatively approximated by the predicate \code{true}.
 
@@ -1029,41 +1041,42 @@ It could also be possible that an expression can not be directly translated, lik
 
 \begin{definition}[Expressions Typing: $\Gamma \vdash e : \tau$]
 
-\begin{gather*}
-  \inferrule*[left=Lit]
+
+$$ \begin{gathered}
+  \inferrule*[left=Lit\rulelabel{Lit}]
     {\alpha \text{ fresh}}
     {\Gamma \vdash v: \{ \alpha : b \mid \alpha \simeq \bbracket{v}\Gamma\} }
   %
   \quad
-  \inferrule*[left=Var]
+  \inferrule*[left=Var\rulelabel{Var}]
     {\alpha \text{ fresh}}
     {(\mu, \Phi)\vdash x : \{ \alpha : b \mid \beta \simeq \alpha \} }
   %
   \\
-  \inferrule*[left=Add]
+  \inferrule*[left=Add\rulelabel{Add}]
     {
       \alpha \text{ fresh}
     }
     {\Gamma \vdash x_1 \odot x_2 : \{ \alpha: b \mid \alpha \simeq \bbracket{x_1 \odot x_2}\Gamma \} }
   %
   \\
-  \inferrule*[left=Var-Deref]
+  \inferrule*[left=Var-Deref\rulelabel{Var-Deref}]
     {\Gamma \vdash x : \{ \beta : \&b \mid \beta \doteq \&y \} \\ \Gamma \vdash y : \tau }
     {\Gamma \vdash *x : \tau }
   %
   \\
-  \inferrule*[left=Ref]
+  \inferrule*[left=Ref\rulelabel{Ref}]
     {\star}
     {\Gamma \vdash \&x : \{ \alpha : \&b \simeq \bbracket{\&x}\Gamma\}}
   %
   \quad
-  \inferrule*[left=Intro-Sub]
+  \inferrule*[left=Intro-Sub\rulelabel{Intro-Sub}]
     {
       \Gamma \vdash e : \tau
       \\ \Gamma \vdash \tau \preceq \tau'
     }
     {\Gamma \vdash e \texttt{ as } \tau': \tau'}
-\end{gather*}
+\end{gathered} $$
 
 Because we assume that the base language type checking already accepted the program, the expression typing rule become quite simple. The rules \textsc{Lit, Var, Add, Ref} are solely concerned with delegating to the expression constraint generation.
 \textsc{Var-Deref} stipulates that dereferencing \code{*x} has type $\tau$ if the target of \code{x} is known and unique.
@@ -1074,8 +1087,8 @@ Because we assume that the base language type checking already accepted the prog
 
 \begin{definition}[Statement Type Checking $\Gamma \vdash s \Rightarrow \Gamma'$]
 
-\begin{gather*}
-  \inferrule*[left=If]
+$$ \begin{gathered}
+  \inferrule*[left=If\rulelabel{If}]
     {
       \Gamma, \Gamma(x) \doteq \code{true} \vdash s_t \Rightarrow \Gamma'
       \\ \Gamma, \Gamma(x) \doteq \code{false} \vdash s_e \Rightarrow \Gamma'
@@ -1083,7 +1096,7 @@ Because we assume that the base language type checking already accepted the prog
     {\Gamma \vdash \text{if } x \text{ then }s_t\text{ else } s_e \Rightarrow \Gamma'}
   %
   \\
-  \inferrule*[left=While]
+  \inferrule*[left=While\rulelabel{While}]
     {
       \Gamma_I, \Gamma_I(x) \doteq \code{true} \vdash s \Rightarrow \Gamma_I'
       \\ \Gamma_I' \preceq \Gamma_I
@@ -1091,36 +1104,42 @@ Because we assume that the base language type checking already accepted the prog
     {\Gamma_I \vdash \texttt{while } x \{ s \} \Rightarrow \Gamma_I,\Gamma_I(x) \doteq \code{false}}
   %
   \\
-  \inferrule*[left=Seq]
+  \inferrule*[left=Seq\rulelabel{Seq}]
     {
       \Gamma \vdash s_1 \Rightarrow \Gamma'
       \\ \Gamma' \vdash s_2 \Rightarrow \Gamma''
     }
     {\Gamma \vdash s_1 ; s_2 \Rightarrow \Gamma''}
   %
+  \inferrule*[left=Relax\rulelabel{Relax}]
+    {
+      \Gamma' \preceq \Gamma
+    }
+    {\Gamma \vdash \code{relax\_ctx!}\{\Gamma'\} \Rightarrow \Gamma'}
   \\
-  \inferrule*[left=Decl]
+  \inferrule*[left=Decl\rulelabel{Decl}]
     {
       \Gamma \vdash e :  \{ \beta : b \mid \varphi \}
     }
     {\Gamma \vdash \code{let } x = e  \Rightarrow \Gamma[ x \mapsto \beta], \varphi}
   %
   \quad
-  \inferrule*[left=Assign]
+  \inferrule*[left=Assign\rulelabel{Assign}]
     {\Gamma \vdash e : \{ \beta : b \mid \varphi \}}
     {\Gamma \vdash x = e \Rightarrow \Gamma[x \mapsto \beta], \varphi}
   %
   \\
-  \inferrule*[left=Assign-Strong]
+  \inferrule*[left=Assign-Strong\rulelabel{Assign-Strong}]
     {
-      \Gamma \vdash e : \{ \beta \mid \varphi \}
+      \Gamma(z) = \beta
       \\ \Gamma \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y \}
+      \\ \Gamma \vdash \gamma \text{ fresh}
       % \\ \Gamma, \psi \vdash \alpha \text{ must reference } y
     }
-    {\Gamma \vdash *x = e \Rightarrow \Gamma [y \mapsto \beta], \varphi}
+    {\Gamma \vdash *x = z \Rightarrow \Gamma [y \mapsto \gamma], \gamma \doteq \beta}
   %
   \\
-  \inferrule*[left=Assign-Weak]
+  \inferrule*[left=Assign-Weak\rulelabel{Assign-Weak}]
     {
       \Gamma \vdash e : \tau 
       \\ \Gamma \vdash x : \{ \alpha : \& b \mid \alpha \doteq \&y_1 \vee \dots \vee \alpha \doteq \&y_n \}
@@ -1134,7 +1153,7 @@ Because we assume that the base language type checking already accepted the prog
     {\Gamma \vdash *x = e \Rightarrow \Gamma}
   % %
   % \\
-  % \inferrule*[left=Fn-Call]
+  % \inferrule*[left=Fn-Call\rulelabel{Fn-Call}]
   %   {
   %     \text{subst} = ...
   %     \\
@@ -1144,13 +1163,13 @@ Because we assume that the base language type checking already accepted the prog
   %   {(\mu, \Phi) \vdash \code{let res} = f(a, \dots, \code{\&mut} b, \dots) \Rightarrow (\mu[a \mapsto \alpha', \dots, subst^{-1}], \Phi \wedge \varphi'_{\alpha} \wedge \dots)}
   %
   \\
-  \inferrule*[left=Fn-Call]
+  \inferrule*[left=Fn-Call\rulelabel{Fn-Call}]
     {
      (\mu, \Phi) \preceq (\mu, \Phi \wedge, \overline{x_i \doteq a_i \wedge \varphi_i}, \overline{y_j \doteq b_i \wedge \psi_j})
      \\ \Sigma \vdash f(\overline{a_i : \{ \alpha_i : l_i \mid \varphi_i \}}, \overline{b_j : \{ \beta_j : l_j \mid \psi_j \Rightarrow \beta_j' \mid \psi_j'\}})
     }
-    {(\mu, \Phi) \vdash \code{let res} = f(\overline{x_i}, \overline{\&mut y_j}) => \mu[\overline{x_i \mapsto \alpha_i}, \overline{y_j \mapsto \beta_j}], \Phi \wedge \overline{\phi_i} \wedge \overline{\psi_j} \wedge \overline{\psi_i}}
-\end{gather*}
+    {(\mu, \Phi) \vdash \code{let res} = f(\overline{x_i}, \overline{\&mut y_j}) \Rightarrow \mu[\overline{x_i \mapsto \alpha_i}, \overline{y_j \mapsto \beta_j}], \Phi \wedge \overline{\phi_i} \wedge \overline{\psi_j} \wedge \overline{\psi_i}}
+\end{gathered} $$
 \end{definition}
 
 %%%% OLD Must ref rule
@@ -1186,19 +1205,33 @@ As usual, we consider the three properties (see Pierce \cite[p. 95, p.167]{pierc
 
 Because MiniCorten is based on Rust, we will assume, that progress, as well as preservation for the base-types. This includes preservation of type- and ownership-safety. Thus it is sufficient to prove, that assuming these properties hold, preservation of the refinement types is holds.
 
-
-\begin{definition}[State Conformance]
+\begin{definition}[State Conformance]\label{def:state-conformance}
   A state $\sigma$ is conformant with respect to a typing context $\Gamma = (\mu, \varphi)$ (written as $\sigma : \Gamma$), iff:
   $$
-    \varphi[\mu(x) \triangleright \bbracket{\sigma(x)} \mid x] \text{is satisfiable}
+    \varphi[\mu(x) \triangleright \bbracket{\sigma(x)} \mid x] \text{ is satisfiable}
   $$
   I.e. a conformant type context does not contradict the execution state.
 \end{definition}
 
+\begin{lemma}[Conformant States Conservatively Approximate Reference Destinations]
+  If $\sigma : \Gamma$, $\Gamma \vdash x : \{\alpha : \&b \mid \alpha \doteq y_1 \vee \dots \vee \alpha \doteq y_n \}$
+  then 
+    $$\sigma(x) = \&y_i \text{ for some } i = 1,\dots, n$$
+\end{lemma}
+
+\begin{proof}
+  Rule inversion over $\Gamma \vdash x : \{\alpha : \&b \mid \alpha \doteq y_1 \vee \dots \vee \alpha \doteq y_n \}$ yields:
+
+  \begin{align*}
+      &\phantom{implies}\ \ \varphi \wedge x = x \doteq \&y_i \text{ SAT}
+      \\ &\implies m \vDash \varphi \wedge x \doteq \&y_i \quad\text{for some }m
+      \\ &\implies \underbrace{(m \vDash \varphi)}_{\text{def state conformance}} ,\underbrace{(m \vDash x \doteq \&y_i)}_{\lightning \text{ assumption}}
+  \end{align*}
+\end{proof}
 The state conformance rule differs from the usual rule in two ways.
 
-\begin{lemma}[Conformance of Symbolic Execution]
-  If $\sigma : \Gamma$, $\Gamma \vdash \alpha \text{ fresh}$ then $\sigma[x \tr \bbracket{e} \sigma] : \Gamma[x \mapsto \alpha],(\alpha \simeq \bbracket{e} \Gamma)$
+\begin{lemma}[Conformance of Symbolic Execution]\label{lem:conf-sym-exec}
+  If \hyperref[def:state-conformance]{$\sigma : \Gamma$}, $\Gamma \vdash \alpha \text{ fresh}$ then $\sigma[x \tr \bbracket{e} \sigma] : \Gamma[x \mapsto \alpha],(\alpha \simeq \bbracket{e} \Gamma)$
 \end{lemma}
 \begin{proof}
   Given $\varphi[ \mu(x) \tr \bbracket{\sigma(x) \mid x}] \text{ SAT}$ show
@@ -1207,8 +1240,8 @@ The state conformance rule differs from the usual rule in two ways.
   As a model we select $m' = m[\beta \tr \sigma(x)], \mu(x) = \beta$ and show that the proof obligation is satisfied for $m'$.
   
   Split the goal on the conjunction; if both sides are valid then the conjunction is valid (for the given model).
-  \begin{description}
-    \item[Part I] show: $m' \vDash \varphi
+  \begin{itemize}
+    \item \textsc{Part I} show: $m' \vDash \varphi
     [\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]$
       \begin{align*}
           &\phantom{=}\ \ \varphi[\mu(y) \tr \bbracket{\sigma(y)} \mid y]
@@ -1232,23 +1265,23 @@ The state conformance rule differs from the usual rule in two ways.
         \\\underbrace{m[\mu(x) \mapsto \bbracket{\varphi(x)}]}_{= m'} & \vDash \varphi
             [\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
       \end{align*}
-    \item[Part II] show $m' \vDash (\alpha \simeq \bbracket{e}\Gamma)[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]$
+    \item \textsc{Part II} show $m' \vDash (\alpha \simeq \bbracket{e}\Gamma)[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]$
       
       Case distinction on $\alpha \simeq \bbracket{e}\Gamma$
 
-      \begin{description}
-        \item[Case true] show $m' \vDash \text{true}[\dots]$; trivial
-        \item[Case constraint] show:
+      \begin{itemize}
+        \item \textsc{Case true} show $m' \vDash \text{true}[\dots]$; trivial
+        \item \textsc{Case constraint} show:
           $$ m' \vDash 
             \underbrace{\alpha[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]}_{\bbracket{\sigma(x)}=\bbracket{e}\sigma}
             \doteq 
             \bbracket{e}\Gamma[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
           $$
-          \begin{description}
-            \item[Case Constant] $e=v$ trivial
-            \item[Case Variable] $e=z$
-              \begin{description}
-                \item[Case $e=z=x$] 
+          \begin{itemize}
+            \item \textsc{Case Constant} $e=v$ trivial
+            \item \textsc{Case Variable} $e=z$
+              \begin{itemize}
+                \item \textsc{Case $e=z=x$} 
                   \begin{align*}
                     &\phantom{=}\ \ \Gamma[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
                     \\ &= \mu(x)[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
@@ -1256,17 +1289,17 @@ The state conformance rule differs from the usual rule in two ways.
                     \\ &\overset{\mathclap{\alpha \text{ fresh}}}{=} \mu(x) 
                       \overset{\text{def. } m'}{=} \bbracket{\sigma(x)}
                   \end{align*}
-                \item[Case $e = z \neq x$]
+                \item \textsc{Case $e = z \neq x$}
                   \begin{align*}
                     &\phantom{=}\ \ \bbracket{z}\Gamma[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
                     \\ &= \mu(z)[\mu[x\mapsto \alpha](z) \tr \bbracket{\sigma'(z)}]
                     \\ &\overset{\mathclap{\text{def. } z}}{=} \mu(z)[\mu(z) \tr \bbracket{\sigma'(z)}]
                     \\ &=\bbracket{\sigma(z)} = \bbracket{z}\sigma
                   \end{align*}
-              \end{description}
-            \item[Case Binary Operation] $e = x_1 \odot x_2$
-              \begin{description}
-                \item[Case $x_1=x$, $x_2 \neq x$] (without loss of generality)
+              \end{itemize}
+            \item \textsc{Case Binary Operation} $e = x_1 \odot x_2$
+              \begin{itemize}
+                \item \textsc{Case $x_1=x$, $x_2 \neq x$} (without loss of generality)
                 \begin{align*}
                   &\phantom{=}\ \ \bbracket{x \odot x_2}[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
                   \\ &=\bbracket{x \odot x_2}\Gamma[\mu(x_2)\tr \bbracket{\sigma'(x_2)}][\mu[x \mapsto \alpha](x) \tr \bbracket{\sigma'(x)}]
@@ -1274,29 +1307,63 @@ The state conformance rule differs from the usual rule in two ways.
                   \\ &=\bbracket{\mu(x) \odot \mu(x_2)}[\mu(x_2)\tr \bbracket{\sigma(x_2)}]
                   \\ &=\bbracket{\sigma(x) \odot \sigma(x_2)} \underset{Inv.}{\overset{Rule}{=}} \bbracket{e}\sigma
                 \end{align*}
-                \item[Case] $x_1\neq x, x_2 \neq x$, \textbf{Case} $x_1 = x, x_2 = x$ and \textbf{Case} $x_1 \neq x, x_2 = x$ analogous
-              \end{description}
-          \end{description}
-      \end{description}
-  \end{description}
+                \item \textsc{Case} $x_1\neq x, x_2 \neq x$, \textbf{Case} $x_1 = x, x_2 = x$ and \textbf{Case} $x_1 \neq x, x_2 = x$ analogous
+              \end{itemize}
+          \end{itemize}
+      \end{itemize}
+  \end{itemize}
 \end{proof}
 
+A crucial consequence of \cref{lem:conf-sym-exec} it that references are tracked conservatively:
+\begin{lemma}[Conservative Reference Tracking]\label{lem:conservative-ref-tracking}
+ If $\sigma : \Gamma$, $\Gamma \vdash x : \{ \alpha : \&b \mid \alpha \doteq y_i \}$ and $ \Gamma \vdash \alpha \text{ fresh}  $ then $\bbracket{\sigma(x)} = \&y_i$
+\end{lemma}
+
+\begin{proof}
+  \begin{align*}
+    &\phantom{\implies}\ \ \sigma : \Gamma 
+    \\ &\implies \sigma : \Gamma[x \mapsto \alpha], \alpha \doteq \&y_i \quad (\cref{lem:conf-sym-exec})
+    \\ &\implies m \vDash (\varphi \wedge \alpha \doteq \&y_i)[\mu(z) \tr \bbracket{\sigma(z)} \mid z] \quad \text{for some }m
+    \\ &\implies m \vDash (\alpha \doteq \&y_i)[\mu(x) \tr \bbracket{\sigma(x)} \mid x]
+    \\ &\implies m \vDash (\alpha \doteq \&y_i)[\alpha \tr \bbracket{\sigma(x)} \mid x]
+    \\ &\implies m \vDash \bbracket{\sigma(x)} \doteq \&y_i \quad \text{independent of $m$}
+    \\ &\implies  \bbracket{\sigma(x)} = \&y_i
+  \end{align*}
+\end{proof}
 
 \begin{lemma}[Preservation of State Conformance]
   If $\Gamma \vdash s \Rightarrow \Gamma_2$, $\sigma : \Gamma$ and $\tuple{s}{\sigma} \leadsto \tuple{s_1}{\sigma_1}$, then  $\sigma_1 : \Gamma_1$ and $\Gamma_1 \vdash s_1 \Rightarrow \Gamma_2$ for some $\Gamma_1$
 \end{lemma}
-
-
 \begin{proof} Rule Induction over $\tuple{t}{\sigma} \leadsto \tuple{t'}{\sigma'}$
 \begin{itemize}
   \item \textsc{Case SS-Assign}:
-    Given $\sigma :: \Gamma$, $\Gamma \vdash x = e \Rightarrow \Gamma_2$
+    Given $\sigma : \Gamma$, $\Gamma \vdash x = e \Rightarrow \Gamma_2$
     show $\exists \Gamma_1, \sigma[ x \mapsto \llbracket e \rrbracket \sigma] : \Gamma_1 \wedge \Gamma_1 \vdash \code{unit} \Rightarrow \Gamma_2 $
 
-    Rule inversion over $\Gamma \vdash x = e \Rightarrow \Gamma_2$ yields $\Gamma \vdash e: \{ \alpha : b \mid \alpha \doteq \llbracket e \rrbracket \}$ and $\Gamma_2 = (\Gamma[x \mapsto \alpha], \alpha \doteq \llbracket e \rrbracket)$
+    Rule inversion over $\Gamma \vdash x = e \Rightarrow \Gamma_2$:
+    \begin{itemize}
+      \item \textsc{Case Sym}: rule inversion yields $\Gamma \vdash e: \{ \alpha : b \mid \alpha \doteq \llbracket e \rrbracket \}$ and $\Gamma_2 = (\Gamma[x \mapsto \alpha], \alpha \doteq \llbracket e \rrbracket)$
 
-    With $\Gamma_1 = \Gamma_2$, the goal is: $\sigma[x \mapsto \bbracket{e}\sigma ] : (\Gamma[x \mapsto \alpha], \alpha \doteq \llbracket e \rrbracket)$
-    Using lemma XXX, yields the goal.
+      With $\Gamma_1 = \Gamma_2$, the goal is: $\sigma[x \mapsto \bbracket{e}\sigma ] : (\Gamma[x \mapsto \alpha], \alpha \doteq \llbracket e \rrbracket)$; \cref{lem:conf-sym-exec} implies the goal.
+      \item \textsc{Case Var-Deref} $e = *y$:
+        rule inversion yields $\Gamma \vdash y : \{\beta : b \mid \beta \doteq \&z\}$, $\Gamma \vdash z : \{\gamma : b \mid \varphi_\gamma\}$ and $\Gamma_2 = \Gamma[x \mapsto \gamma], \varphi_\gamma$
+
+        Choose $\Gamma_1 = \Gamma_2$ and $ m' = m[\mu(x) \mapsto \bbracket{\sigma(x)}] $ to show 
+        $ m' \vDash (\varphi \wedge \varphi_\gamma)[\mu[x \mapsto \gamma](y) \tr \bbracket{\sigma(y)} \mid y]$.
+        % $ m' \vDash \varphi[\mu[x \mapsto \gamma](y) \tr \bbracket{\sigma(y)} \mid y]$.
+
+        \begin{align*}
+          m  &\vDash \varphi[\mu(x) \tr \bbracket{\sigma(x)} \mid y]
+          \\ &= \varphi[\mu(x) \tr \bbracket{\sigma(x)}][\mu(x) \tr \bbracket{\sigma(x)} \mid y \neq x]
+          \\ \text{implies} 
+          \\ m' = m[\mu(x) \mapsto \bbracket{\sigma(x)}] &\vDash \varphi[\mu[x \mapsto \gamma](x) \tr \bbracket{\sigma(x)}][\mu(x) \tr \bbracket{\sigma(x)} \mid y \neq x]
+          \\ &= \varphi[\mu[x \mapsto \gamma](y) \tr \bbracket{\sigma(y)} \mid y]
+          \\ &= \varphi[\mu[x \mapsto \bbracket{z}\sigma](y) \tr \bbracket{\sigma(y)} \mid y]
+          \\ &\overset{\mathclap{absorption}}{=} (\varphi \wedge \varphi_\gamma)[\mu[x \mapsto \bbracket{z}\sigma](y) \tr \bbracket{\sigma(y)} \mid y]
+          \\ &= (\varphi \wedge \varphi_\gamma)[\mu[x \mapsto \gamma](y) \tr \bbracket{\sigma(y)} \mid y]
+          \\ 
+        \end{align*}
+    \end{itemize} 
     
     % Let $v = \llbracket e \rrbracket \sigma$. 
     % For $\Gamma_1 = (\mu[x \mapsto v], \varphi)$
@@ -1308,7 +1375,7 @@ The state conformance rule differs from the usual rule in two ways.
     % $\mu'(x) = \beta$, $\sigma'(x) = v$ and induction hypothesis $\sigma : \Gamma$. Since $\mu'(x) \doteq \varphi(x) \to \varphi$ is trivially valid. Monotonicity of State Conformance gives us the goal.
 
     % Because $e'$ is \code{unit}, the second proof obligation is trivially true, because $\Gamma' = \Gamma''$
-  \item \textsc{Case SS-Seq-Inner}:
+  \item \textsc{Case \cref{rule:SS-Seq-Inner}}:
     Given: $\tuple{c_1}{\sigma} \leadsto \tuple{c_1'}{\sigma'}$, \\
      $\Gamma \vdash c_1 ; c_2 \Rightarrow \Gamma_2$, \\
      $\forall \Gamma_2, \Gamma \vdash c_1 \Rightarrow \Gamma_2 \wedge \sigma : \Gamma \to \exists \Gamma_1, \sigma' : \Gamma_1 \wedge \Gamma_1 \vdash c_1' \Rightarrow \Gamma_2$ \\
@@ -1322,25 +1389,39 @@ The state conformance rule differs from the usual rule in two ways.
     State conformance $\sigma' : \Gamma_1'$ follows directly from this.
 
     For $\Gamma_1'$ the preconditions for the \textsc{Seq} rule are satisfied.
-  \item \textsc{Case SS-Seq-N}: 
+  \item \textsc{Case \cref{rule:SS-Seq-N}}: 
     Given: $\Gamma \vdash \code{unit}; c \Rightarrow \Gamma_2$, $\sigma : \Gamma$
     show $\exists \Gamma_1, \sigma : \Gamma_1 \wedge \Gamma \vdash c \Rightarrow \Gamma_2$.
 
     Rule inversion over $\Gamma \vdash \code{unit}; c \Rightarrow \Gamma_2$ yields $\Gamma \vdash c \Rightarrow \Gamma_2$.
     Together with the second induction hypothesis this implies the goal.
-  \item \textsc{Case SS-If-T}:
+  \item \textsc{Case \cref{rule:SS-IF-T}}:
      Given $\llbracket x \rrbracket \sigma \doteq \code{true}$, $\Gamma \vdash \code{if $x$\{$s_t$\}else\{$s_e$\}} \Rightarrow \Gamma_2$, $\sigma : \Gamma$, show $\exists \Gamma_1, \sigma : \Gamma_1 \wedge \Gamma_1 \vdash s_t \Rightarrow \Gamma_2$
     
     Rule inversion over $\Gamma \vdash \code{..} \Rightarrow \Gamma_2$ yields $\Gamma \vdash s_t \Rightarrow \Gamma_2$.
     With $\Gamma_1 = \Gamma$ the goal is satisfied.
-  \item \textsc{Case SS-If-F}: analogous to \textsc{Case SS-If-T}
-  \item \textsc{Case SS-Decl}: analogous to \textsc{Case SS-Assign}
-  \item \textsc{Case Deref}
-    $\sigma(x) = v$, $e' = v$, $\sigma' = \sigma$
+  \item \textsc{Case \cref{rule:SS-IF-F}}: analogous to \textsc{Case \cref{rule:SS-IF-T}}
+  \item \textsc{Case \cref{rule:SS-Decl}}: analogous to \textsc{Case \cref{rule:SS-Assign}}
+  \item \textsc{Case \cref{rule:SS-Assign-Ref}}
+    Given $ \sigma(x) = \&y $, $\Gamma \vdash *x = z \Rightarrow \Gamma_2$, $\sigma : \Gamma$, show
+    $\exists \Gamma_1, \sigma[y \mapsto \bbracket{\sigma(z)}] : \Gamma_1 \wedge \Gamma_1 \vdash \code{unit} \Rightarrow \Gamma_2$
 
-    For $\Gamma' = \Gamma$, $\sigma : \Gamma'$ true by assumption
+    Rule inversion over $\Gamma \vdash *x = z \Rightarrow \Gamma_2$ yields:
+    $\Gamma(z) = \beta$, $\Gamma \vdash x: \{\alpha : \&b \mid \alpha \doteq \&y\}$, $\Gamma \vdash \gamma \text{ fresh}$
 
-    Show: $\Gamma \vdash v : \tau' \Rightarrow \Gamma$. By rule inversion \textsc{Lit}, $\tau' = \{ l \mid l \doteq v \}$
+    Choose $\Gamma_1 = \Gamma_2 = \Gamma_1 = \Gamma[y \mapsto \gamma], \gamma \doteq \beta$.
+    With $\Gamma \vdash \alpha \text{ fresh}$ (by rule inversion) using \cref{lem:conservative-ref-tracking} yields $\bbracket{\sigma(x)} = \&y$.
+    \cref{lem:conf-sym-exec} yields $\sigma[y \mapsto \bbracket{\sigma(z)}] : \Gamma[y \mapsto \gamma], \gamma \doteq \beta$
+
+  \item \textsc{Case \cref{rule:SS-While}}
+    Given $\Gamma \vdash \code{while}(x) \{s\} \rightarrow \Gamma_2$, $\sigma : \Gamma$ show $\exists \Gamma_1, \sigma : \Gamma_1 \wedge \Gamma_1 \vdash \code{if}(x) \{\code{while}(x) \{s\}\}\code{else}\{\code{unit}\} \Rightarrow \Gamma_2$
+
+    Rule inversion over $\Gamma \vdash \code{while}(x) \{s\} \rightarrow \Gamma_2$ yields $\Gamma \preceq \Gamma'$, $\Gamma(x) = \alpha$, $\Gamma \vdash c \rightarrow \Gamma'$
+
+    Thus $\Gamma \vdash \code{while}(x) \{s\} \Rightarrow \Gamma$.
+    Which completes the precondition for \\$\Gamma \vdash \code{if}(x) \{\code{while}(x) \{s\}\}\code{else}\{\code{unit}\} \Rightarrow \Gamma_2$ and together with the second hypothesis implies the goal.
+  \item \textsc{Case \cref{rule:SS-Sub}}
+  \item \textsc{Case \cref{rule:SS-Call}} function calls are executed by renaming and inlining and adding a context relaxation at the start and end of the function pertaining to the entry and exit context specifications. Thereby the argument from context relaxation apply here.
 \end{itemize}
 \end{proof}
 
@@ -1843,7 +1924,9 @@ Refinement types are also used in other applications. For example Graf et al. \c
 
 In terms of alternative verification approaches, Prusti\cite{astrauskas_leveraging_2019} is notable, because of their work on formalizing the full Rust semantics, including \code{unsafe}. Prusti is a heavy-weight functional verification framework for Rust; based on separation logic.
 
-Alternative verification approaches also exists: For example RustHorn\cite{matsushita_rusthorn_2020} employs constrained horn clauses based verification to Rust. Particularity relevant for this thesis is the novel formalization for mutable references used in the paper. The authors stipulate that mutable references should be specified by a pre- and post-state from before a reference is borrowed to after it is returned.
+Alternative verification approaches also exists: For example RustHorn\cite{matsushita_rusthorn_2020} employs constrained horn clauses based verification to Rust. Particularity relevant for this thesis is the novel formalization for mutable references used in the paper. 
+% The authors stipulate that mutable references should be specified by a pre- and post-state from before a reference is borrowed to after it is returned.
+The authors stipulate that lending of a variable should have a contract between the lender and the borrower: The borrower requires some precondition to be satisfied about the mutable reference and upon returning the borrow, the borrower ensures that a postcondition is met. 
 
 
 \subsection{Alternative Approaches for Handling Mutability} \label{subsec:related-work-mutability} 

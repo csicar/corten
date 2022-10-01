@@ -1168,13 +1168,13 @@ The state conformance rule differs from the usual rule in two ways.
   Let $\sigma' = \sigma[x \tr \bbracket{e} \sigma]$.
   As a model we select $m' = m[\beta \tr \sigma(x)], \mu(x) = \beta$ and show that the proof obligation is satisfied for $m'$.
   
-  Split the goal on $\cdot \wedge \cdot$; if both sides are satisfied, then the prove in completed.
+  Split the goal on the conjunction; if both sides are valid then the conjunction is valid (for the given model).
   \begin{description}
     \item[Part I] show: $m' \vDash \varphi
     [\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]$
       \begin{align*}
-          \varphi[\mu(y) \tr \bbracket{\sigma(y)} \mid y]
-             &= \varphi[\mu(y) \tr \bbracket{\sigma(y)} \mid y \neq x][\mu(x) \tr \bbracket{\sigma(x)}]
+          &\phantom{=}\ \ \varphi[\mu(y) \tr \bbracket{\sigma(y)} \mid y]
+          \\   &= \varphi[\mu(y) \tr \bbracket{\sigma(y)} \mid y \neq x][\mu(x) \tr \bbracket{\sigma(x)}]
           \\ &= \varphi
             [\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y \neq x]
             [\alpha \tr \bbracket{e} \sigma]
@@ -1212,7 +1212,7 @@ The state conformance rule differs from the usual rule in two ways.
               \begin{description}
                 \item[Case $e=z=x$] 
                   \begin{align*}
-                    &\bbracket{x}\Gamma[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
+                    &\phantom{=}\ \ \Gamma[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
                     \\ &= \mu(x)[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
                     \\ &= \mu(x)[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y \neq x][\alpha \tr \bbracket{\sigma'(x)} ]
                     \\ &\overset{\mathclap{\alpha \text{ fresh}}}{=} \mu(x) 
@@ -1220,7 +1220,7 @@ The state conformance rule differs from the usual rule in two ways.
                   \end{align*}
                 \item[Case $e = z \neq x$]
                   \begin{align*}
-                    &\phantom{=} \bbracket{z}\Gamma[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
+                    &\phantom{=}\ \ \bbracket{z}\Gamma[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
                     \\ &= \mu(z)[\mu[x\mapsto \alpha](z) \tr \bbracket{\sigma'(z)}]
                     \\ &\overset{\mathclap{\text{def. } z}}{=} \mu(z)[\mu(z) \tr \bbracket{\sigma'(z)}]
                     \\ &=\bbracket{\sigma(z)} = \bbracket{z}\sigma
@@ -1230,7 +1230,7 @@ The state conformance rule differs from the usual rule in two ways.
               \begin{description}
                 \item[Case $x_1=x$, $x_2 \neq x$] (without loss of generality)
                 \begin{align*}
-                     &\phantom{=} \bbracket{x \odot x_2}[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
+                  &\phantom{=}\ \ \bbracket{x \odot x_2}[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
                   \\ &=\bbracket{x \odot x_2}\Gamma[\mu(x_2)\tr \bbracket{\sigma'(x_2)}][\mu[x \mapsto \alpha](x) \tr \bbracket{\sigma'(x)}]
                   \\ &=\bbracket{\mu(x) \odot \mu(x_2)}[\mu(x_2)\tr \bbracket{\sigma'(x_2)}][\alpha \tr \bbracket{\sigma'(x)}]
                   \\ &=\bbracket{\mu(x) \odot \mu(x_2)}[\mu(x_2)\tr \bbracket{\sigma(x_2)}]
@@ -1306,15 +1306,6 @@ The state conformance rule differs from the usual rule in two ways.
 \end{itemize}
 \end{proof}
 
-\begin{lemma}
-  State Conformance is monotone\todo{sensible name?}: If $\sigma : \Gamma$, $(\beta = v) \to \varphi$ then
-    $\sigma[x \mapsto v] : \Gamma[x \mapsto \beta] \wedge \varphi$
-\end{lemma}
-
-\begin{proof}
-  $$\vDash \left(\bigwedge_{x \in \text{Var}} \mu(x) \doteq \sigma(x)\right) \to \varphi$$
-  ...?
-\end{proof}
 
 \iftrue % shorten
 \label{sec:extensions} \section{Extensions}

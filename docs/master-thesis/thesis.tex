@@ -914,17 +914,23 @@ If \code{sum} is updated first, we can establish its type, but once \code{i} is 
 
 For this purpose, Corten provides a mechanism for the programmer to instruct Corten to relax all variables at once \- named \code{relax\_ctx}. The syntax is similar to the refinement type syntax, but allows for multiple variables to be described at a time. The type system will check all refinement types at once, resulting in the successful type checking of the example.
 
-\section{Function Declaration Type Checking}
+\fi
+\section{Type System}
 
-The following sections will introduce the type checking rules of Corten, starting with the rule for checking function declarations. We assume the program has passed the Rust type checking rules, meaning (non-refined) type- and ownership-checking was successful.
+The following sections will introduce the type checking rules of Corten. We assume the program has passed the Rust type checking rules, meaning (non-refined) type- and ownership-checking was successful.
 
 \begin{definition}[Typing Context $\Gamma = (\mu, \Phi)$]
-  is the typing context, consisting of a partial function $\mu : \text{PVar} \rightharpoonup \text{LVar}$ used for tracking the current logic variable associated with a program variables and a set of predicates $\Phi$, which constrains the logic variables in the image of $\mu$.
+  The typing context, consisting of an injective function $\mu : \text{PVar} \rightharpoonup \text{LVar}$, that is used for tracking the current logic variable associated with a program variables and a set of predicates $\Phi$, which constrains the logic variables in the image of $\mu$, holds the relevant dynamic state for the various type checking rules.
+  $\mu$ must contain a logic variable for every program variable and $\Phi$ can contain additional logic variables not found in the image of $\mu$.
+
+  We abbreviate $(\mu, \Phi \wedge \varphi)$ to $\Gamma, \varphi$ for the addition of $\varphi$ to the constraint set, $(\mu[x \mapsto \alpha], \Phi)$ to $\Gamma[x \mapsto \alpha]$ for the update of the mapping for program variable $x$ to $\alpha$ and 
+  $\mu(x)$ to $\Gamma(x)$ for accessing to the logic variable associated with $x$.
 \end{definition}
 
-
+We start with the rule for checking function declarations.
 Without loss of generality, we assume arguments are ordered by their type: First immutable / owned arguments and then mutable arguments.
 
+\begin{definition}[Function Declaration Type Checking]
 When handling mutable references in parameters some subtleties need to be considered. The function can change both the referenced \textit{value} as well as the reference \textit{location}. To describe the referenced value is normally done using the $\{ \alpha \mid \alpha \doteq \&b\}$ syntax. The question arises: If $\alpha$ was the logic variable for a parameter, what should be the analog for $b$? In contrast to local variables, there is no variable representing the referenced value for parameters. As seen in section \ref{subsec:mutable-references}, using the dereference operator would come with a lot of complications.
 Instead we introduce $arg^i_n$, a special variable denoting the initial abstract value (i.e. stack location), that the mutable reference of argument $n$ points to. $i$ denotes the level of nesting: For the $n$th parameter with the Rust type \code{\&mut \&mut i32} we would generate $arg^1_n$ and $arg^2_n$.
 
@@ -937,17 +943,19 @@ Instead we introduce $arg^i_n$, a special variable denoting the initial abstract
     }
     {\code{fn } f(a_1 : \{ \alpha_1 \mid \varphi^\alpha_1 \}, \dots, b_1 : \{ \beta_1 \mid \varphi^\beta_1 \Rightarrow \gamma_1 \mid \varphi^\gamma_1\}) \to \tau \{ \bar s; s_{res} \}}
 \end{gather*}
+\end{definition}
 
-\section{Sub-Typing Rule: $\Gamma \vdash \tau \preceq \tau'$}
-
-Next, we introduce the Rule for checking the subtype relation: a type $\tau$ is a subtype of $\tau'$ in the context $\Gamma$, if the predicate of the supertype imply the predicate of the subtype. Corten uses a decidable, propositional logic with the theories of equality and linear arithmetic. Before dispatching a request to the SMT solver, the supertype's logic variable is substituted for the subtype's variable to the predicate to refer to the same variable.
+Next, we introduce the Rule for checking the subtype relation.
+\begin{definition}[Sub-Typing Rule: $\Gamma \vdash \tau \preceq \tau'$]
+A type $\tau$ is a subtype of $\tau'$ in the context $\Gamma$, if the predicate of the supertype imply the predicate of the subtype. Corten uses a decidable, propositional logic with the theories of equality and linear arithmetic. 
+Before dispatching a request to the SMT solver, the supertype's logic variable is substituted for the subtype's variable to the predicate to refer to the same variable.
 
 \[
   \inferrule*[left=$\preceq$-Ty]
     {\text{SMT-Valid}(\Phi \wedge \varphi'[\beta \triangleright \alpha ] \implies \varphi)}
     {\Gamma = (\mu, \Phi) \vdash \{ \alpha \mid \varphi\} \preceq \{ \beta \mid \varphi' \}}
 \]
-
+\end{definition}
 % alternative (should be equivalent):
 
 % \[
@@ -980,38 +988,53 @@ The domain restriction ensures, that the sub-context does not contain additional
     {(\Phi, \mu) \preceq (\Phi', \mu')}
 \]
 
+\begin{definition}[Fresh Variable $\Gamma \vdash \alpha \text{ fresh}$]
 
+Corten requires that new logic variables are distinct from all others. The rule ensures that $\alpha$ is a free variable in $\Gamma = (\mu, \Phi)$:
+  $$\Gamma \vdash \alpha \text{ fresh} \text{ iff } \alpha \notin FV(\Phi)$$
+\end{definition}
 
-\section{Expressions Typing: $\Gamma \vdash e : \tau$}
+\begin{definition}[Expression Constraint: $\alpha \simeq \bbracket{e}\Gamma$]
+An expression constraint is used to restrict $\alpha$ to (as close to) the value of expression $e$. For instance, typing the expression \code{a + 3} should get the strongest type $\alpha == \alpha + 3$ where $\alpha$ is the logic variable for \code{a}.
+It could also be possible that an expression can not be directly translated, like operations not allowed by the logic. In that case, the expression will be conservatively approximated by the predicate \code{true}.
+
+\begin{align*}
+  \alpha \simeq \bbracket{v}\Gamma &= \alpha \doteq v
+  \\ \alpha \simeq \bbracket{x_1 \odot x_2}\Gamma &= \alpha \doteq (x_1 \odot x_2) &&\text{if }\odot\text{ allowed}
+  \\ \alpha \simeq \bbracket{x}\Gamma &= \alpha \doteq \mu(x)
+  \\ \alpha \simeq \bbracket{\&y}\Gamma &= \alpha \doteq \&y
+  \\ \alpha \simeq \bbracket{e}\Gamma &= \text{true} &&\text{otherwise}
+\end{align*}
+\end{definition}
+
+\begin{definition}[Expressions Typing: $\Gamma \vdash e : \tau$]
 
 \begin{gather*}
   \inferrule*[left=Lit]
-    {l \text{ fresh} \\ \text{base\_ty}(v) = b}
-    {\Gamma \vdash v: \{ l : b \mid l \doteq v\} }
+    {\alpha \text{ fresh}}
+    {\Gamma \vdash v: \{ \alpha : b \mid \alpha \simeq \bbracket{v}\Gamma\} }
   %
   \quad
   \inferrule*[left=Var]
-    {\alpha \text{ fresh} \\ \mu(x) = \beta}
-    {(\mu, \Phi)\vdash x : \{ \alpha : b \mid \beta \doteq \alpha \} }
-  %
-  \\
-  \inferrule*[left=Var-Deref]
-    {\Gamma \vdash y : \tau \\ \Gamma \vdash x : \{ \beta : \&b \mid \beta \doteq \&y \}}
-    {\Gamma \vdash *x : \tau }
+    {\alpha \text{ fresh}}
+    {(\mu, \Phi)\vdash x : \{ \alpha : b \mid \beta \simeq \alpha \} }
   %
   \\
   \inferrule*[left=Add]
     {
-      \gamma \text{ fresh}
-      \\ \mu(x_1) = \alpha
-      \\ \mu(x_2) = \beta
+      \alpha \text{ fresh}
     }
-    {\Gamma \vdash x_1 \cdot x_2 : \{ \gamma: b \mid \gamma \doteq \alpha \cdot \beta \} }
+    {\Gamma \vdash x_1 \odot x_2 : \{ \alpha: b \mid \alpha \simeq \bbracket{x_1 \odot x_2}\Gamma \} }
+  %
+  \\
+  \inferrule*[left=Var-Deref]
+    {\Gamma \vdash x : \{ \beta : \&b \mid \beta \doteq \&y \} \\ \Gamma \vdash y : \tau }
+    {\Gamma \vdash *x : \tau }
   %
   \\
   \inferrule*[left=Ref]
     {\star}
-    {\Gamma \vdash \&x : \{ \alpha : \&b \mid \alpha \doteq \&x\}}
+    {\Gamma \vdash \&x : \{ \alpha : \&b \simeq \bbracket{\&x}\Gamma\}}
   %
   \quad
   \inferrule*[left=Intro-Sub]
@@ -1022,22 +1045,19 @@ The domain restriction ensures, that the sub-context does not contain additional
     {\Gamma \vdash e \texttt{ as } \tau': \tau'}
 \end{gather*}
 
-\section{Statement Type Checking $\Gamma \vdash s \Rightarrow \Gamma'$}
+Because we assume that the base language type checking already accepted the program, the expression typing rule become quite simple. The rules \textsc{Lit, Var, Add, Ref} are solely concerned with delegating to the expression constraint generation.
+\textsc{Var-Deref} stipulates that dereferencing \code{*x} has type $\tau$ if the target of \code{x} is known and unique.
+\textsc{Intro-Sub} allows for a subtype to be introduced, which would mostly be used internally by an inference system.
+\end{definition}
 
 
-\paragraph*{Abbreviations}
-We write:
-\begin{itemize}
-  \item  $\Gamma, c$ for $(\mu, \Phi \wedge c)$
-  \item $\Gamma[a \mapsto \alpha]$ for $(\mu[a \mapsto \alpha], \Phi)$
-  \item $\Gamma(x)$ for $\mu(x)$
-\end{itemize}
+
+\begin{definition}[Statement Type Checking $\Gamma \vdash s \Rightarrow \Gamma'$]
 
 \begin{gather*}
   \inferrule*[left=If]
     {
-      \Gamma \vdash \Gamma(x) : \text{bool} \Rightarrow \Gamma
-      \\ \Gamma, \Gamma(x) \doteq \code{true} \vdash s_t \Rightarrow \Gamma'
+      \Gamma, \Gamma(x) \doteq \code{true} \vdash s_t \Rightarrow \Gamma'
       \\ \Gamma, \Gamma(x) \doteq \code{false} \vdash s_e \Rightarrow \Gamma'
     }
     {\Gamma \vdash \text{if } x \text{ then }s_t\text{ else } s_e \Rightarrow \Gamma'}
@@ -1084,12 +1104,12 @@ We write:
     {
       \Gamma \vdash e : \tau 
       \\ \Gamma \vdash x : \{ \alpha : \& b \mid \alpha \doteq \&y_1 \vee \dots \vee \alpha \doteq \&y_n \}
-      \\\\ \Gamma \vdash \tau \preceq \{ \beta_1 \mid \varphi_1 \}
-      \\     \dots  
-      \\ \Gamma \vdash \tau \preceq \{ \beta_n \mid \varphi_n \}
       \\\\ \Gamma \vdash y_i : \{ \beta_1 \mid \varphi_1 \}
       \\ \dots 
       \\ \Gamma \vdash y_i : \{ \beta_i \mid \varphi_i \}
+      \\\\ \Gamma \vdash \tau \preceq \{ \beta_1 \mid \varphi_1 \}
+      \\     \dots  
+      \\ \Gamma \vdash \tau \preceq \{ \beta_n \mid \varphi_n \}
       }
     {\Gamma \vdash *x = e \Rightarrow \Gamma}
   % %
@@ -1111,7 +1131,7 @@ We write:
     }
     {(\mu, \Phi) \vdash \code{let res} = f(\overline{x_i}, \overline{\&mut y_j}) => \mu[\overline{x_i \mapsto \alpha_i}, \overline{y_j \mapsto \beta_j}], \Phi \wedge \overline{\phi_i} \wedge \overline{\psi_j} \wedge \overline{\psi_i}}
 \end{gather*}
-
+\end{definition}
 
 %%%% OLD Must ref rule
 
@@ -1130,8 +1150,6 @@ We write:
 %     {(\mu, \Phi) \vdash \alpha \text{ must reference } y}
 % \end{gather*}
 % \todo{In think the first precondition and second precondition should serve the same purpose. Second one should be nicer and correct}
-
-\fi
 
 \section{Soundness of the Type System}
 
@@ -1160,11 +1178,11 @@ Because MiniCorten is based on Rust, we will assume, that progress, as well as p
 The state conformance rule differs from the usual rule in two ways.
 
 \begin{lemma}[Conformance of Symbolic Execution]
-  If $\sigma : \Gamma$, $\Gamma \vdash \alpha \text{ fresh}$ then $\sigma[x \tr \bbracket{e} \sigma] : \Gamma[x \mapsto \alpha],(\alpha \doteq \llbracket e \rrbracket \Gamma)$
+  If $\sigma : \Gamma$, $\Gamma \vdash \alpha \text{ fresh}$ then $\sigma[x \tr \bbracket{e} \sigma] : \Gamma[x \mapsto \alpha],(\alpha \simeq \bbracket{e} \Gamma)$
 \end{lemma}
 \begin{proof}
   Given $\varphi[ \mu(x) \tr \bbracket{\sigma(x) \mid x}] \text{ SAT}$ show
-  $(\varphi \wedge \alpha \doteq \bbracket{e}\Gamma)[\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)}]$.
+  $(\varphi \wedge \alpha \simeq \bbracket{e}\Gamma)[\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)}]$.
   Let $\sigma' = \sigma[x \tr \bbracket{e} \sigma]$.
   As a model we select $m' = m[\beta \tr \sigma(x)], \mu(x) = \beta$ and show that the proof obligation is satisfied for $m'$.
   
@@ -1194,9 +1212,9 @@ The state conformance rule differs from the usual rule in two ways.
         \\\underbrace{m[\mu(x) \mapsto \bbracket{\varphi(x)}]}_{= m'} & \vDash \varphi
             [\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
       \end{align*}
-    \item[Part II] show $m' \vDash (\alpha \doteq \bbracket{e}\Gamma)[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]$
+    \item[Part II] show $m' \vDash (\alpha \simeq \bbracket{e}\Gamma)[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]$
       
-      Case distinction on $\alpha \doteq \bbracket{e}\Gamma$
+      Case distinction on $\alpha \simeq \bbracket{e}\Gamma$
 
       \begin{description}
         \item[Case true] show $m' \vDash \text{true}[\dots]$; trivial
@@ -1621,7 +1639,7 @@ Note, that when typing \code{client}, CortenC needs to match \code{\&mut x} with
 
 \section{Recursion: Fibonacci-Numbers}
 
-Thanks to Corten's modular approach, handling recursive functions is strait forward in CortenC. Listing \ref{lst:eval-fib} demonstrates this by implementing a function, that returns the $n$th fibonacci number $F_n$ and asserting that $F_n \geq n^2$. Because $n$ is arbitrary, this is proves that the fibonacci sequence grows faster than the $n^2$.
+Thanks to Corten's modular approach, handling recursive functions is strait forward in CortenC. Listing \ref{lst:eval-fib} demonstrates this by implementing a function, that returns the $n$th fibonacci number $F_n$ and asserting that $F_n \geq n^2$\footnote{The specification is not technically in linear arithmetic, but CortenC can allow some leeway, as long as SMT-Solver are still able to solve it.}. Because $n$ is arbitrary, this is proves that the fibonacci sequence grows faster than the $n^2$.
 
 
 \begin{listing}[ht]

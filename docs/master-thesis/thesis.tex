@@ -229,6 +229,7 @@
 % With increasing reliance on increasingly complex software, ensuring correctness of programs is a vital concern to software development.
 With increasing amount and reliance on software, ensuring the correctness of programs is a vital concern for the future of software development.
 Although research in this area has made good progress, most approaches are not accessible enough for general adoption by the developers. Especially in light of a predicted shortage of developers\cite{breaux_2021_2021-1}, it is not sufficient to require developers to undergo year-long training in specialized and complex verification methods to ensure the correctness of their software. It is therefore crucial to integrate with their existing tooling and workflows to ensure the future high quality of software.
+
 One avenue for improving accessability for functional verification is extending the expressiveness of the type system to cover more of the correctness properties.
 Using type systems for correctness was traditionally prevalent in purely functional languages where evolving states are often represented by evolving types, offering approachable and gradual adoption of verification methods. Tracing evolving states in the type system would be especially useful for languages with mutability, since substantial parts of the behaviour of the program is expressed as mutation of state. In particular Rust seems like a promising target language, because mutability is already tracked precisely and thus promising functional verification for relatively minimal effort on the programmer's part.
 
@@ -279,16 +280,80 @@ The central idea of Refinement Types is adding predicates to a language's type: 
 
 The notion of refinements is embedded into the base language using subtyping: A refined type $\tau$ is a subtype of $\tau'$ if $\tau$'s predicate implies the predicate of $\tau'$ (in the current typing context $\Gamma$).
 As is common with subtyping systems, the subtype can then be used in the place where the super type is expected.
-The following rule shows how subtyping is handled by Liquid types \cite[p. 6]{rondon_liquid_2008}:
+The following rules shows how subtyping is handled by Liquid types \cite[p. 6]{rondon_liquid_2008}\footnote{Names were adapted to better match our notation}. \textsc{LT-Sub} allows a value $e$ to be typed with the type $\tau_2$ if $e$ has type $\tau_1$ and the subtyping relation $\Gamma \vdash \tau_1 \preceq \tau_2$ is satisfied -- for instance by \textsc{$\preceq$-Base}. 
 
-\begin{equation*}
-  \inferrule*
-    {\text{SMT-Valid}(\llbracket \Gamma \rrbracket \wedge \llbracket e_1 \rrbracket \Rightarrow \llbracket e_2 \rrbracket)}
+\begin{gather*}
+  \inferrule*[left=LT-Sub]
+    {
+        \Gamma \vdash e: \tau_1 
+        \\ \Gamma \vdash \tau_1 \preceq \tau_2
+        \\ \Gamma \vdash \tau_2
+    }
+    {\Gamma \vdash e : \tau_2}
+  \inferrule*[left=$\preceq$-Base]
+    {\text{SMT-Valid}(\llbracket \Gamma \rrbracket \wedge \llbracket e_1 \rrbracket \to \llbracket e_2 \rrbracket)}
     {\Gamma \vdash \left\{ v : b \mid e_1 \right\} \preceq \left\{ v: b \mid e_2 \right\}}
-\end{equation*}
+\end{gather*}
 
-Refinement Types are related to dependent types, distinguished by the limited expressiveness of the type. Refinement types trade off expressiveness for automatic type checking. Allowed formulas are chosen from a SMT decidable logic. 
-Rondon et al. \cite{rondon_liquid_2008} chose the EUFA as the logic fragment, meaning a propositionaly logic with the theories of equality, uninterpreted functions and linear arithmetic.
+The subtyping rule \textsc{$\preceq$-Base} requires that in the current context $\Gamma$, the predicate of the subtype must imply the predicate of the supertype, meaning a value of type $\tau_1$ may be used in a place requiring $\tau_2$, since $\tau_2$ was shown to satisfy all properties of $\tau_1$. 
+$\bbracket{\Gamma}$ encodes the predicates in $\Gamma$ as an SMT formula by substituting $v$ in the type predicates by the program variable's name.
+For example, we can show, that in the context $\Gamma = (y : \{ v : \text{i32} \mid v > 10\}, x : \{ v : \text{i32} \mid v > y\})$, $x$ can be typed as $\{ v : \text{i32} \mid v > 0 \}$:
+
+\begin{gather*}
+  \inferrule*[left=LT-Sub]
+    {
+      \inferrule*[left=LT-Var]
+        {\Gamma(x) = \tau_1}
+        {\Gamma \vdash x: \tau_1}
+        \\ \inferrule*[left=$\preceq$-Base]
+          {\text{SMT-Valid}(y > 10 \wedge v > 0 \to v > y)}
+          {\Gamma \vdash \{ v : \text{i32} \mid v > 10\} \preceq \{ v : \text{i32} \mid v > y \}}
+        \\ \dots
+    }
+    {\Gamma \vdash x : \{ v : \text{i32} \mid v > 0 \}}
+\end{gather*}
+
+Liquid types also has a mechanism for enabling path sensitivity: When encountering an if expression, the related path condition is added to the context:
+
+\begin{gather*}
+  \inferrule*[left=LT-If]
+    {
+        \Gamma \vdash e: \code{ bool}
+        \\ \Gamma; e \vdash e_t : \tau
+        \\ \Gamma; \neg e \vdash e_e : \tau
+        \\ \Gamma \vdash \tau
+    }
+    {\Gamma \vdash \code{if } e \code{ then } e_t \code{ else } e_e : \tau}
+\end{gather*}
+
+Note, that $e_t$ and $e_e$ need to have the same type, but can use the path condition to create a value of that type. 
+As an example Rondon et al. use the $\max$ function. It is implemented as
+\code{fn max(x, y) \{ if x > y \{ x \} else \{ y \}\}} given the return type $\{ v: \text{i32} \mid x \leq v \wedge y \leq v\}$.
+To show that the then-case has the required return type, we must show, that $x>y \vdash x : \{ v: \text{i32} \mid x \leq v \wedge y \leq v\}$, which the following proof tree shows:
+
+{\scriptsize
+\begin{gather*}
+  \inferrule*[leftstyle=\scriptsize, left=LT-If]
+    {
+      \inferrule*[left=LT-Sub, ]
+        {
+          \inferrule*[left=$\preceq$-Base]
+            {\text{SMT-Valid}(x > y \wedge (v = x) \to (x \leq v \wedge y \leq v))}
+            {\{ v : \text{i32} \mid v = x \} \preceq  \{ v: \text{i32} \mid x \leq v \wedge y \leq v \}} 
+          \\
+          \inferrule*[left=LT-Var]
+            {\star}
+            {\Gamma \vdash x: \{ v : \text{i32} \mid v = x \}}
+        }
+        {\Gamma; x > y \vdash x: \{ v: \text{i32} \mid x \leq v \wedge y \leq v \}}
+        \\ \dots
+    }
+    {\Gamma \vdash \code{ if } x > y \{ x \} \code{ else } \{ y \} : \{ v: \text{i32} \mid x \leq v \wedge y \leq v \}}
+\end{gather*}
+}
+
+Refinement Types can also be understood as dependent types, distinguished by the limited expressiveness of the type. Refinement types trade off expressiveness for automatic type checking. Allowed formulas are chosen from a SMT decidable logic. For instance
+Rondon et al. \cite{rondon_liquid_2008} choose the EUFA as the logic fragment, meaning a propositional logic with the theories of equality, uninterpreted functions and linear arithmetic.
 
 
 \section{Rust}
@@ -362,7 +427,9 @@ Thus, Rust ensures that for every variable at every point during the execution t
     ...
     let a = User { name: "Alice", age: 25 };
     let b = &a;
-    let c = &mut a; // error: cannot borrow `a` as mutable because it is also borrowed as immutable
+    let c = &mut a; 
+    // {\color{red} \code{    \textuparrow\textuparrow\textuparrow\textuparrow\textuparrow\textuparrow error: }}
+    // {\color{red} cannot borrow `a` as mutable because it is also borrowed as immutable}
     age(c);
     let result = greet(&b); // Lend \code{a} to \code{greet}
     println!(a.name);
@@ -815,10 +882,11 @@ Besides the mutation of values, mutable references are also common in Rust, whic
 
 Corten has two ways of dealing with assignment to mutable references: If the reference destination is known, the destination's type will be updated with the assigned values type (i.e. strong update). If there are multiple possible reference destinations, Corten will require the assigned value to satisfy the predicates of all possible destinations (i.e. weak updates). This is a standard approach (e.g. \cite{kloos_asynchronous_2015}), but more precise in Rust: The set of possible destinations only grows, when it depends on the execution of an optional control flow path. This means most of the time, strong updates are possible and weak updates are only needed if the reference destination is actually dynamic (i.e. dependent on the execution) \footnote{It would also be possible to encode the path condition in the reference type, but this was decided against for the stated goal of simplicity for the user}
 
-The problem with mutable references is possibility of aliasing. Aliasing is problematic, because it might create interdependencies between the types of different variables: If one variable is changed, it might affect wether another variable is typed correctly. In \cref{lst:mutation-strong} the return value \code{a} is affected by changes done to a different variable \code{a}. Conservative approximation requires that all possible effects must be tracked.
+The problem with mutable references is the possibility of aliasing. Aliasing is problematic, because it might create interdependencies between the types of different variables: If one variable is changed, it might affect wether another variable is typed correctly. In \cref{lst:mutation-strong} the return value \code{a} is affected by changes done to a different variable \code{b}. Conservative approximation requires that all possible effects must be tracked. 
 
-The key idea is that reference types constrains the reference target, while the value owner's type constrains the value.
-Because of the ownership system, Corten can accurately track references, which are phrased as predicates.
+A consequence of the ownership system is, that at any time, the owner's and at most one mutable reference's type could be affected by a mutation. The owner's type is changed if the value is changed and the mutable reference borrows the value and updates the owner's value once the reference dropped. If there was another variable's type affected by mutating the value, it would imply that the references alias, which is not allowed by the ownership system.
+
+References are specified by recognizing the fact that it is sufficient to let the reference's type solely constrain the reference target, while the value owner's type constrains the value.
 In the example, \code{b = \&mut a} and \code{\&mut a} will have inferred type \code{\{ r : \&mut | r == \& a \}}, meaning any inhabitant of this type can at most refer to the variable called \code{y}.
 When a new value is assigned to \code{*b}, the type system will look at the typing context to find out what \code{b} might refer to. In this case \code{a} is the \textit{only} possible target und we can therefore \textit{update} its type. I.e. in type system, \code{*b = 0} will change the type of \code{a} to \code{\{ s : i32 | s == 0 \}}, but the type of \code{b} stays the same (because it still refers to the same location). We call this kind of assignment a strong assignment, as it can change the type. 
 
@@ -2166,8 +2234,8 @@ $\Phi' = \{v_2 \doteq v_1 - 1, v_1 > 0\}$.
 What Corten calls a sub-context relation, is referred to as context inclusion in Flux.
 Though Flux is significantly more conservative with its rules: Only allowing permutations (\textsc{C-Perm}), removal (\textsc{C-Weaken}) of predicates and subtyping of just individual types (\textsc{C-Sub}) and only if they can be separated (\textsc{C-Frame}), meaning they do not depend on other predicates.
 Flux should thusly is seems that Flux, can only show inclusion for a subset of what the logic and theories allow.
-As an example consider the sets displayed in \cref{fig:flux-context-space}, which are described by the constraints super-context $x > y - 1 \wedge x > y + 1$, which allows $x$ to vary from $y$ by at most $1$. A sensible sub-context would be $x=y$, which satisfies the constraints, but there is no possible proof for this fact.
-Because Corten delegates sub-context checking to SMT, handling these dependencies is no problem.
+As an example consider the sets displayed in \cref{fig:flux-context-space}, which are described by the constraints super-context $x > y - 1 \wedge x > y + 1$, which allows $x$ to vary from $y$ by at most $1$. A sensible sub-context would be $x=y$, which satisfies the constraints, but there is no possible proof for this fact. Flux can only prove context inclusion, if the subcontext is included an the axis aligned containment box, meaning the set $\{(x_1, \dots, x_n) \mid (\forall \xi. (\xi, x_2, \dots x_n) \in D) \wedge \dots \wedge (\forall \xi. (x_1, \dots, x_{n-1}, \xi) \in D)\}$. In this example, it would be $[-0.5, 0.5] \times [-0.5, 0.5]$. 
+Because Corten delegates sub-context checking to SMT, handling these dependencies are no problem.
 
 \begin{figure}[h]
 	\centering

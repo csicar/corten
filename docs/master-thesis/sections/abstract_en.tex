@@ -15,8 +15,18 @@
 Software correctness is a central goal for software development.
 One way to improve correctness is using strong and descriptive types, that express correctness properties as types, and verifying their compatibility with the programs by using type systems.
 In particular Refinement Types demonstrated, that even with a verification system that is restricted to a decidable logic, intricate properties can be expressed in a lightweight and gradual way and verified automatically.
-However existing approaches for adapting Refinement Types from functional to imperative languages proved hard without compromising on at least one of core features of Refinement Types.
+
+However existing approaches for adapting Refinement Types from functional to imperative languages showed that the presence of mutable data and references entails compromising on at least one of the core features of Refinement Types, which are the automated, decidable verification and minimal, approachable specification.
+% However existing approaches for adapting Refinement Types from functional to imperative languages proved hard without compromising on at least one of core features of Refinement Types.
+
 % I argue that a base language restricted to unique mutable references will make
-This thesis aims to design a Refinement Type system without such compromises by taking advantage of Rust's restriction to unique mutable references.
-I will define a Refinement Type language and typing rules and argue for their soundness. Additionally I will implement a prototype verifier to evaluate the effectiveness of the approach on selected examples.
-\todo{can be longer: aliasing problematic erwähnen, beiträge aufzählen: Theorie, Praxis, ...}
+This thesis presents a Refinement Type system minimal compromises by taking advantage of Rust's restriction to unique mutable references.
+
+
+To this end, we augment a flow-sensitive Refinement Type system with a variable typing context that facilitates type updates and tracks reference destinations. We define a notion of subtyping on this context and argue for the soundness of our typing rules. 
+Furthermore we implement a prototype verifier for an extended version of our type system as a plugin to the Rust compiler to evaluate the efficacy of the approach on a selection of examples demonstrating automatic verification and minimal, approachable specification.
+
+Our work provides insights into the unique advantages that Rust's ownership system provides for a Refinement Type system. Additionally we analyse a large dataset of existing Rust code to gauge how relevant language features are used in practice.
+
+% We will define a Refinement Type language with these properties and typing rules and argue for their soundness. Additionally I will implement a prototype verifier to evaluate the effectiveness of the approach on selected examples.
+% \todo{can be longer: aliasing problematic erwähnen, beiträge aufzählen: Theorie, Praxis, ...}

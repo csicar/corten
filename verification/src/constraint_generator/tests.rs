@@ -1970,6 +1970,10 @@ mod evaluation {
                     *v
                 }
 
+                fn get(v : &mut ty!{ b: IntVec | true => a | a == b }, index: ty!{i : i32 | 0 <= i && i < b}) -> ty!{ r: () } {
+                    ()
+                }
+
                 fn is_empty(v : &mut ty!{ v1 : i32 | true => v2 | v2 == v1 }) -> ty!{ e : bool | e == (v1 == 0) } {
                     let l = len(v);
                     l == 0
@@ -1987,9 +1991,13 @@ mod evaluation {
                     let mut v = new();
                     push(&mut v);
                     push(&mut v);
+                    let mut i = 1;
+                    get(&mut v, i);
                     pop(&mut v);
                     push(&mut v);
                     pop(&mut v);
+                    i = 0;
+                    get(&mut v, i);
                     len(&mut v)
                 }
 

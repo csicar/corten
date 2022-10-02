@@ -457,12 +457,12 @@ Although the ownership system was originally introduced to allow for safe, manua
 
 \subsection{Insights into Rust as a Verification Target}
 
-Rust justifies a new approach to verification, because it is possible to take advantage of guarantees provided by Rust's ownership system. 
+% Rust justifies a new approach to verification, because it is possible to take advantage of guarantees provided by Rust's ownership system. 
+% Rust features a few exceptional design decisions that profoundly influence the design of verification systems for it. The following paragraphs will elaborate on this.
+
+Rust justifies a new approach to verification due to its unique set of design decisions that profoundly influence the design of verification systems for it. The following paragraphs will elaborate on this.
 
 % Rust is split into two languages: safe and unsafe Rust. Like most type systems, Rust's type and ownership system is conservative, meaning any (safe) Rust program that type checks, will not crash due to memory safety or type errors. Unsafe Rust gives the programmer the ability to expand the programs accepted by Rust outside that known-safe subset.
-
-
-Rust features a few exceptional design decisions that profoundly influence the design of verification systems for it. The following paragraphs will elaborate on this.
 
 
 \paragraph*{Opaque Generics} Rust does not provide a way to check a generic parameter for its instantiation. This means that we cannot extract any additional information from a generic parameter \code{T}. A function from \code{T} to \code{T} can therefor only be the identity function.
@@ -472,12 +472,16 @@ In contrast, languages with instance-of-checks allow an implementation of a poly
 
 \paragraph*{Explicit Mutable Access} A consequence of the ownership rules is that a function can only mutate (part of) the state that is passed to it as a parameter. There is no global state and there is no implicit access to an object instance. Thus any intention of mutating state must already be expressed in the function signature, which makes the specification of this mutation quite natural.
 
+\paragraph*{Explicit Nullabillituy} Rust will ensure definite assignment, meaning variable can only be accessed if they contain a value. For verification this means, that there is no need to proove that a variable is defined. If nullabillity is desired, Rust offers normal sum type \code{Option<T>} type with the variants \code{None} and \code{Some(T)}. 
+By handling the general case of sum types verification system can get handling of nullable data for free.
+
 \paragraph*{Minimal subtyping} In contrast to object oriented languages, Rust has no user-extendable notion of object subtyping. 
 Rust does have a notion of subtyping for its permission system, which serves the purpose of coercing mutable references \code{\&mut T} to immutable references \code{\& T} etc. where needed. 
 At the type level Rust also has a concept of subtyping for \code{traits}.
 Because of the limited, well-known scope, these subtyping relations create no ambiguity with a refinement type system.
 
-\paragraph*{What Rust does not solve} Even though Rust simplifies reasoning about mutability and aliasing of mutable data, Rust does not eliminate the need to reason about multiple references to mutable data. For example, \cref{lst:alias-mut} shows how \code{cell}'s type is influenced by changes to \code{r}. This does not mean that the ownership rule  \textit{mutability XOR aliasing} are broken: Even though both \code{cell} and \code{r} are mutable, but only one is active.
+\paragraph*{What Rust does not solve} Even though Rust simplifies reasoning about mutability and aliasing of mutable data, Rust does not eliminate the need to reason about their interaction. For example, \cref{lst:alias-mut} shows how \code{cell}'s value is influenced by changes to another variable \code{r}. This does not mean that the ownership rule  \textit{mutability XOR aliasing} are broken: Even though both \code{cell} and \code{r} are mutable, \code{cell} becomes inaccessible while \code{r} is live.
+This form of aliasing is very restrictive: there may only be one owner and one borrower alive at a time. Once the borrow is returned, a new reference may be created.
 
 \begin{listing}[ht]
   \begin{minted}[fontsize=\footnotesize, autogobble]{rust}
@@ -491,17 +495,18 @@ Because of the limited, well-known scope, these subtyping relations create no am
   \label{lst:alias-mut}
 \end{listing}
 
+Unfortunately Rust is also quite a big language with a lot of features and details to keep in mind, which makes it easy to get distracted by complexity, that is accidental to the problem at hand.
+
 \section{Rustc}
 
 Since the implementation interacts with Rustc, the reference implementation of a Rust compiler, this section will summarize the relevant parts of Rustc mainly based on the Rustc dev guide \cite{noauthor_overview_nodate}.
 
-Rustc offers an APIs for writing compiler plugins, which can access the intermediate languages of Rust at different stages during the compilation and allows the plugin to emit warnings and errors. 
 At a high level, rustc is built with stages that incrementally lower the source code to an executable binary. Rustc has multiple stages and associated data structures. 
 Relevant for the thesis are the first few stages: Firstly the AST, which is a representation of the source code after lexing and parsing, 
 
 \begin{figure}[h]
 	\centering
-	\includegraphics[width=0.7\linewidth]{./rustc-stages.pdf}
+	\includegraphics[width=0.6\linewidth]{./rustc-stages.pdf}
 	\caption{Diagram providing an overview of the Rustc Compiler Stages}
 	\label{fig:rust-stages}
 \end{figure}
@@ -513,7 +518,9 @@ THIR will then be used to create the mid-level IR by drastically simplifying the
 
 Finally Rustc uses external tools \- like llvm \- to generate executable files and link them.
 
-
+An especially useful feature for this work is that Rustc offers an APIs for writing compiler plugins, which can access the intermediate languages of Rust at different stages during the compilation and allows the plugin to emit warnings and errors. 
+Plugins can either wrap the Rustc compiler and hook into callback after each compiler stage or expose a lint pass, that can be registered to be called on different AST items.
+Although the linting API is not guaranteed to be stable, some parts of Rust's official tooling depends on it. In particular, the popular Rust linter clippy uses the interface.
 
 \chapter{Empirical Analysis of Use-Cases} \label{ch:analysis} 
 
@@ -658,15 +665,15 @@ For this thesis the following conclusion can be drawn:
 
 \chapter{The MiniCorten Language} \label{ch:language} 
 
-Rust's main disadvantage as a target language it its size: There is a lot of syntax and semantics that would need to be accounted. A lot of it even incidental to the verification. To reduce the complexity and amount of work that needs to be done, we will focus on a subset of Rust described in this section.
-
-The goal is to remove as much incidental complexity as possible without compromising to the central topic of research: How to extend LiquidTypes to mutability under the presence of Rust's ownership model.
-
+Rust's main disadvantage as a target language it its size: There is a lot of syntax and semantics that would need to be accounted. A lot of it even incidental to the verification. 
+To reduce the complexity and amount of work that needs to be done, we will focus on a subset of Rust described in this section.
+The goal is to remove as much incidental complexity as possible without compromising to the central topic of research: How to extend Refinement Types to mutability under the presence of Rust's ownership model. 
 
 \section{Syntax}
 
-This subsection will introduce the syntax of MiniCorten, a language modelled after a simplified version of Rust, with the addition of refinement types.
-To simplify the formal definitions and proofs, the language is restricted to A-Normal Form (short ANF), meaning arguments of expressions must be variables. ANF was described by \cite{sabry_reasoning_1993}. Note that the implementation does not have this restriction.
+This subsection will introduce the syntax of MiniCorten\footnote{Corten is named after a alloy of steel, named COR-TEN, that forms an unusually stable and strong form of rust when oxidized (a "refined" rust, if you will).}, a language modelled after a simplified version of Rust, with the addition of refinement types.
+To simplify the formal definitions and proofs, the language is restricted to A-Normal Form (short ANF), as described by Sabry and Felleisen.
+ANF normalizes the syntactic structure by requiring that arguments of expressions must be variables. Nested expression are translated into variable declaration for each subexpression. Note that the implementation (for the most part) does not have this restriction.
 
 There are two namespaces for identifiers: $x \in \text{PVar}$ for variables of program variables and $\alpha \in \text{LVar}$ for variable in the refinement predicates. The syntax is defined by the following BNF-Grammar:
 
@@ -740,41 +747,45 @@ There are two namespaces for identifiers: $x \in \text{PVar}$ for variables of p
 \end{bnfgrammar}
 
 Most constructs are standard, the main difference being the addition of refinement types that consist of a logic variable $\alpha$, a base type $b$ (from the target language) and a predicate $\varphi$. Intuitively this means that the value inhabiting that type satisfied the $\varphi$ in $\alpha$ represents the value. 
+The statement \code{relax\_ctx!\{...\}} allows the user (or a future inference system) to relax the restrictions in the current typing context (as long as they do not conflict with the actual context). The details will be explained in \cref{ch:type-system}.
 
 \section{Semantics}
 
-The semantics are mostly standard. The main difference being that Rust and our simplified language enable most statements to be used in place of an expression. The value is determined by the last statement in the sequence. For example If-Expressions, sequences of statements and function all follow this rule: Their (return) value is determined by the last statement or expression in the sequence.
+% The semantics are mostly standard. 
+%  The main difference being that Rust and our simplified language enable most statements to be used in place of an expression. 
+% The value is determined by the last statement in the sequence. For example If-Expressions, sequences of statements and function all follow this rule: Their (return) value is determined by the last statement or expression in the sequence.
 
-The semantics loosely based on Jung's MiniRust \cite{jung_minirust_2022}.
-
-Another difference between Rust and MiniCorten is of course the addition of refinement types.
+The semantics loosely based on Jung's MiniRust \cite{jung_minirust_2022}, but greatly reduce the complexity by removing stack frames, pointer among other things.
+However, we of course added refinement types to the language, which do not influence the execution semantics.
 
 In terms of the formal description, the rules are similar to Pierce's \cite[p. 166f]{pierce_types_2002-3} "Reference" language. % Also: Semantik von programmiersprachen WhileT p.45
 The main difference is that in Rust, every piece of data has a unique, known owner. This fact makes the concept of locations redundant. Instead we treat $\code{ref}(x)$ as a value itself. The following definitions show the new execution rules.
 
 \begin{definition}[Execution-State]
-  The execution state is a partial function from program variables to values: $\sigma : \text{PVar} \rightharpoonup \text{Value}$. 
+  The execution state is a function from program variables to values: $\sigma : \text{PVar} \rightharpoonup \text{Value}$. 
 \end{definition}
 
 
-\begin{definition}[Evaluation of Expressions: $\bbracket{e} \sigma$ ]
-  \begin{align*}
-   \bbracket{v} \sigma &= v \\
-   \bbracket{x} \sigma &= \sigma(x) \\
-   \bbracket{e_1 + e_2} \sigma &= \bbracket{e_1} \sigma + \bbracket{e_2} \sigma \\
-   \bbracket{*x} \sigma &= \sigma(y) \qquad \text{if } \sigma(x) = \code{ref}(y) \\
-   \bbracket{\code{\&mut } x} \sigma &= \code{ref}(x) \\
-   \bbracket{e \code{ as } \tau} \sigma &= \bbracket{e}\sigma \\
-  \end{align*}
- \end{definition}
+\begin{definition}[Evaluation of Expressions: $\bbracket{e} \sigma$]
+Evaluation of an expression $e$ in a state $\sigma$ is mostly standard. $\bbracket{*x}\sigma$ dereferences $x$ by reading the target from $x$'s value and $\&\code{mut } x$ introduces a reference to $x$. The subtype introduction $e \code{ as }\tau$ has no effect on the evaluation of $e$.
+\begin{align*}
+  \bbracket{v} \sigma &= v \\
+  \bbracket{x} \sigma &= \sigma(x) \\
+  \bbracket{x_1 + x_2} \sigma &= \bbracket{x_1} \sigma + \bbracket{x_2} \sigma \\
+  \bbracket{*x} \sigma &= \sigma(y) \qquad \text{if } \sigma(x) = \code{ref}(y) \\
+  \bbracket{\code{\&mut } x} \sigma &= \code{ref}(x) \\
+  \bbracket{e \code{ as } \tau} \sigma &= \bbracket{e}\sigma \\
+\end{align*}
+\end{definition}
  
 
-\begin{definition}[Declaration Environment]
-  The environment of function declarations is constant and globally known. It is defined as a partial function $\Sigma : \text{Fn-Name} \rightharpoonup (n, s)$ where $n$ is the number of arguments and $s$ is the body of the function
+\begin{definition}[Declaration Environment: $\Sigma$]
+  The environment of function declarations is constant and globally known. It is defined as a partial function $\Sigma : \text{Fn-Name} \to \text{Fn-Decl}$. A function declaration $\code{fn}(\overline{a_i}) {s, r}$ contains the function parameters $\overline{a_i}$, the function body $s$ and the local variable $r$, that contains the return value.
 \end{definition}
 
-\begin{definition}[Small-Step Semantics of MiniCorten: $\tuple{e}{\sigma} \leadsto \tuple{e'}{\sigma'}$]
+\begin{definition}[Small-Step Semantics of MiniCorten: $\tuple{s}{\sigma} \leadsto \tuple{s'}{\sigma'}$]
 
+The execution semantics of MiniCorten are described by the small step semantic $\tuple{s}{\sigma} \leadsto \tuple{s'}{\sigma'}$ denoting that the execution of statement $s$ in $\sigma$ reduces to the execution of $s'$ in $\sigma'$. The small-step semantic for MiniCorten consist of:
 $$\begin{gathered}
   \inferrule*[left=SS-Assign\rulelabel{SS-Assign}]
     {\star}
@@ -827,6 +838,8 @@ $$\begin{gathered}
   %   {\tuple{f(x_1, \dots, x_2)}{\sigma} \leadsto \tuple{v_r}{\sigma' \oplus \sigma}}
 \end{gathered}$$
 
+The rule \cref{rule:SS-Call} executes functions by inlining them after renaming the local variable to fresh names and replacing the parameter variables by the argument variables. Rule \cref{rule:SS-Relax} states, has relaxing the context no effect at runtime. 
+
 % where $$(\sigma' \oplus \sigma)(x) =
 %   \begin{cases}
 %     \sigma(x) & \text{if } x = arg_i \\
@@ -840,15 +853,20 @@ $$\begin{gathered}
 
 \chapter{The Refinement Type System} \label{ch:type-system}
 
-\todo{intro}
+Based on the description of the base language in \cref{ch:language}, we will define a describe the proposed refinement type system "Corten". 
+Before describing the typing rules itself in \cref{sec:type-system}, the next section will give an overview over the features of the type system, which will also help to explain why certain design decisions were made.
+\Cref{sec:soundness} will then justify, why the typing rules are sensible, followed by \cref{sec:extensions} which describes how the type system could be extended.
+
 \section{Features}
 
-This subsection will explain some of the key features of the Corten type system.
-Corten is directly embedded in Rust using two macros. Firstly the macro \code{ty!} can be used in place of a Rust type and adds a predicate to the Rust type that any inhabitant of that type must satisfy. For example, the type \code{ty!\{ v : i32 | v >= 0\}} stipulates that a value of Rust type \code{i32} is positive. The second macro is \code{relax\_ctx!\{ ... \}} which will be explained in subsection \ref{subsec:atomic-updates}.
+% This section will explain some of the key features of the Corten type system.
+Instead of phrasing the features in MiniCorten, we will use the Rust syntax of the implementation "CortenC", which is designed for practical use rather than as a framework for the formal description.
+CortenC is directly embedded in Rust using two macros. Firstly the macro \code{ty!} can be used in place of a Rust type and adds a predicate to the Rust type that any inhabitant of that type must satisfy. For example, the type \code{ty!\{ v : i32 | v >= 0\}} stipulates that a value of Rust type \code{i32} is positive. The second macro is \code{relax\_ctx!\{ ... \}} for relaxing the context, which will be explained in the subsection \ref{subsec:atomic-updates}.
 
 \subsection{Decidable, Conservative Subtyping}
 
 Having a decidable subtyping system is essential to making it feasible in practice: A developer expects type checking to be automatic and part of compilation without additional effort. There is no need for user interaction, if the SMT solver can automatically verify the program.
+The refinement predicates are translated into assertions of satisfiability of formulae in predicate logic with the theories of linear arithmetic and equality. Thus, an SMT solver can be used to decide if the formula is satisfiable.
 
 \subsection{Mutable Values}
 
@@ -1035,7 +1053,7 @@ If \code{sum} is updated first, we can establish its type, but once \code{i} is 
 
 For this purpose, Corten provides a mechanism for the programmer to instruct Corten to relax all variables at once \- named \code{relax\_ctx}. The syntax is similar to the refinement type syntax, but allows for multiple variables to be described at a time. The type system will check all refinement types at once, resulting in the successful type checking of the example.
 
-\section{Type System}
+\section{Type System} \label{sec:type-system}
 
 The following sections will introduce the type checking rules of Corten. We assume the program has passed the Rust type checking rules, meaning (non-refined) type- and ownership-checking was successful.
 
@@ -1290,7 +1308,7 @@ $$ \begin{gathered}
 % \end{gather*}
 % \todo{In think the first precondition and second precondition should serve the same purpose. Second one should be nicer and correct}
 
-\section{Soundness of the Type System}
+\section{Soundness of the Type System}\label{sec:soundness}
 
 We will write substitution as $\Phi[ x \tr a ]$ meaning $x$ is replaced by $a$ in $\varphi$ and $\mu[x \mapsto \alpha]$ for the function update meaning $\mu[x \mapsto \alpha](x) = \alpha$ and $\mu(y)$ everywhere else.
 
@@ -1571,7 +1589,7 @@ A crucial consequence of \cref{lem:conf-sym-exec} it that references are tracked
 
 
 \iftrue % shorten
-\label{sec:extensions} \section{Extensions}
+\section{Extensions}\label{sec:extensions}
 
 
 To limit the complexity a few features are not defined as part of the Corten or the implementation.

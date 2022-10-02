@@ -81,6 +81,8 @@
 \newcommand{\cdisj}[0]{|| }
 
 \DeclareMathOperator{\rref}{ref}
+\DeclareMathOperator{\dom}{dom}
+\DeclareMathOperator{\img}{img}
 
 \makeatletter
 \NewDocumentCommand{\rulelabel}{m}{%
@@ -741,7 +743,7 @@ $$\begin{gathered}
 where $$(\sigma' \oplus \sigma)(x) =
   \begin{cases}
     \sigma(x) & \text{if } x = arg_i \\
-    \sigma'(x) & \text{if } x \in \text{dom}(\sigma) \cap \text{dom}(\sigma')\\
+    \sigma'(x) & \text{if } x \in \dom(\sigma) \cap \dom(\sigma')\\
     \sigma(x) & \text{otherwise }
   \end{cases}$$
 \end{definition}
@@ -1004,18 +1006,18 @@ Note that, $\Gamma \vdash \tau \preceq \tau'$ can be rephrased in terms of $\Gam
 In contrast to other refinement type systems, Corten allows types in the context to refer to one another.
 For example a type specifications \code{a : \{ $\alpha$ : i32 | $\alpha$ > $\beta$\}, b:  \{ $\beta$: i32 | $\beta$ != $\alpha$\}} would be valid and result in the context $\Gamma = (\emptyset, \alpha \neq \beta \wedge \beta \geq \alpha)$. In the example, the value $0$ i a valid inhabitant of \code{a}'s type as long as $\code{b} \geq 1$.
 
-The rule \textsc{$\preceq$-Ctx} serves the purpose of allowing these interdependencies between predicates while still providing an applicable concept of subtyping: As long as the set of predicates in $\Gamma'$ imply the predicates for $\Gamma$, the sub-context relation is satisfied and $\Gamma'$ ($\Gamma$) is called the super-context (sub-context) respectively. 
-To be more precise: The rule needs to relate the predicates for each \textit{program} variable with the opposing predicates for that program variable. The substitution $\Phi'[\mu'(\alpha) \triangleright \mu(\alpha)\ \mid \alpha \in \text{img}(\mu)]$ forces the logic variable associated with \code{x} in $\Gamma'$ to be substituted by the logic variable $\mu(x)$ , which is associated with \code{x} in $\Gamma'$.
+The rule \textsc{$\preceq$-Ctx} serves the purpose of allowing these interdependencies between predicates while still providing an applicable concept of subtyping: As long as the set of predicates in $\Gamma'$ imply the predicates for $\Gamma$, the sub-context relation is satisfied and $\Gamma'$ and $\Gamma$ is called the super-context and sub-context respectively. 
+To be more precise: The rule needs to relate the predicates for each \textit{program} variable with the opposing predicates for that program variable. The substitution $\Phi'[\mu'(x) \triangleright \mu(x)\ \mid x \in \dom(\mu)]$ forces the logic variable associated with \code{x} in $\Gamma'$ to be substituted by the logic variable $\mu(x)$ , which is associated with \code{x} in $\Gamma'$.
 
 The domain restriction ensures, that the sub-context does not contain additional program variables, which would leave unconstrained variables in the antecedent
 
 \[
   \inferrule*[left=$\preceq$-Ctx]
     {
-      \text{SMT-Valid}(\Phi'[\mu'(\alpha) \triangleright \mu(\alpha)\ \mid \alpha \in \text{img}(\mu)] \implies \Phi)
-      \\ \text{dom}(\mu) \subseteq \text{dom}(\mu')
+      \text{SMT-Valid}(\Phi'[\mu'(x) \triangleright \mu(x)\ \mid x \in \dom(\mu')] \implies \Phi)
+      \\ \dom(\mu') \subseteq \dom(\mu)
     }
-    {(\Phi, \mu) \preceq (\Phi', \mu')}
+    {(\mu, \Phi) \preceq (\mu', \Phi')}
 \]
 \end{definition}
 
@@ -1023,11 +1025,11 @@ The domain restriction ensures, that the sub-context does not contain additional
 \begin{definition}[Fresh Variable $\Gamma \vdash \alpha \text{ fresh}$]
 
 Corten requires that new logic variables are distinct from all others. The rule ensures that $\alpha$ is a free variable in $\Gamma = (\mu, \Phi)$:
-  $$\Gamma \vdash \alpha \text{ fresh} \text{ iff } \alpha \notin FV(\Phi) \cup img(\mu)$$
+  $$\Gamma \vdash \alpha \text{ fresh} \text{ iff } \alpha \notin FV(\Phi) \cup \img(\mu)$$
 \end{definition}
 
 \begin{definition}[Expression Constraint $\alpha \simeq \bbracket{e}\Gamma$]
-An expression constraint is used to restrict $\alpha$ to (as close to) the value of expression $e$. For instance, typing the expression \code{a + 3} should get the strongest type $\alpha == \alpha + 3$ where $\alpha$ is the logic variable for \code{a}.
+An expression constraint is used to restrict $\alpha$ to (as close to) the value of expression $e$. For instance, typing the expression \code{b + 3} should get the strongest type $\alpha \doteq \beta + 3$ where $\beta$ is the logic variable for \code{b}.
 It could also be possible that an expression can not be directly translated, like operations not allowed by the logic. In that case, the expression will be conservatively approximated by the predicate \code{true}.
 
 \begin{align*}
@@ -1113,7 +1115,7 @@ $$ \begin{gathered}
   %
   \inferrule*[left=Relax\rulelabel{Relax}]
     {
-      \Gamma' \preceq \Gamma
+      \Gamma \preceq \Gamma'
     }
     {\Gamma \vdash \code{relax\_ctx!}\{\Gamma'\} \Rightarrow \Gamma'}
   \\
@@ -1331,6 +1333,59 @@ A crucial consequence of \cref{lem:conf-sym-exec} it that references are tracked
   \end{align*}
 \end{proof}
 
+\begin{lemma}[Subtyping is Conservative]\label{lem:conservative-subtype}
+  If $\Gamma \preceq \Gamma'$ and $\sigma : \Gamma'$ then $\sigma : \Gamma'$
+\end{lemma}
+
+\begin{proof}
+  Given $\Gamma \preceq \Gamma'$, $\sigma : \Gamma$ show $\sigma : \Gamma'$. Let $x \in \mu$ denote $x \in \dom(\mu)$ and $v_x$ denote $\bbracket{\sigma(x)}$.
+
+  Rule inversion on $\Gamma \preceq \Gamma'$ yields:
+  \begin{align}
+      &m \vDash \Phi'[\mu'(x) \tr \mu(x) \mid x \in \mu] \to \Phi \quad \text{forall }m\label{eq:sub-i}
+    \\ 
+      & \dom(\mu) \subseteq \dom(\mu)\label{eq:sub-ii}
+    \\ 
+      \sigma : \Gamma 
+      &\implies m^\star \vDash \Phi[\mu(x) \tr v_x \mid x \in \mu] \quad \text{for some }m^\star
+    \\
+      &\implies m^\star \vDash \Phi[\mu(x) \tr v_x \mid x \in \mu]
+    \\ 
+      \intertext{$\mu' \setminus \mu$  is fresh wrt. $\Gamma$}
+      &\implies m^\star[\mu'(x) \tr v_x \mid x\in\mu'\setminus\mu] 
+      \vDash \Phi[\mu(x) \tr v_x \mid x \in \mu] 
+    \\
+      &\implies  m^\star[\mu'(x) \tr v_x \mid x\in\mu'\setminus\mu][\mu(x) \tr v_x \mid x \in \mu] 
+      \vDash \Phi
+    \\
+      \intertext{Let $m=m^\star[\mu'(x) \tr v_x \mid x \in \mu'\setminus\mu]$}
+      &\implies  m[\mu(x) \tr v_x \mid x \in \mu] 
+      \vDash \Phi\label{eq:sub-iv}
+    \\
+      \intertext{\cref{eq:sub-i} for $m$}
+      &\implies m[\mu(x) \tr v_x \mid x \in \mu] 
+      \vDash \Phi'[\mu'(x) \tr \mu(x) \mid x \in \mu] \to \Phi
+    \\
+      \intertext{Using \cref{eq:sub-iv}:}
+      &\implies m[\mu(x) \tr v_x \mid x \in \mu] 
+      \vDash \Phi'[\mu'(x) \tr \mu(x) \mid x \in \mu]
+    \\
+      &\implies m 
+      \vDash \Phi'[\mu'(x) \tr \mu(x) \mid x \in \mu][\mu(x) \tr v_x \mid x \in \mu]
+    \\
+      &\implies m
+      \vDash \Phi'[\mu'(x) \tr v_x \mid x \in \mu]
+    \\
+      &\implies m^\star
+      \vDash \Phi'[\mu'(x) \tr v_x \mid x \in \mu][\mu'(x) \tr v_x \mid x \in \mu'\setminus\mu]
+    \\
+      &\implies m^\star
+      \vDash \Phi'[\mu'(x) \tr v_x \mid x \in \mu']
+    \\
+      &\Leftrightarrow \sigma : \Gamma'
+  \end{align}
+\end{proof}
+
 \begin{lemma}[Preservation of State Conformance]
   If $\Gamma \vdash s \Rightarrow \Gamma_2$, $\sigma : \Gamma$ and $\tuple{s}{\sigma} \leadsto \tuple{s_1}{\sigma_1}$, then  $\sigma_1 : \Gamma_1$ and $\Gamma_1 \vdash s_1 \Rightarrow \Gamma_2$ for some $\Gamma_1$
 \end{lemma}
@@ -1414,13 +1469,19 @@ A crucial consequence of \cref{lem:conf-sym-exec} it that references are tracked
     \cref{lem:conf-sym-exec} yields $\sigma[y \mapsto \bbracket{\sigma(z)}] : \Gamma[y \mapsto \gamma], \gamma \doteq \beta$
 
   \item \textsc{Case \cref{rule:SS-While}}
-    Given $\Gamma \vdash \code{while}(x) \{s\} \rightarrow \Gamma_2$, $\sigma : \Gamma$ show $\exists \Gamma_1, \sigma : \Gamma_1 \wedge \Gamma_1 \vdash \code{if}(x) \{\code{while}(x) \{s\}\}\code{else}\{\code{unit}\} \Rightarrow \Gamma_2$
+    Given $\Gamma \vdash \code{while}(x) \{s\} \rightarrow \Gamma_2$, $\sigma : \Gamma$ 
+    show $\exists \Gamma_1, \sigma : \Gamma_1 \wedge \Gamma_1 \vdash \code{if}(x) \{\code{while}(x) \{s\}\}\code{else}\{\code{unit}\} \Rightarrow \Gamma_2$
 
     Rule inversion over $\Gamma \vdash \code{while}(x) \{s\} \rightarrow \Gamma_2$ yields $\Gamma \preceq \Gamma'$, $\Gamma(x) = \alpha$, $\Gamma \vdash c \rightarrow \Gamma'$
 
     Thus $\Gamma \vdash \code{while}(x) \{s\} \Rightarrow \Gamma$.
     Which completes the precondition for \\$\Gamma \vdash \code{if}(x) \{\code{while}(x) \{s\}\}\code{else}\{\code{unit}\} \Rightarrow \Gamma_2$ and together with the second hypothesis implies the goal.
-  \item \textsc{Case \cref{rule:SS-Sub}}
+  \item \textsc{Case \cref{rule:SS-Relax}} 
+    Given $\Gamma \vdash \code{relax\_ctx!}\{\Gamma'\} \Rightarrow \Gamma_2$, $\sigma : \Gamma$ 
+    show $ \exists \Gamma_1, \sigma : \Gamma_1 \wedge \Gamma_1 \vdash \code{unit} \Rightarrow \Gamma_2$.
+
+    Rule inversion over $\Gamma \vdash \code{relax\_ctx!}\{\Gamma'\} \Rightarrow \Gamma_2$ yields $\Gamma_2 \preceq \Gamma$
+    For $\Gamma_1 = \Gamma_2$ and \cref{lem:conservative-subtype} implies the goal.
   \item \textsc{Case \cref{rule:SS-Call}} function calls are executed by renaming and inlining and adding a context relaxation at the start and end of the function pertaining to the entry and exit context specifications. Thereby the argument from context relaxation apply here.
 \end{itemize}
 \end{proof}

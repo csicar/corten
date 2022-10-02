@@ -736,20 +736,28 @@ $$\begin{gathered}
     {\tuple{\code{relax\_ctx!\{ ... \}}}{\sigma} \leadsto \tuple{\code{unit}}{\sigma}}
   \\
   \inferrule*[left=SS-Call\rulelabel{SS-Call}]
-    {\tuple{\Sigma(f)[arg_1 \triangleright x_1, \dots, arg_n \triangleright x_n]}{\sigma} \leadsto \tuple{v_r}{\sigma'} }
-    {\tuple{f(x_1, \dots, x_2)}{\sigma} \leadsto \tuple{v_r}{\sigma' \oplus \sigma}}
+    {
+      \Sigma(f) = \code{fn} (\overline{a_i}) \to (\overline{s}, r)
+      \\ \overline{l} \text{ local vars in } s
+      \\ \bar{l'} \text{ fresh names for } \bar{l} \text{ wrt. } \sigma
+    }
+    {\tuple{\code{let } x = f(\overline{x_i})}{\sigma} \leadsto \tuple{\bar{s}[\overline{l} \tr \overline{l'}][\overline{a_i} \tr \overline{x_i}]; \code{let } x = r[\overline{l} \tr \overline{l'}]}{\sigma}}
+  % \\
+  % \inferrule*[left=SS-Call\rulelabel{SS-Call}]
+  %   {\tuple{\Sigma(f)[arg_1 \triangleright x_1, \dots, arg_n \triangleright x_n]}{\sigma} \leadsto \tuple{v_r}{\sigma'} }
+  %   {\tuple{f(x_1, \dots, x_2)}{\sigma} \leadsto \tuple{v_r}{\sigma' \oplus \sigma}}
 \end{gathered}$$
 
-where $$(\sigma' \oplus \sigma)(x) =
-  \begin{cases}
-    \sigma(x) & \text{if } x = arg_i \\
-    \sigma'(x) & \text{if } x \in \dom(\sigma) \cap \dom(\sigma')\\
-    \sigma(x) & \text{otherwise }
-  \end{cases}$$
+% where $$(\sigma' \oplus \sigma)(x) =
+%   \begin{cases}
+%     \sigma(x) & \text{if } x = arg_i \\
+%     \sigma'(x) & \text{if } x \in \dom(\sigma) \cap \dom(\sigma')\\
+%     \sigma(x) & \text{otherwise }
+%   \end{cases}$$
 \end{definition}
 
 
-The \cref{rule:SS-Call} rule does not scope the variables from the callee to the caller. This is actually fine, because by definition variable names are distinct. Therefore only the arguments need to be replaced in the resulting state.
+% The \cref{rule:SS-Call} rule does not scope the variables from the callee to the caller. This is actually fine, because by definition variable names are distinct. Therefore only the arguments need to be replaced in the resulting state.
 
 \chapter{The Refinement Type System} \label{ch:type-system}
 
@@ -964,16 +972,20 @@ Without loss of generality, we assume arguments are ordered by their type: First
 
 \begin{definition}[Function Declaration Type Checking]
 When handling mutable references in parameters some subtleties need to be considered. The function can change both the referenced \textit{value} as well as the reference \textit{location}. To describe the referenced value is normally done using the $\{ \alpha \mid \alpha \doteq \&b\}$ syntax. The question arises: If $\alpha$ was the logic variable for a parameter, what should be the analog for $b$? In contrast to local variables, there is no variable representing the referenced value for parameters. As seen in section \ref{subsec:mutable-references}, using the dereference operator would come with a lot of complications.
-Instead we introduce $arg^i_n$, a special variable denoting the initial abstract value (i.e. stack location), that the mutable reference of argument $n$ points to. $i$ denotes the level of nesting: For the $n$th parameter with the Rust type \code{\&mut \&mut i32} we would generate $arg^1_n$ and $arg^2_n$.
+Instead we introduce $arg^i$, a special variable denoting the initial abstract value (i.e. stack location), that the mutable reference of argument $n$ points to. For the $j$th parameter with the Rust type \code{\&mut i32} we would generate $arg_j$.
+
+%  $i$ denotes the level of nesting: For the $n$th parameter with the Rust type \code{\&mut \&mut i32} we would generate $arg^1_n$ and $arg^2_n$.
 
 \begin{gather*}
   \inferrule*[left=Fn-Decl]
-    { (\{ a_1 \mapsto \alpha_1, b_1 \mapsto \delta_1 \}, \varphi^\alpha_1 \wedge \dots \wedge \delta_1 = arg^1_1 \wedge \varphi^\beta_1 \wedge \dots ) \vdash \bar s \Rightarrow \Gamma'
-      \\ \Gamma' \vdash s_{res} : \tau_{res} \Rightarrow \Gamma''
-      \\ \Gamma'' \vdash \tau_{res} \preceq \tau
-      \\ \Gamma'' \preceq (\{\beta_1 \mapsto \gamma_1\}, \varphi^\gamma_1 )
+    { \mu_{init} = \{ x_i \mapsto \alpha_i, y_j \mapsto \delta_j, arg_j \mapsto \beta_j \}
+      \\ \Phi_{init} = \varphi_i, \psi_j, \delta_j \doteq \&arg_j
+      \\\\ (\mu_{init}, \Phi_{init}) \vdash \bar s \Rightarrow \Gamma'
+      \\ \Gamma' \vdash x_r : \tau_r
+      \\ \Gamma' \vdash \tau_r \preceq \tau
+      \\ \Gamma' \preceq (\{arg_j \mapsto \gamma_j\}, \chi_j )
     }
-    {\code{fn } f(a_1 : \{ \alpha_1 \mid \varphi^\alpha_1 \}, \dots, b_1 : \{ \beta_1 \mid \varphi^\beta_1 \Rightarrow \gamma_1 \mid \varphi^\gamma_1\}) \to \tau \{ \bar s; s_{res} \}}
+    {\code{fn } f(x_i : \{ \alpha_i : b_i \mid \varphi_i \}, y_j : \&\code{mut }\{ \beta_j : b_j \mid \phi_j \Rightarrow \gamma_j \mid \chi_j\}) \to \tau \{ \bar s; x_r \}}
 \end{gather*}
 \end{definition}
 
@@ -1214,23 +1226,6 @@ Because MiniCorten is based on Rust, we will assume, that progress, as well as p
   $$
   I.e. a conformant type context does not contradict the execution state.
 \end{definition}
-
-\begin{lemma}[Conformant States Conservatively Approximate Reference Destinations]
-  If $\sigma : \Gamma$, $\Gamma \vdash x : \{\alpha : \&b \mid \alpha \doteq y_1 \vee \dots \vee \alpha \doteq y_n \}$
-  then 
-    $$\sigma(x) = \&y_i \text{ for some } i = 1,\dots, n$$
-\end{lemma}
-
-\begin{proof}
-  Rule inversion over $\Gamma \vdash x : \{\alpha : \&b \mid \alpha \doteq y_1 \vee \dots \vee \alpha \doteq y_n \}$ yields:
-
-  \begin{align*}
-      &\phantom{implies}\ \ \varphi \wedge x = x \doteq \&y_i \text{ SAT}
-      \\ &\implies m \vDash \varphi \wedge x \doteq \&y_i \quad\text{for some }m
-      \\ &\implies \underbrace{(m \vDash \varphi)}_{\text{def state conformance}} ,\underbrace{(m \vDash x \doteq \&y_i)}_{\lightning \text{ assumption}}
-  \end{align*}
-\end{proof}
-The state conformance rule differs from the usual rule in two ways.
 
 \begin{lemma}[Conformance of Symbolic Execution]\label{lem:conf-sym-exec}
   If \hyperref[def:state-conformance]{$\sigma : \Gamma$}, $\Gamma \vdash \alpha \text{ fresh}$ then $\sigma[x \tr \bbracket{e} \sigma] : \Gamma[x \mapsto \alpha],(\alpha \simeq \bbracket{e} \Gamma)$

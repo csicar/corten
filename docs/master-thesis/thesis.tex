@@ -1187,16 +1187,19 @@ Corten requires that new logic variables are distinct from all others. The rule 
 \end{definition}
 
 \begin{definition}[Expression Constraint $\alpha \simeq \bbracket{e}\Gamma$]
-An expression constraint is used to restrict $\alpha$ to (as close to) the value of expression $e$. For instance, typing the expression \code{b + 3} should get the strongest type $\alpha \doteq \beta + 3$ where $\beta$ is the logic variable for \code{b}.
-It could also be possible that an expression can not be directly translated, like operations not allowed by the logic. In that case, the expression will be conservatively approximated by the predicate \code{true}.
+An expression constraint is used to restrict $\alpha$ to (as close to) the value of expression $e$. For instance, 
+when typing the expression \code{b + c}, $\alpha \simeq \bbracket{a + b}\Gamma$ will generate the strongest type $\alpha \doteq \beta + \gamma$ where $\alpha, \beta$ are the logic variable for \code{a}, \code{b} in $\Gamma$. 
 
 \begin{align*}
   \alpha \simeq \bbracket{v}\Gamma &= \alpha \doteq v
-  \\ \alpha \simeq \bbracket{x_1 \odot x_2}\Gamma &= \alpha \doteq (x_1 \odot x_2) && \text{if }\odot\text{ allowed}
-  \\ \alpha \simeq \bbracket{x}\Gamma &= \alpha \doteq \mu(x) && \text{for }\Gamma = (\mu, \Phi)
+  \\ \alpha \simeq \bbracket{x_1 \odot x_2}\Gamma &= \alpha \doteq (\Gamma(x_1) \odot \Gamma(x_2)) && \text{if }\odot\text{ allowed}
+  \\ \alpha \simeq \bbracket{x}\Gamma &= \alpha \doteq \Gamma(x)
   \\ \alpha \simeq \bbracket{\&y}\Gamma &= \alpha \doteq \&y
   \\ \alpha \simeq \bbracket{e}\Gamma &= \text{true} && \text{otherwise}
 \end{align*}
+
+In some cases, it may not be possible to generate the strongest type in the predicate logic. Take for instance the expression \code{x * y}, which is not admissible in EUFA. In these cases, the expression will be conservatively approximated by the predicate \code{true}.
+
 \end{definition}
 
 \begin{definition}[Expressions Typing: $\Gamma \vdash e : \tau$]
@@ -1226,8 +1229,8 @@ $$ \begin{gathered}
   %
   \\
   \inferrule*[left=Ref\rulelabel{Ref}]
-    {\star}
-    {\Gamma \vdash \&x : \{ \alpha : \&b \simeq \bbracket{\&x}\Gamma\}}
+    {\Gamma \vdash \alpha \text{ fresh}}
+    {\Gamma \vdash \&x : \{ \alpha : \&b \mid \alpha \simeq \bbracket{\&x}\Gamma\}}
   %
   \quad
   \inferrule*[left=Intro-Sub\rulelabel{Intro-Sub}]
@@ -1303,12 +1306,8 @@ $$ \begin{gathered}
     {
       \Gamma \vdash e : \tau 
       \\ \Gamma \vdash x : \{ \alpha : \& b \mid \alpha \doteq \&y_1 \vee \dots \vee \alpha \doteq \&y_n \}
-      \\\\ \Gamma \vdash y_1 : \{ \beta_1 : b_1 \mid \varphi_1 \}
-      \\ \dots 
-      \\ \Gamma \vdash y_n : \{ \beta_n : b_n \mid \varphi_n \}
-      \\\\ \Gamma \vdash \tau \preceq \{ \beta_1 : b_1 \mid \varphi_1 \}
-      \\     \dots  
-      \\ \Gamma \vdash \tau \preceq \{ \beta_n : b_n \mid \varphi_n \}
+      \\\\ \fline{ \Gamma \vdash y_i : \{ \beta_i : b_i \mid \varphi_i \} }
+      \\ \fline{ \Gamma \vdash \tau \preceq \{ \beta_i : b_i \mid \varphi_i \} }
       }
     {\Gamma \vdash *x = e \Rightarrow \Gamma}
   % %
@@ -1330,10 +1329,30 @@ $$ \begin{gathered}
       (\mu, \Phi) \preceq (\mu, \Phi \wedge (\fline{\varphi_i} \wedge \fline{\psi_j})\fline{[\alpha_i \tr \mu(x_i)]}\,\fline{[\beta_j \tr \mu(y_j)]}
       \\ \Sigma \vdash f : \code{fn}(\fline{u_i: \set{\alpha_i : b_i \mid \varphi_i}}, \fline{v_j : \{\beta_j : b_j \mid \psi_j \Rightarrow \beta_j' \mid \psi_j'\}}) \to \set{\gamma : b \mid \rho}
     }
-    {(\mu, \Phi) \vdash \code{let }r = f(\fline{\vphantom{\mid}x_i}, \fline{\&\code{mut } y_j}) \Rightarrow (\mu[\fline{x_i \mapsto \alpha_i}, \fline{y_j \mapsto \beta_j}, r \mapsto \gamma], \Phi \wedge \fline{\phi_i} \wedge \fline{\psi_j} \wedge \fline{\psi_i} \wedge \rho)}
+    {(\mu, \Phi) \vdash \code{let }r = f(\fline{\vphantom{\mid}x_i}, \fline{\&\code{mut } y_j}) 
+      \Rightarrow \qquad  \qquad  \qquad  \qquad  \qquad  \qquad  \qquad  \\\\
+      \qquad \qquad \qquad  \qquad  (
+        \mu[\fline{y_j \mapsto \beta_j'}, r \mapsto \gamma],
+        \Phi \wedge (\fline{\varphi_i} \wedge \fline{\psi_j} \wedge \fline{\psi_i} \wedge \rho)\fline{[\alpha_i \tr \mu(x_i)]}
+      )
+    }
 \end{gathered} $$
 
-Part of the \cref{Fn-Call} that is not shown in the rule is ensuring, that the logic variable names from the function call signature do not conflict with the any variable in the current context by renaming them if necessary.
+The rule \cref{rule:If} models the path sensitivity for branches of the statement and requires that both branches have the same return context, which forces the branches to express their effects using the same context. If an inference system was added to Corten, it would add context relaxation statements to the end of the branches to automate the process.
+
+The \cref{rule:While} implements a loop invariant rule: Type checking of a while loop requires that the body invariant $\Gamma_I$ is preserved by the body, meaning the body end execution with a context $\Gamma_I'$ that does not conflict with $\Gamma_I$ and ensures that the context after execution is $\Gamma_I$ with the addition of the path condition.
+
+\Cref{rule:Relax} allows the user to introduce a sub-context constraint; \cref{rule:Decl} and \cref{rule:Assign} append the context with the predicate of the value and update (or append for the declaration) the logic variable association for the program variable $x$. 
+
+For handling references, Corten offers the rules \cref{rule:Assign-Strong} and \cref{rule:Assign-Weak} with the first implementing 
+strong updates, changing the type of the reference target $y$, if it can be shown that $x$ must refer to $y$. 
+The second rule allows updates to the value only if the type is not affected by it. This is ensured by demanding that the assigned type $\tau$ is at least as specific as the type of every possible reference destination (in the current context $\Gamma$).
+
+
+\Cref{rule:Fn-Call} handles function calls by requiring the current context to be a sub-context of the function entry predicates $\varphi_i$ for values and immutable references and $\psi_j$ for mutable references, where the logic variables of the parameters are substituted by argument's logic variables. 
+The rule states that resulting context will be the starting context with updated the association for the mutated arguments $y_j$ and new association for $r$ and the addition of the predicates the function ensures to be true after execution. Because these predicates can use the variables from the immutable values, we also need to substitute the logic variable.
+
+For clarity, \cref{rule:Fn-Call} omits a renaming step done directly after extracting the function signature from the declaration context $\Sigma$. It ensures that the logic variable names from the function call signature do not conflict with the any variable in the current context by renaming them if necessary. An an example take \cref{sec:eval-fibonacci}: If the variables were not renamed, the second call to \code{fib(n2)} would conflict with the first.
 \end{definition}
 
 %%%% OLD Must ref rule
@@ -1355,6 +1374,8 @@ Part of the \cref{Fn-Call} that is not shown in the rule is ensuring, that the l
 % \todo{In think the first precondition and second precondition should serve the same purpose. Second one should be nicer and correct}
 
 \section{Soundness of the Type System}\label{sec:soundness}
+
+Next, we would like to justify why Corten 
 
 We will write substitution as $\Phi[ x \tr a ]$ meaning $x$ is replaced by $a$ in $\Phi$ and $\mu[x \mapsto \alpha]$ for the function update meaning $\mu[x \mapsto \alpha](x) = \alpha$ and $\mu(y)$ everywhere else.
 
@@ -1950,7 +1971,7 @@ Note that when typing \code{client}, CortenC needs to match \code{\&mut x} with 
   \label{lst:eval-clamp}
 \end{listing}
 
-\section{Recursion: Fibonacci-Numbers}
+\section{Recursion: Fibonacci-Numbers}\label{sec:eval-fibonacci}
 
 Thanks to Corten's modular approach, handling recursive functions is straitforward in CortenC. Listing \ref{lst:eval-fib} demonstrates this by implementing a function that returns the $n$th fibonacci number $F_n$ and asserting that $10\cdot F_n \geq n^2$\footnote{The specification is not technically in linear arithmetic, but CortenC can allow some leeway, as long as SMT-Solver are still able to solve it.}. Because $n$ is arbitrary, this proves that the Fibonacci sequence grows faster than the $n^2\over10$.
 

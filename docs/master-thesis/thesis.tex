@@ -73,6 +73,7 @@
 
 \newcommand{\mtext}[1]{$\text{#1}$}
 \newcommand{\tuple}[2]{\langle #1 \mid #2 \rangle}
+\newcommand{\set}[1]{\left\{ #1 \right\}}
 \newcommand{\bbracket}[1]{\llbracket #1 \rrbracket}
 \newcommand{\tr}[0]{\triangleright}
 
@@ -107,6 +108,7 @@
 
 
 \newtheorem{theorem}{Theorem}[section]
+\newtheorem{example}{Example}[section]
 \newtheorem{corollary}{Corollary}[theorem]
 \newtheorem{lemma}[theorem]{Lemma}
 \theoremstyle{definition}
@@ -472,7 +474,7 @@ In contrast, languages with instance-of-checks allow an implementation of a poly
 
 \paragraph*{Explicit Mutable Access} A consequence of the ownership rules is that a function can only mutate (part of) the state that is passed to it as a parameter. There is no global state and there is no implicit access to an object instance. Thus any intention of mutating state must already be expressed in the function signature, which makes the specification of this mutation quite natural.
 
-\paragraph*{Explicit Nullabillituy} Rust will ensure definite assignment, meaning variable can only be accessed if they contain a value. For verification this means, that there is no need to proove that a variable is defined. If nullabillity is desired, Rust offers normal sum type \code{Option<T>} type with the variants \code{None} and \code{Some(T)}. 
+\paragraph*{Explicit Nullability} Rust will ensure definite assignment, meaning variable can only be accessed if they contain a value. For verification this means, that there is no need to prove that a variable is defined. If nullability is desired, Rust offers normal sum type \code{Option<T>} type with the variants \code{None} and \code{Some(T)}. 
 By handling the general case of sum types verification system can get handling of nullable data for free.
 
 \paragraph*{Minimal subtyping} In contrast to object oriented languages, Rust has no user-extendable notion of object subtyping. 
@@ -859,23 +861,56 @@ Before describing the typing rules itself in \cref{sec:type-system}, the next se
 
 \section{Features}
 
-% This section will explain some of the key features of the Corten type system.
-Instead of phrasing the features in MiniCorten, we will use the Rust syntax of the implementation "CortenC", which is designed for practical use rather than as a framework for the formal description.
-CortenC is directly embedded in Rust using two macros. Firstly the macro \code{ty!} can be used in place of a Rust type and adds a predicate to the Rust type that any inhabitant of that type must satisfy. For example, the type \code{ty!\{ v : i32 | v >= 0\}} stipulates that a value of Rust type \code{i32} is positive. The second macro is \code{relax\_ctx!\{ ... \}} for relaxing the context, which will be explained in the subsection \ref{subsec:atomic-updates}.
+% This section will explain some of the key features of the Corten type system. 
+
+% Instead of phrasing the features in MiniCorten, we will use the Rust syntax of the implementation "CortenC", which is designed for practical use rather than as a framework for the formal description.
+The type system is surfaces in two ways in the language, which can be directly embedded in Rust using two macros. Firstly the macro \code{ty!} can be used in place of a Rust type and adds a predicate to the Rust type that any inhabitant of that type must satisfy. For example, the type \code{ty!\{ v : i32 | v >= 0\}} stipulates that a value of Rust type \code{i32} is positive. The second macro is \code{relax\_ctx!\{ ... \}} for relaxing the context, which will be explained in the subsection \ref{subsec:atomic-updates}.
+To make the examples more readable, we will take the liberty to use parts from the implementation CortenC if the formal language is not elaborate enough.
 
 \subsection{Decidable, Conservative Subtyping}
 
 Having a decidable subtyping system is essential to making it feasible in practice: A developer expects type checking to be automatic and part of compilation without additional effort. There is no need for user interaction, if the SMT solver can automatically verify the program.
 The refinement predicates are translated into assertions of satisfiability of formulae in predicate logic with the theories of linear arithmetic and equality. Thus, an SMT solver can be used to decide if the formula is satisfiable.
 
+
+\label{subsec:path-sensitivify}\subsection{Path Sensitivity}
+
+First of all, the type system retains the basic features of the refinement type system we build upon.
+
+In particular that it is path sensitive, meaning that the type system is aware of necessary guards that need to be passed for a statement to be evaluated. For example \cref{lst:max-path-sensitive} shows a function computing the maximum of its inputs. 
+The return type requires, that the result must be at least as big as both inputs\footnote{Corten can also prove the characteristic property of the maximum function. The simpler specification is used for brevity.}. In the then branch, $a$ is only a maximum of $a$ and $b$, because the condition $a > b$ implies it. Corten will symbolically evaluate the condition and store it in its typing context.
+
+\begin{listing}[ht]
+  \begin{minted}[fontsize=\footnotesize]{rust}
+    fn max(a : ty!{ av: i32 }, b: ty!{ bv: i32 })
+        -> ty!{ v: i32 | v >= av && v >= bv} {
+        if a > b {
+          a as ty!{ x : i32 | x >= av && x >= bv }
+        } else {
+          b
+        }
+    }
+  \end{minted}
+  \caption{Function computing the maximum of its inputs; guaranteeing that the returned value is larger than its inputs}
+  \label{lst:max-path-sensitive}
+\end{listing}
+
+
+\Cref{lst:max-path-sensitive} obviously also demonstrates, that subtyping judgements, like \code{a as ty!\{ x : i32 | x >= av \&\& x >= bv \}}, can be introduced and checked.
+
+Because inference is explicitly not the goal of the thesis, our type system is not able to infer, that both branches of the if expression must have the same type as the return type. By adding adding the type relaxation to one branch of the expression, we assist our limited inference system in proving the program type correct.
+
+It should be noted, that path sensitivity is not limited to the value of the expression, but also applies to the mutable effects.
+
 \subsection{Mutable Values}
 
 As seen in \cref{sec:analysis-mutability}, mutable declarations are quite common in Rust. Therefore handling them is essential for Corten.
-To explain the problems that mutable values can cause, consider the problem seen in \cref{list:mutable-values}: Suppose the value given to \code{i} is known to be positive, which is expressed by the type $\{ v_1 : i32 \mid v_1 > 0\}$, then assigning a new value to \code{i} may change the type. Notably, the new value's type might depend on the old value, which is the case here: \code{i + 1} has type $\{ v_2 : i32 \mid v_2 = v_1 - 1\}$.
+To explain the problems that mutable values can cause, consider the problem seen in \cref{lst:mutable-values}: Suppose the value given to \code{i} is known to be positive, which is expressed by the type $\{ v_1 : i32 \mid v_1 > 0\}$, then assigning a new value to \code{i} may change the type. Notably, the new value's type might depend on the old value, which is the case here.
 Corten elected to treat predicates as immutable, meaning assigning to a variable will not change the old predicates that was associated with the variable.
-Therefore assigning a new value to a variable will give that variable a new type, but \- crucially \- keep the logic variable in the typing context, which means that types of other variables can still refer to it. Logic variables that are no longer associated with a program variable (like $v_1$), are called unassociated variables.
+Therefore assigning a new value to a variable will give that variable a new type, but -- crucially -- keep the logic variable in the typing context, which means that types of other variables can still refer to it. In this case, the update \code{i = i + 1} changes the type of \code{i} to $\{ v_2 : i32 \mid v_2 = v_1 - 1\}$.
+Logic variables that are no longer associated with a program variable (like $v_1$), are called unassociated variables.
 That means that the number of predicates in the context increases with every new value assignment.
-In the example, the typing context initially contains the predicate $v_1 > 0$ and the association of $\{i \mapsto v_1\}$. After the assignment, the predicate $v_2 = v_1 + 1$ is \textit{added} to the context and the association is \textit{changed} to $\{i \mapsto v_2\}$
+In the example, the typing context initially contains the predicate $v_1 > 0$ and the association of $\{\code{i} \mapsto v_1\}$. After the assignment, the predicate $v_2 = v_1 - 1$ is \textit{added} to the context and the association is \textit{changed} to $\{i \mapsto v_2\}$, resulting in the context $\Gamma' = (\{\code{i} \mapsto v_2\}, v_1 > 0 \wedge v_2 \doteq v_1 +-1)$.
 % In the example, the typing context at the end of the function body contains $v_1$, $v_2$ and their predicates and the association of \code{i} to $v_2$.
 
 There are other approaches for handling changing values in refinement types, which will be described and compared in \ref{subsec:related-work-mutability}.
@@ -898,15 +933,15 @@ There are other approaches for handling changing values in refinement types, whi
 Besides the mutation of values, mutable references are also common in Rust, which is underpinned by the analysis, which found more than 10\% of parameters to be mutable.
 % The key difference to Refinement Type Systems for functional languages to Rust it the pervasive use of mutation. Therefore the most important feature of Corten it the support for mutation and also mutable references.
 
-Corten has two ways of dealing with assignment to mutable references: If the reference destination is known, the destination's type will be updated with the assigned values type (i.e. strong update). If there are multiple possible reference destinations, Corten will require the assigned value to satisfy the predicates of all possible destinations (i.e. weak updates). This is a standard approach (e.g. \cite{kloos_asynchronous_2015}), but more precise in Rust: The set of possible destinations only grows, when it depends on the execution of an optional control flow path. This means most of the time, strong updates are possible and weak updates are only needed if the reference destination is actually dynamic (i.e. dependent on the execution) \footnote{It would also be possible to encode the path condition in the reference type, but this was decided against for the stated goal of simplicity for the user}
+Corten has two ways of dealing with assignment to mutable references: If the reference destination is known, the destination's type will be updated with the assigned values type (i.e. strong update). If there are multiple possible reference destinations, Corten will require the assigned value to satisfy the predicates of all possible destinations (i.e. weak updates). This is a standard approach (e.g. \cite{kloos_asynchronous_2015}), but more precise in Rust: The set of possible destinations only grows, when it depends on the execution of an optional control flow path. This means most of the time, strong updates are possible and weak updates are only needed if the reference destination is actually dynamic (i.e. dependent on the execution) 
 
 The problem with mutable references is the possibility of aliasing. Aliasing is problematic, because it might create interdependencies between the types of different variables: If one variable is changed, it might affect wether another variable is typed correctly. In \cref{lst:mutation-strong} the return value \code{a} is affected by changes done to a different variable \code{b}. Conservative approximation requires that all possible effects must be tracked. 
 
-A consequence of the ownership system is, that at any time, the owner's and at most one mutable reference's type could be affected by a mutation. The owner's type is changed if the value is changed and the mutable reference borrows the value and updates the owner's value once the reference dropped. If there was another variable's type affected by mutating the value, it would imply that the references alias, which is not allowed by the ownership system.
+% A consequence of the ownership system is, that at any time, the owner's and at most one mutable reference's type could be affected by a mutation. The owner's type is changed if the value is changed and the mutable reference borrows the value and updates the owner's value once the reference dropped. If there was another variable's type affected by mutating the value, it would imply that the references alias, which is not allowed by the ownership system.
 
-References are specified by recognizing the fact that it is sufficient to let the reference's type solely constrain the reference target, while the value owner's type constrains the value.
-In the example, \code{b = \&mut a} and \code{\&mut a} will have inferred type \code{\{ r : \&mut | r == \& a \}}, meaning any inhabitant of this type can at most refer to the variable called \code{y}.
-When a new value is assigned to \code{*b}, the type system will look at the typing context to find out what \code{b} might refer to. In this case \code{a} is the \textit{only} possible target und we can therefore \textit{update} its type. I.e. in type system, \code{*b = 0} will change the type of \code{a} to \code{\{ s : i32 | s == 0 \}}, but the type of \code{b} stays the same (because it still refers to the same location). We call this kind of assignment a strong assignment, as it can change the type. 
+References are tracked by recognizing the fact that it is sufficient to let the reference's type solely constrain the reference target, while the value owner's type constrains the value.
+In the example, \code{b = \&mut a} will have inferred type \code{\{ r : \&mut | r == \& a \}}, meaning any inhabitant of this type can at most refer to the variable \code{y}\footnote{It would also be possible to encode the path condition in the reference type, but this was decided against for the stated goal of simplicity for the user. This why no new construct needs to be introduced}.
+When a new value is assigned to \code{*b}, the type system will look at the typing context to find out what \code{b} might refer to. In this case \code{a} is the \textit{only} possible target und we can therefore \textit{update} its type. I.e. in type system, \code{*b = 0} will change the type of \code{a} to \code{\{ s : i32 | s == 0 \}}, but the type of \code{b} stays the same (because it still refers to the same location). We call this kind of assignment a strong assignment, as it can change the type.
 
 This is sensible, because in Rust's ownership system, \code{a} must be the unique owner of the memory belonging to \code{a}, meaning no other value predicate can be affected by the change.
 
@@ -927,7 +962,7 @@ This is sensible, because in Rust's ownership system, \code{a} must be the uniqu
 
 Note that the type can only be changed because we know exactly what \code{b} refers to. If there is ambiguity about the destination of a reference, strong updates are no longer possible.
 
-To support these use cases, Corten also supports weak updates, which can not change types, but allow assigning to ambiguous reference destinations.
+To also support these use cases, Corten features supports for weak updates, which can not change types, but allow assigning to ambiguous reference destinations.
 \Cref{lst:mutation-weak} demonstrates how ambiguity about the reference destination may emerge: Depending on the if condition, \code{res} could refer to either \code{y} or \code{z}.
 Naturally, we can weaken the reference type to \code{ty!\{ r1 : \&mut i32 | r1 == \&y || r1 == \&z \}}, meaning \code{res} could refer to either \code{y} or \code{z}.
 Because the destination is ambiguous, assigning to \code{*res} can not change the type of \code{y} or \code{z}, which is the case if the type of the assigned value is at least as specific as the types of all possible reference destinations.
@@ -939,10 +974,10 @@ Because the destination is ambiguous, assigning to \code{*res} can not change th
       let mut z = x + 10 as ty!{ z1 : i32 | z1 >= x1 + 10 };
       let mut res;
       if x > 0 {
-        res = &mut y as ty!{ r : &mut | r == &y || r == &z };
+        res = &mut y as ty!{ r : &mut i32 | r == &y || r == &z };
                       // branches of if need same type => weaken
       } else {
-        res = &mut z as ty!{ r : &mut | r == &y || r == &z };
+        res = &mut z as ty!{ r : &mut i32 | r == &y || r == &z };
       }
       *res = x + 11; // res could refer to b or c 
                     // -> assigned value must satisfy both types
@@ -953,58 +988,38 @@ Because the destination is ambiguous, assigning to \code{*res} can not change th
   \label{lst:mutation-weak}
 \end{listing}
 
-An intricacy about conservative reference tracking are functions that return references. In Rust this is possible, if the reference was passed as an argument: The function signature \code{fn f(a : \&mut T, b : \&mut T) -> \&mut T} would allow \code{f} to return either a reference to \code{a} or \code{b}. For the callee knowing where the returned value points to, is important because the type of dereferencing it depends on that knowledge. Consequently, for the return type to be conservative, it must state every possible reference destination.
+An intricacy about conservative reference tracking are functions that return references. In Rust this is possible, if the reference was passed as an argument: The function signature \code{fn f(a : \&mut T, b : \&mut T) -> \&mut T} would allow \code{f} to return either a reference to \code{a} or \code{b}. For the callee knowing where the returned value points to, is important because the type of dereferencing it depends on that knowledge. 
+Consequently, for the return type to be conservative, it must state every possible reference destination.
+Our approach naturally extends to this problem: If the callee does not specify the target (i.e. the return type is $\{ v : \text{T} \mid \text{true}\}$), then any assignment to it would need to show, that it satisfies the predicate of all possible targets, which in this case would be every target, so no assignment to the return type is possible.
+Conversely, if the callee forgot a possible reference target in the return type, then type checking of the body would fail, because the actual (supposedly weaker) type (e.g. $\{ r : \&\code{mut T} \mid r \doteq \&y \}$) does not imply the required (supposedly stronger) type (e.g. $\{ r : \&\code{mut T} \mid r \doteq \&y \vee r \doteq \&z \}$).
 
 
-\label{subsec:path-sensitivify}\subsection{Path Sensitivity}
+% \subsection{Strong Type Updates}\label{subsec:strong-type-updates}
 
-Firstly, the type system is path sensitive, meaning that the type system is aware of necessary XXX that need to be passed for an expression to be evaluated. For example listing \ref{lst:max-path-sensitive} shows a function computing the maximum of its inputs. In the then branch, $a$ is only a maximum of $a$ and $b$, because the condition $a > b$ implies it. Corten will symbolically evaluate the condition and store it in its typing context.
+% \begin{listing}[ht]
+%   \begin{minted}[fontsize=\footnotesize]{rust}
+%     fn strong_updates(b: ty!{ bv: i32 | bv > 0}) -> ty!{ v: i32 | v > 2} {
+%         let mut a = 2;
+%         a = a + b;
+%         a
+%     }
+%   \end{minted}
+%   \caption{Example of changes to \code{a}'s value affecting its type}
+%   \label{lst:strong-updates}
+% \end{listing}
 
-\begin{listing}[ht]
-  \begin{minted}[fontsize=\footnotesize]{rust}
-    fn max(a : ty!{ av: i32 }, b: ty!{ bv: i32 })
-        -> ty!{ v: i32 | v >= av && v >= bv} {
-        if a > b {
-          a as ty!{ x : i32 | x >= av && x >= bv }
-        } else {
-          b
-        }
-    }
-  \end{minted}
-  \caption{Function computing the maximum of its inputs; guaranteeing that the returned value is larger than its inputs}
-  \label{lst:max-path-sensitive}
-\end{listing}
-
-
-- inference
-- also with mutations
-
-
-\subsection{Strong Type Updates}\label{subsec:strong-type-updates}
-
-\begin{listing}[ht]
-  \begin{minted}[fontsize=\footnotesize]{rust}
-    fn strong_updates(b: ty!{ bv: i32 | bv > 0}) -> ty!{ v: i32 | v > 2} {
-        let mut a = 2;
-        a = a + b;
-        a
-    }
-  \end{minted}
-  \caption{Example of changes to \code{a}'s value affecting its type}
-  \label{lst:strong-updates}
-\end{listing}
-
+% The example is still quite tame, 
 
 
 \label{sec:modularity}\subsection{Modularity}
 
-For a verification system to be scalable, it needs to be able modularize a proof. Corten can propagate type information across function calls and by taking advantage of Rust's ownership system, it can do so very accurately. Listing \ref{lst:modular-calls} shows, how an incrementing function \code{inc} can be specified: \code{inc} signature stipulates that it can be called with any \code{i32} (given the name \code{a1}) and will return a value \code{a2}, which equals \code{a1 + 1}. Only the signature of \code{inc} is necessary for the type checking of \code{client}. 
+For a verification system to be scalable, it needs to be able modularize a proof. Corten can propagate type information across function calls and by taking advantage of Rust's ownership system, it can do so very accurately. Listing \ref{lst:modular-calls} shows, how an incrementing function \code{inc} can be specified: \code{inc} signature stipulates that the function can be called with a mutable reference to any \code{i32} whose reference target (given the logic variable name \code{a1}) satisfies the predicate \code{true} and will update it to the value \code{a2}, which equals \code{a1 + 1}. Only the signature of \code{inc} is considered for the type checking \code{client}. 
 
 Notice that all of the type information about \code{y} is preserved when \code{inc(x)} is called. There are no further annotations needed to type check this program. This is possible, because in safe Rust, any (externally observable) mutation done by a function must be part of the function signature. Corten expands on this, by enabling the user specify exactly how a referenced value is mutated.
 
 \begin{listing}[ht]
   \begin{minted}[fontsize=\footnotesize]{rust}
-    fn inc(a: &mut ty!{ a1: i32 => a2 | a2 == a1 + 1 }) {
+    fn inc(a: &mut ty!{ a1: i32 | true => a2 | a2 == a1 + 1 }) {
       *a = *a + 1;
     }
     fn client(mut x: ty!{ xv: i32 | xv > 2 }) -> ty!{ v: i32 | v > 7 } {
@@ -1019,18 +1034,16 @@ Notice that all of the type information about \code{y} is preserved when \code{i
 \end{listing}
 
 
-
-
 \subsection{Atomic Updates}\label{subsec:atomic-updates}
 
 Complex mutation patterns can result in complex interdependencies. We deem it necessary to allow different types to refer to each other. 
 The properties of arguments might depend on each other, consequently their refinement types should be able to refer to each other.
 
-The listing \ref{lst:mutual-reference} is extract from the evaluation example \ref{subsec:evaluation-gauss}. It requires establishing an invariant, where \code{i} has the predicate $\geq 0$ and \code{sum} has the predicate $= i \cdot n$.
+The listing \ref{lst:mutual-reference} is extracted from the evaluation example \ref{sec:evaluation-gauss}. It requires establishing an invariant, where \code{i} has the predicate $\geq 0$ and \code{sum} has the predicate $= i \cdot n$.
 
 Attempting to update one type at a time, will not yield the desired result. If \code{i} is updated first, then it is not possible to establish \code{sum}'s type, because \code{i}'s type is no longer expressive enough.
 If \code{sum} is updated first, we can establish its type, but once \code{i} is updated, it will refer to a different logic variable for \code{i} than \code{sum}. If we tried to carry the information that the two logic variables are the same in the type, it would no longer be an invariant, because reassigning the value would invalidate it\footnote{
-  For this use-case, it might also be possible to relax a single variable at a time, by renaming the logic variables to their old names after the subtyping relation is shown. This approach was not chosen, because its influence on correctness are hard to assess.
+  For this use-case, it might also be possible to relax a single variable at a time, by renaming the logic variables to their old names after the subtyping relation is shown. This approach was not chosen, because it may only cover some special cases.
 }.
 
 \begin{listing}[ht]
@@ -1044,10 +1057,9 @@ If \code{sum} is updated first, we can establish its type, but once \code{i} is 
     }
 
     i = i + 1;
-    sum = sun + i;
-
+    sum = sum + i;
   \end{minted}
-  \caption{Demonstration of interdependent types}
+  \caption{Example Demonstrating Interdependence between Types}
   \label{lst:mutual-reference}
 \end{listing}
 
@@ -1055,10 +1067,11 @@ For this purpose, Corten provides a mechanism for the programmer to instruct Cor
 
 \section{Type System} \label{sec:type-system}
 
-The following sections will introduce the type checking rules of Corten. We assume the program has passed the Rust type checking rules, meaning (non-refined) type- and ownership-checking was successful.
+The following section will introduce the type checking rules of Corten. We assume the program has passed the Rust type checking rules, meaning (non-refined) type- and ownership-checking was successful.
 
 \begin{definition}[Typing Context $\Gamma = (\mu, \Phi)$]
-  The typing context, consisting of an injective function $\mu : \text{PVar} \rightharpoonup \text{LVar}$ that is used for tracking the current logic variable associated with a program variables and a set of predicates $\Phi$, which constrains the logic variables in the image of $\mu$, holds the relevant dynamic state for the various type checking rules.
+  The typing context consist of an injective function $\mu : \text{PVar} \rightharpoonup \text{LVar}$ that is used for tracking the current logic variable associated with a program variables and a set of predicates $\Phi$
+  It is used to constrain the logic variables in the image of $\mu$ and holds the relevant variable context for the various type checking rules.
   $\mu$ must contain a logic variable for every program variable and $\Phi$ can contain additional logic variables not found in the image of $\mu$.
 
   We abbreviate $(\mu, \Phi \wedge \varphi)$ to $\Gamma, \varphi$ for the addition of $\varphi$ to the constraint set, $(\mu[x \mapsto \alpha], \Phi)$ to $\Gamma[x \mapsto \alpha]$ for the update of the mapping for program variable $x$ to $\alpha$ and 
@@ -1069,8 +1082,8 @@ We start with the rule for checking function declarations.
 Without loss of generality, we assume arguments are ordered by their type: First immutable / owned arguments and then mutable arguments.
 
 \begin{definition}[Function Declaration Type Checking]
-When handling mutable references in parameters some subtleties need to be considered. The function can change both the referenced \textit{value} as well as the reference \textit{location}. To describe the referenced value is normally done using the $\{ \alpha \mid \alpha \doteq \&b\}$ syntax. The question arises: If $\alpha$ was the logic variable for a parameter, what should be the analog for $b$? In contrast to local variables, there is no variable representing the referenced value for parameters. As seen in section \ref{subsec:mutable-references}, using the dereference operator would come with a lot of complications.
-Instead we introduce $arg^i$, a special variable denoting the initial abstract value (i.e. stack location) that the mutable reference of argument $n$ points to. For the $j$th parameter with the Rust type \code{\&mut i32} we would generate $arg_j$.
+When handling mutable references in parameters some subtleties need to be considered. To describe the referenced value is normally done using the $\{ \alpha \mid \alpha \doteq \&y\}$ syntax. The question arises: If $\alpha$ was the logic variable for a parameter, what should be the analog for $b$? In contrast to local variables, there is no variable representing the referenced value for parameters. Also for an argument $x_i$, the function could change both the referenced \textit{value} (\code{*i = 2}) as well as the reference \textit{target} (\code{i = \&mut y}). As seen in section \ref{subsec:mutable-references}, using the dereference operator would come with a lot of complications.
+Instead we introduce $arg^i$, a special variable denoting the initial abstract value (i.e. stack location) that the mutable reference of argument $n$ points to. For the $j$th parameter with the Rust type \code{\&mut i32} we would generate pseudo location $arg_j$. 
 %  $i$ denotes the level of nesting: For the $n$th parameter with the Rust type \code{\&mut \&mut i32} we would generate $arg^1_n$ and $arg^2_n$.
 
 \begin{gather*}
@@ -1090,13 +1103,14 @@ and the pseudo variables for the mutable arguments $arg_j$, which are constraine
 The next antecedent stipulates that the execution of the body $s$ updates the context to $\Gamma'$.
 The last three terms are concerned with ensuring, that the asserted postconditions for the return type as well as the context update hold. The rules will be introduced in the following definitions. 
 
-A function consist of the signature, with a type annotations with immutable values, which simply specify what input values they accept and mutable references, which describe what the \textit{target value} for a The function body $s$ 
+
 \end{definition}
 
-Next, we introduce the Rule for checking the subtype relation.
+Next, we introduce the rule for checking the subtype relation, which is introduced by the function return type check or by the user / future inference system as part of an expression.
+
 \begin{definition}[Sub-Typing Rule: $\Gamma \vdash \tau \preceq \tau'$]
-A type $\tau$ is a subtype of $\tau'$ in the context $\Gamma$, if the predicate of the supertype imply the predicate of the subtype. Corten uses a decidable, propositional logic with the theories of equality and linear arithmetic. 
-Before dispatching a request to the SMT solver, the supertype's logic variable is substituted for the subtype's variable to the predicate to refer to the same variable.
+A type $\tau$ is a subtype of $\tau'$ in the context $\Gamma$, if the predicate of the supertype implies the predicate of the subtype, with the supertype's logic variable substituted for the subtype's variable to the predicate so that they refer to the same variable. The validity check performed in the decidable, propositional logic with the theories of equality and linear arithmetic. 
+Corten uses an SMT solver for deciding these requests. 
 
 \[
   \inferrule*[left=$\preceq$-Ty]
@@ -1120,12 +1134,12 @@ Note that, $\Gamma \vdash \tau \preceq \tau'$ can be rephrased in terms of $\Gam
 \begin{definition}[Sub-Context Rules: $\Gamma \preceq \Gamma'$]
 
 In contrast to other refinement type systems, Corten allows types in the context to refer to one another.
-For example a type specifications \code{a : \{ $\alpha$ : i32 | $\alpha$ > $\beta$\}, b:  \{ $\beta$: i32 | $\beta$ != $\alpha$\}} would be valid and result in the context $\Gamma = (\emptyset, \alpha \neq \beta \wedge \beta \geq \alpha)$. In the example, the value $0$ is a valid inhabitant of \code{a}'s type as long as $\code{b} \geq 1$.
+For example the type specifications \code{a : \{ $\alpha$ : i32 | $\alpha$ > $\beta$\}, b:  \{ $\beta$: i32 | $\beta$ != $\alpha$\}} are considered well formed in Corten and result in the context $\Gamma = (\{\code{a} \mapsto \alpha, \code{b} \mapsto \beta\}, \alpha \neq \beta \wedge \beta \geq \alpha)$. In the example, the value $0$ is a valid inhabitant of \code{a}'s type as long as $\code{b} \geq 1$.
 
 The rule \textsc{$\preceq$-Ctx} serves the purpose of allowing these interdependencies between predicates while still providing an applicable concept of subtyping: As long as the set of predicates in $\Gamma'$ imply the predicates for $\Gamma$, the sub-context relation is satisfied and $\Gamma'$ and $\Gamma$ is called the super-context and sub-context respectively. 
-To be more precise: The rule needs to relate the predicates for each \textit{program} variable with the opposing predicates for that program variable. The substitution $\Phi'[\mu'(x) \triangleright \mu(x)\ \mid x \in \dom(\mu)]$ forces the logic variable associated with \code{x} in $\Gamma'$ to be substituted by the logic variable $\mu(x)$ , which is associated with \code{x} in $\Gamma'$.
+To be more precise, the rule needs to relate the predicates for each \textit{program} variable with the opposing predicates for that program variable. The substitution $\Phi'[\mu'(x) \triangleright \mu(x)\ \mid x \in \dom(\mu)]$ forces the logic variable associated with \code{x} in $\Gamma'$ to be substituted by the logic variable $\mu(x)$ , which is associated with \code{x} in $\Gamma'$.
 
-The domain restriction ensures that the sub-context does not contain additional program variables, which would leave unconstrained variables in the antecedent
+The domain restriction ensures that the sub-context does not contain additional program variables, which would leave unconstrained variables in the antecedent.
 
 \[
   \inferrule*[left=$\preceq$-Ctx]
@@ -1136,6 +1150,30 @@ The domain restriction ensures that the sub-context does not contain additional 
     {(\mu, \Phi) \preceq (\mu', \Phi')}
 \]
 \end{definition}
+
+\begin{example}[Sub-Context Relations]
+  \begin{align*}
+    (\set{ a \mapsto \alpha }, \alpha \doteq 2) 
+      &\preceq (\set{ a \mapsto \beta}, \beta > 0) 
+      % &&\text{Generalization $\preceq$-Ty}
+      \\
+    (\set{ a \mapsto \alpha}, \alpha > 0, \beta \doteq 4) 
+      &\preceq (\set{ a \mapsto \alpha }, \alpha \doteq 5) 
+      % &&\text{Free Variable} 
+      \\
+    (\set{a \mapsto \gamma, b \mapsto \delta}, \gamma \doteq 0, \delta \geq 1)
+      &\preceq (\{a \mapsto \alpha, b \mapsto \beta\}, \alpha \neq \beta \wedge \beta \geq \alpha)
+      % &&\text{Example for Sub-Context Def.}
+      \\
+      (\set{}, \code{true})
+      &\preceq \Gamma'
+      \quad \text{ for all }\Gamma'
+      \\
+    \Gamma
+      &\preceq (\set{}, \code{false})
+      \quad \text{ for all }\Gamma
+  \end{align*}
+\end{example}
 
 
 \begin{definition}[Fresh Variable $\Gamma \vdash \alpha \text{ fresh}$]

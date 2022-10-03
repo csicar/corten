@@ -1,5 +1,8 @@
 use super::*;
-use crate::{test_with_rustc::{with_expr, with_item_and_rt_lib}, smtlib_ext::SolverExt};
+use crate::{
+    smtlib_ext::SolverExt,
+    test_with_rustc::{with_expr, with_item_and_rt_lib},
+};
 use pretty_assertions as pretty;
 use quote::quote;
 use rsmt2::SmtConf;

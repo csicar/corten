@@ -76,6 +76,8 @@
 \newcommand{\set}[1]{\left\{ #1 \right\}}
 \newcommand{\bbracket}[1]{\llbracket #1 \rrbracket}
 \newcommand{\tr}[0]{\triangleright}
+\newcommand{\fline}[1]{\overline{\vphantom{\mid}#1}} 
+
 
 \newcommand{\ccolon}[0]{: }
 \newcommand{\cmid}[0]{| }
@@ -1319,13 +1321,17 @@ $$ \begin{gathered}
   %   {(\mu, \Phi) \vdash \code{let res} = f(a, \dots, \code{\&mut} b, \dots) \Rightarrow (\mu[a \mapsto \alpha', \dots, subst^{-1}], \Phi \wedge \varphi'_{\alpha} \wedge \dots)}
   %
   \\
+  \\
+  \mprset { vskip =1ex }
   \inferrule*[left=Fn-Call\rulelabel{Fn-Call}]
     {
-     (\mu, \Phi) \preceq (\mu, \Phi \wedge, \overline{x_i \doteq a_i \wedge \varphi_i}, \overline{y_j \doteq b_i \wedge \psi_j})
-     \\ \Sigma \vdash f(\overline{a_i : \{ \alpha_i : l_i \mid \varphi_i \}}, \overline{b_j : \{ \beta_j : l_j \mid \psi_j \Rightarrow \beta_j' \mid \psi_j'\}})
+      (\mu, \Phi) \preceq (\mu, \Phi \wedge (\fline{\varphi_i} \wedge \fline{\psi_j})\fline{[\alpha_i \tr \mu(x_i)]}\,\fline{[\beta_j \tr \mu(y_j)]}
+      \\ \Sigma \vdash f : \code{fn}(\fline{u_i: \set{\alpha_i : b_i \mid \varphi_i}}, \fline{v_j : \{\beta_j : b_j \mid \psi_j \Rightarrow \beta_j' \mid \psi_j'\}}) \to \set{\gamma : b \mid \rho}
     }
-    {(\mu, \Phi) \vdash \code{let res} = f(\overline{x_i}, \overline{\&mut y_j}) \Rightarrow \mu[\overline{x_i \mapsto \alpha_i}, \overline{y_j \mapsto \beta_j}], \Phi \wedge \overline{\phi_i} \wedge \overline{\psi_j} \wedge \overline{\psi_i}}
+    {(\mu, \Phi) \vdash \code{let }r = f(\fline{\vphantom{\mid}x_i}, \fline{\&\code{mut } y_j}) \Rightarrow \mu[\fline{x_i \mapsto \alpha_i}, \fline{y_j \mapsto \beta_j}, r \mapsto \gamma], \Phi \wedge \fline{\phi_i} \wedge \fline{\psi_j} \wedge \fline{\psi_i} \wedge \rho}
 \end{gathered} $$
+
+Part of the \cref{Fn-Call} that is not shown in the rule is ensuring, that the logic variable names from the function call signature do not conflict with the any variable in the current context by renaming them if necessary.
 \end{definition}
 
 %%%% OLD Must ref rule

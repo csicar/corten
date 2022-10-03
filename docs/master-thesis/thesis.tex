@@ -95,6 +95,7 @@
     [][][]%
     #1
   }
+  % \label[typerule]{rule:\IfNoValueTF{#1}{#2}{#1}}%
   \label[typerule]{rule:#1}%
   \endgroup  
 }
@@ -162,6 +163,7 @@
 %% For more details, see 
 %% http://en.wikibooks.org/wiki/LaTeX/Text_Formatting#Hyphenation
 \hyphenation{
+  own-er-ship
 % me-ta-mo-del
 }
 
@@ -1143,14 +1145,14 @@ To be more precise, the rule needs to relate the predicates for each \textit{pro
 
 The domain restriction ensures that the sub-context does not contain additional program variables, which would leave unconstrained variables in the antecedent.
 
-\[
-  \inferrule*[left=$\preceq$-Ctx]
+$$
+  \inferrule*[left=$\preceq$-Ctx\rulelabel{Sub-Ctx}]
     {
       \vDash \Phi'[\mu'(x) \triangleright \mu(x)\ \mid x \in \dom(\mu')] \to \Phi
       \\ \dom(\mu') \subseteq \dom(\mu)
     }
     {(\mu, \Phi) \preceq (\mu', \Phi')}
-\]
+$$
 \end{definition}
 
 \begin{example}[Sub-Context Relations]
@@ -1190,10 +1192,10 @@ It could also be possible that an expression can not be directly translated, lik
 
 \begin{align*}
   \alpha \simeq \bbracket{v}\Gamma &= \alpha \doteq v
-  \\ \alpha \simeq \bbracket{x_1 \odot x_2}\Gamma &= \alpha \doteq (x_1 \odot x_2) &&\text{if }\odot\text{ allowed}
-  \\ \alpha \simeq \bbracket{x}\Gamma &= \alpha \doteq \mu(x)
+  \\ \alpha \simeq \bbracket{x_1 \odot x_2}\Gamma &= \alpha \doteq (x_1 \odot x_2) && \text{if }\odot\text{ allowed}
+  \\ \alpha \simeq \bbracket{x}\Gamma &= \alpha \doteq \mu(x) && \text{for }\Gamma = (\mu, \Phi)
   \\ \alpha \simeq \bbracket{\&y}\Gamma &= \alpha \doteq \&y
-  \\ \alpha \simeq \bbracket{e}\Gamma &= \text{true} &&\text{otherwise}
+  \\ \alpha \simeq \bbracket{e}\Gamma &= \text{true} && \text{otherwise}
 \end{align*}
 \end{definition}
 
@@ -1208,7 +1210,7 @@ $$ \begin{gathered}
   \quad
   \inferrule*[left=Var\rulelabel{Var}]
     {\alpha \text{ fresh}}
-    {(\mu, \Phi)\vdash x : \{ \alpha : b \mid \beta \simeq \alpha \} }
+    {(\mu, \Phi)\vdash x : \{ \alpha : b \mid \alpha \simeq \bbracket{x}\Gamma \} }
   %
   \\
   \inferrule*[left=Add\rulelabel{Add}]
@@ -1328,7 +1330,7 @@ $$ \begin{gathered}
       (\mu, \Phi) \preceq (\mu, \Phi \wedge (\fline{\varphi_i} \wedge \fline{\psi_j})\fline{[\alpha_i \tr \mu(x_i)]}\,\fline{[\beta_j \tr \mu(y_j)]}
       \\ \Sigma \vdash f : \code{fn}(\fline{u_i: \set{\alpha_i : b_i \mid \varphi_i}}, \fline{v_j : \{\beta_j : b_j \mid \psi_j \Rightarrow \beta_j' \mid \psi_j'\}}) \to \set{\gamma : b \mid \rho}
     }
-    {(\mu, \Phi) \vdash \code{let }r = f(\fline{\vphantom{\mid}x_i}, \fline{\&\code{mut } y_j}) \Rightarrow \mu[\fline{x_i \mapsto \alpha_i}, \fline{y_j \mapsto \beta_j}, r \mapsto \gamma], \Phi \wedge \fline{\phi_i} \wedge \fline{\psi_j} \wedge \fline{\psi_i} \wedge \rho}
+    {(\mu, \Phi) \vdash \code{let }r = f(\fline{\vphantom{\mid}x_i}, \fline{\&\code{mut } y_j}) \Rightarrow (\mu[\fline{x_i \mapsto \alpha_i}, \fline{y_j \mapsto \beta_j}, r \mapsto \gamma], \Phi \wedge \fline{\phi_i} \wedge \fline{\psi_j} \wedge \fline{\psi_i} \wedge \rho)}
 \end{gathered} $$
 
 Part of the \cref{Fn-Call} that is not shown in the rule is ensuring, that the logic variable names from the function call signature do not conflict with the any variable in the current context by renaming them if necessary.
@@ -1354,7 +1356,10 @@ Part of the \cref{Fn-Call} that is not shown in the rule is ensuring, that the l
 
 \section{Soundness of the Type System}\label{sec:soundness}
 
-We will write substitution as $\Phi[ x \tr a ]$ meaning $x$ is replaced by $a$ in $\varphi$ and $\mu[x \mapsto \alpha]$ for the function update meaning $\mu[x \mapsto \alpha](x) = \alpha$ and $\mu(y)$ everywhere else.
+We will write substitution as $\Phi[ x \tr a ]$ meaning $x$ is replaced by $a$ in $\Phi$ and $\mu[x \mapsto \alpha]$ for the function update meaning $\mu[x \mapsto \alpha](x) = \alpha$ and $\mu(y)$ everywhere else.
+
+For $x_1 \dots x_n \in \dom(\mu)$ 
+we shorten $\Phi[\mu(x_1) \tr g(x_1)][\dots][\mu(x_n) \tr g(x_n)]$ to $\Phi[f(x_i) \tr g(x_i) \mid x]$ and $\Phi[\mu(x_i) \tr g(x_i) \mid x \neq y]$ if $x \in \set{ x \mid x \in \dom(\mu), x \neq y }$
 
 As usual, we consider the three properties (see Pierce \cite[p. 95, p.167]{pierce_types_2002}) of a type system when assessing the correctness of MiniCorten:
 
@@ -1370,21 +1375,21 @@ As usual, we consider the three properties (see Pierce \cite[p. 95, p.167]{pierc
 Because MiniCorten is based on Rust, we will assume that progress, as well as preservation for the base-types. This includes preservation of type- and ownership-safety. Thus it is sufficient to prove that assuming these properties hold, preservation of the refinement types is holds.
 
 \begin{definition}[State Conformance]\label{def:state-conformance}
-  A state $\sigma$ is conformant with respect to a typing context $\Gamma = (\mu, \varphi)$ (written as $\sigma : \Gamma$), iff:
+  A state $\sigma$ is conformant with respect to a typing context $\Gamma = (\mu, \Phi)$ (written as $\sigma : \Gamma$), iff:
   $$
-    \varphi[\mu(x) \triangleright \bbracket{\sigma(x)} \mid x] \text{ is satisfiable}
+    \Phi[\mu(x) \triangleright \bbracket{\sigma(x)} \mid x \in \dom(\mu)] \text{ is satisfiable}
   $$
   I.e. a conformant type context does not contradict the execution state.
 \end{definition}
 
 \begin{lemma}[Conformance of Symbolic Execution]\label{lem:conf-sym-exec}
-  If \hyperref[def:state-conformance]{$\sigma : \Gamma$}, $\Gamma \vdash \alpha \text{ fresh}$ then $\sigma[x \tr \bbracket{e} \sigma] : \Gamma[x \mapsto \alpha],(\alpha \simeq \bbracket{e} \Gamma)$
+  If \hyperref[def:state-conformance]{$\sigma : \Gamma$}, $\Gamma \vdash \alpha \text{ fresh}$ then $\sigma[x \mapsto \bbracket{e} \sigma] : \Gamma[x \mapsto \alpha],(\alpha \simeq \bbracket{e} \Gamma)$
 \end{lemma}
 \begin{proof}
-  Given $\Phi[ \mu(x) \tr \bbracket{\sigma(x) \mid x}] \text{ SAT}$ where $\Gamma = (\Phi, \mu)$ show
+  Let $\Gamma = (\Phi, \mu)$. Given $\Phi[ \mu(x) \tr \bbracket{\sigma(x)} \mid x] \text{ SAT}$  show
   $(\Phi \wedge \alpha \simeq \bbracket{e}\Gamma)[\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)}]$.
   Let $\sigma' = \sigma[x \tr \bbracket{e} \sigma]$.
-  As a model we select $m' = m[\beta \tr \sigma(x)], \mu(x) = \beta$ and show that the proof obligation is satisfied for $m'$.
+  As a model we select $m' = m[\beta \tr \sigma(x)]$ where $\mu(x) = \beta$ and show that the proof obligation is satisfied for $m'$.
   
   Split the goal on the conjunction; if both sides are valid then the conjunction is valid (for the given model).
   \begin{itemize}
@@ -1463,14 +1468,14 @@ Because MiniCorten is based on Rust, we will assume that progress, as well as pr
 
 A crucial consequence of \cref{lem:conf-sym-exec} it that references are tracked conservatively:
 \begin{lemma}[Conservative Reference Tracking]\label{lem:conservative-ref-tracking}
- If $\sigma : \Gamma$, $\Gamma \vdash x : \{ \alpha : \&b \mid \alpha \doteq y_i \}$ and $ \Gamma \vdash \alpha \text{ fresh}  $ then $\bbracket{\sigma(x)} = \&y_i$
+ If $\sigma : \Gamma$, $\Gamma \vdash x : \{ \alpha : \&b \mid \alpha \doteq \&y_i \}$ and $ \Gamma \vdash \alpha \text{ fresh}  $ then $\bbracket{\sigma(x)} = \&y_i$
 \end{lemma}
 
 \begin{proof}
   \begin{align*}
     &\phantom{\implies}\ \ \sigma : \Gamma 
     \\ &\implies \sigma : \Gamma[x \mapsto \alpha], \alpha \doteq \&y_i \quad (\cref{lem:conf-sym-exec})
-    \\ &\implies m \vDash (\varphi \wedge \alpha \doteq \&y_i)[\mu(z) \tr \bbracket{\sigma(z)} \mid z] \quad \text{for some }m
+    \\ &\implies m \vDash (\Phi \wedge \alpha \doteq \&y_i)[\mu(z) \tr \bbracket{\sigma(z)} \mid z] \quad \text{for some }m
     \\ &\implies m \vDash (\alpha \doteq \&y_i)[\mu(x) \tr \bbracket{\sigma(x)} \mid x]
     \\ &\implies m \vDash (\alpha \doteq \&y_i)[\alpha \tr \bbracket{\sigma(x)} \mid x]
     \\ &\implies m \vDash \bbracket{\sigma(x)} \doteq \&y_i \quad \text{independent of $m$}
@@ -1479,7 +1484,7 @@ A crucial consequence of \cref{lem:conf-sym-exec} it that references are tracked
 \end{proof}
 
 \begin{lemma}[Subtyping is Conservative]\label{lem:conservative-subtype}
-  If $\Gamma \preceq \Gamma'$ and $\sigma : \Gamma'$ then $\sigma : \Gamma'$
+  If \hyperref[rule:Sub-Ctx]{$\Gamma \preceq \Gamma'$} and $\sigma : \Gamma$ then $\sigma : \Gamma'$
 \end{lemma}
 
 \begin{proof}
@@ -1534,7 +1539,7 @@ A crucial consequence of \cref{lem:conf-sym-exec} it that references are tracked
 \begin{lemma}[Preservation of State Conformance]
   If $\Gamma \vdash s \Rightarrow \Gamma_2$, $\sigma : \Gamma$ and $\tuple{s}{\sigma} \leadsto \tuple{s_1}{\sigma_1}$, then  $\sigma_1 : \Gamma_1$ and $\Gamma_1 \vdash s_1 \Rightarrow \Gamma_2$ for some $\Gamma_1$
 \end{lemma}
-\begin{proof} Rule Induction over $\tuple{t}{\sigma} \leadsto \tuple{t'}{\sigma'}$
+\begin{proof} Rule Induction over $\tuple{s_1}{\sigma} \leadsto \tuple{s_2}{\sigma'}$
 \begin{itemize}
   \item \textsc{Case SS-Assign}:
     Given $\sigma : \Gamma$, $\Gamma \vdash x = e \Rightarrow \Gamma_2$
@@ -1549,18 +1554,18 @@ A crucial consequence of \cref{lem:conf-sym-exec} it that references are tracked
         rule inversion yields $\Gamma \vdash y : \{\beta : b \mid \beta \doteq \&z\}$, $\Gamma \vdash z : \{\gamma : b \mid \varphi_\gamma\}$ and $\Gamma_2 = \Gamma[x \mapsto \gamma], \varphi_\gamma$
 
         Choose $\Gamma_1 = \Gamma_2$ and $ m' = m[\mu(x) \mapsto \bbracket{\sigma(x)}] $ to show 
-        $ m' \vDash (\varphi \wedge \varphi_\gamma)[\mu[x \mapsto \gamma](y) \tr \bbracket{\sigma(y)} \mid y]$.
+        $ m' \vDash (\Phi \wedge \varphi_\gamma)[\mu[x \mapsto \gamma](y) \tr \bbracket{\sigma(y)} \mid y]$.
         % $ m' \vDash \varphi[\mu[x \mapsto \gamma](y) \tr \bbracket{\sigma(y)} \mid y]$.
 
         \begin{align*}
           m  &\vDash \varphi[\mu(x) \tr \bbracket{\sigma(x)} \mid y]
-          \\ &= \varphi[\mu(x) \tr \bbracket{\sigma(x)}][\mu(x) \tr \bbracket{\sigma(x)} \mid y \neq x]
+          \\ &= \Phi[\mu(x) \tr \bbracket{\sigma(x)}][\mu(x) \tr \bbracket{\sigma(x)} \mid y \neq x]
           \\ \text{implies} 
-          \\ m' = m[\mu(x) \mapsto \bbracket{\sigma(x)}] &\vDash \varphi[\mu[x \mapsto \gamma](x) \tr \bbracket{\sigma(x)}][\mu(x) \tr \bbracket{\sigma(x)} \mid y \neq x]
-          \\ &= \varphi[\mu[x \mapsto \gamma](y) \tr \bbracket{\sigma(y)} \mid y]
-          \\ &= \varphi[\mu[x \mapsto \bbracket{z}\sigma](y) \tr \bbracket{\sigma(y)} \mid y]
-          \\ &\overset{\mathclap{absorption}}{=} (\varphi \wedge \varphi_\gamma)[\mu[x \mapsto \bbracket{z}\sigma](y) \tr \bbracket{\sigma(y)} \mid y]
-          \\ &= (\varphi \wedge \varphi_\gamma)[\mu[x \mapsto \gamma](y) \tr \bbracket{\sigma(y)} \mid y]
+          \\ m' = m[\mu(x) \mapsto \bbracket{\sigma(x)}] &\vDash \Phi[\mu[x \mapsto \gamma](x) \tr \bbracket{\sigma(x)}][\mu(x) \tr \bbracket{\sigma(x)} \mid y \neq x]
+          \\ &= \Phi[\mu[x \mapsto \gamma](y) \tr \bbracket{\sigma(y)} \mid y]
+          \\ &= \Phi[\mu[x \mapsto \bbracket{z}\sigma](y) \tr \bbracket{\sigma(y)} \mid y]
+          \\ &\overset{\mathclap{absorption}}{=} (\Phi \wedge \varphi_\gamma)[\mu[x \mapsto \bbracket{z}\sigma](y) \tr \bbracket{\sigma(y)} \mid y]
+          \\ &= (\Phi \wedge \varphi_\gamma)[\mu[x \mapsto \gamma](y) \tr \bbracket{\sigma(y)} \mid y]
           \\ 
         \end{align*}
     \end{itemize} 

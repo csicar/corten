@@ -3,7 +3,7 @@ use std::io::Write;
 
 use anyhow::anyhow;
 use rsmt2;
-use rsmt2::print::{IdentParser, ModelParser};
+use rsmt2::print::{IdentParser, ModelParser, Sort2Smt};
 use rsmt2::{
     print::{AdtDecl, Sym2Smt},
     SmtRes, Solver,
@@ -24,12 +24,18 @@ impl<T> SmtResExt<T> for SmtRes<T> {
 
 pub trait SolverExt {
     fn add_prelude(&mut self) -> SmtRes<()>;
+
+    fn declare_const_esc(&mut self, name: &str, ty: impl Sort2Smt) -> SmtRes<()>;
 }
 
 impl<P> SolverExt for Solver<P> {
     fn add_prelude(&mut self) -> SmtRes<()> {
         self.write_all(b"(declare-datatypes () ((Unit unit)))\n\n")?;
         self.declare_fun("ref", &["String"], "Int")
+    }
+
+    fn declare_const_esc(&mut self, name: &str, ty: impl Sort2Smt) -> SmtRes<()> {
+        self.declare_const(format!("|{name}|"), ty)
     }
 }
 

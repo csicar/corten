@@ -1,5 +1,5 @@
 use super::*;
-use crate::test_with_rustc::{with_expr, with_item_and_rt_lib};
+use crate::{test_with_rustc::{with_expr, with_item_and_rt_lib}, smtlib_ext::SolverExt};
 use pretty_assertions as pretty;
 use quote::quote;
 use rsmt2::SmtConf;
@@ -19,7 +19,7 @@ fn test_smt() {
 
     let conf = SmtConf::default_z3();
     let mut solver = conf.spawn(parser).unwrap();
-    solver.declare_const("a", "Int").unwrap();
+    solver.declare_const_esc("a", "Int").unwrap();
 
     let ass = "(> a 2)".to_string();
     dbg!(ass.clone());
@@ -1168,6 +1168,74 @@ mod sub_context {
             |item, tcx| {
                 let ty = type_check_function(item, &tcx).unwrap();
                 pretty::assert_eq!(ty.to_string(), "ty!{ v : i32 | true }");
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_weaken_range_by_update_pos() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn max() -> ty!{ v : () } {
+                    let mut a = 2 as ty!{ v : i32 | v == 2 };
+                    a = 5;
+                    relax_ctx!{
+                        ;
+                        a |-> w | w > 0
+                    };
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : () | true }");
+            },
+        )
+        .unwrap();
+    }
+
+    #[should_panic]
+    #[test]
+    fn asdlkjasdkjb_neg() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn max() -> ty!{ v : () } {
+                    let mut a = 2 as ty!{ v : i32 | v>0 };
+                    relax_ctx!{
+                        ;
+                        a |-> w | w == 2
+                    };
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : () | true }");
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn asdlkjasdkjb_pos() {
+        init_tracing();
+        with_item_and_rt_lib(
+            &quote! {
+                fn max() -> ty!{ v : () } {
+                    let mut a = 2 as ty!{ v : i32 | v==2 };
+                    relax_ctx!{
+                        ;
+                        a |-> w | w > 0
+                    };
+                }
+            }
+            .to_string(),
+            |item, tcx| {
+                let ty = type_check_function(item, &tcx).unwrap();
+                pretty::assert_eq!(ty.to_string(), "ty!{ v : () | true }");
             },
         )
         .unwrap();

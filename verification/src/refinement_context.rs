@@ -259,7 +259,7 @@ where
 
         let smt_ty = encode_type(&ty.base);
 
-        solver.declare_const(&ty.binder, smt_ty).into_anyhow()?;
+        solver.declare_const_esc(&ty.binder, smt_ty).into_anyhow()?;
         Ok(())
     }
 
@@ -871,7 +871,7 @@ pub fn require_is_subtype_of<'tcx>(
     if ctx.lookup_decl_for_binder(&sub_ty.binder).is_none() {
         ctx.encode_binder_decl(solver, sub_ty, tcx)?;
         // let smt_ty = encode_type(&sub_ty.base);
-        // solver.declare_const(&sub_ty.binder,  smt_ty).into_anyhow()?;
+        // solver.declare_const_esc(&sub_ty.binder,  smt_ty).into_anyhow()?;
     }
     solver
         .assert(refinements::encode_smt(&sub_ty.predicate, &|target| {
@@ -880,7 +880,7 @@ pub fn require_is_subtype_of<'tcx>(
         .into_anyhow()?;
 
     // solver
-    //     .declare_const(&super_ty.binder, "Int")
+    //     .declare_const_esc(&super_ty.binder, "Int")
     //     .into_anyhow()?;
 
     // solver

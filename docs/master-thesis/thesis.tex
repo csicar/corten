@@ -365,7 +365,7 @@ Rondon et al. \cite{rondon_liquid_2008} choose the EUFA as the logic fragment, m
 \section{Rust}
 
 The Rust programming language \cite{matsakis_rust_2014} is a multi-paradigm systems programming language, originally developed by Graydon Hoare at Mozilla Research.
-Even though Rust is quite young, the first stable release published in 2015, it has attracted interest in a wide area of applications and organization. It is used everywhere from Volvo building embedded software for cars \cite{foufas_why_2022} to Western Digital implementing a NVMe driver for Linux in Rust \cite{larabel_lpc_2022} and of course the Rust compiler it self.
+Even though Rust is quite young, the first stable release published in 2015, it has attracted interest in a wide area of applications and organizations. It is used everywhere from Volvo building embedded software for cars \cite{foufas_why_2022} to Western Digital implementing a NVMe driver for Linux in Rust \cite{larabel_lpc_2022} and of course the Rust compiler itself.
 It draws inspiration from functional and imperative programming languages. The core forms a set of features usually found in functional programming languages: Functions, closures, algebraic data types, type classes (called traits in Rust) and pattern matching, immutability are all common place in Rust.
 However, Rust is also influenced by C: Rust extends its ML base with optional mutability of data and references and manual memory management. Many design decisions of Rust can be explained by Rust's ambitions to offer safe and clear ML-like abstractions without compromising on performance compared to C.
 For example, Rust elected to use manual memory management like C, which guarantees faster and predictable execution times when compared to garbage collection. Crucial, Rust does not compromise on safety to accomplish this: To this end, Rust incorporates the notion of affine types into its type system (called \textit{ownership system} in Rust). This additional type system guarantees, 
@@ -381,7 +381,7 @@ The next paragraph will explain how the ownership system works.
 The ownership system is an implementation of affine types. It uniquely associates each memory object with an owner. 
 The owner of a Rust object is the binding that is responsible for freeing the object. In the listing \ref{lst:ownership-transfer}, first \code{a} is the owner of the \code{User} object. An object may only be used once, at which point it is consumed and ownership is transferred to its new binding. In the example \code{greet(user)} uses \code{a} and transferring ownership to \code{greet}. At the end of \code{greet}, there is no new owner, as a result the user object is freed.
 
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize, texcomments]{rust}
     struct User { name: String, age: u32 }
 
@@ -400,7 +400,7 @@ The owner of a Rust object is the binding that is responsible for freeing the ob
 On closer inspection, handing over the ownership of \code{a} to \code{greet} is not sensible: \code{greet} just needs to read the value, but should not take ownership of \code{a}. 
 For that purpose, Rust offers a different kind of value transfer called \textit{references}, which have similar execution semantics to pointers. Because creating a reference does not transfer the ownership of the pointee, is is called a \textit{borrow}. Listing \ref{lst:ownership-immut-borrow} rephrases \code{greet} to only take a borrow of the user, instead of taking ownership. Because \code{user} is not owned by \code{greet}, it is not permitted to extract \code{user.name} (of Type \code{String}), instead only borrows to the name are allowed. 
 
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize, texcomments]{rust}
     fn greet(user: &User) -> String { // \code{greet} borrows \code{user}
       let name_ref : &String = &user.name; // borrow \code{name} from \code{user}
@@ -425,7 +425,7 @@ Thus, Rust ensures that for every variable at every point during the execution t
 \Cref{lst:ownership-mut-borrow} demonstrates that Rust will not accept a problem where aliased and mutable access is possible at a time. To resolve the issue, the mutable reference should be borrows after the call to \code{greet}.
 
 
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize, texcomments]{rust}
     fn age(user: &mut User) {
       (*user).age = user.age + 1;
@@ -489,7 +489,7 @@ Because of the limited, well-known scope, these subtyping relations create no am
 \paragraph*{What Rust does not solve} Even though Rust simplifies reasoning about mutability and aliasing of mutable data, Rust does not eliminate the need to reason about their interaction. For example, \cref{lst:alias-mut} shows how \code{cell}'s value is influenced by changes to another variable \code{r}. This does not mean that the ownership rule  \textit{mutability XOR aliasing} are broken: Even though both \code{cell} and \code{r} are mutable, \code{cell} becomes inaccessible while \code{r} is live.
 This form of aliasing is very restrictive: there may only be one owner and one borrower alive at a time. Once the borrow is returned, a new reference may be created.
 
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize, autogobble]{rust}
     let mut cell = 2;
     let r = &mut cell;
@@ -519,7 +519,7 @@ Relevant for the thesis are the first few stages: Firstly the AST, which is a re
 
 Figure \ref{fig:rust-stages} shows the the main compiler stages of Rustc and the associated data structure. The first data structure that is extracted from the source code is the AST (short for abstract syntax tree), which is the result of parsing and expanding macros. 
 Based on the AST, the high-level intermediate representation (short HIR) is created by resolving the names and desugaring some language constructs. The HIR contains accurate source labels, which map all nodes in the HIR to their source code locations. 
-The HIR is then used as the basis for type checking returning the typed high-level intermediate representation (short THIR), which annotates every node with its type. THIR also lowers some additional constructs like automatic dereferencing and overloading and more. In contrast to the previous representations, "[t]he THIR only represents bodies, i.e. <<executable code>>; this includes function bodies [..]. Consequently, the THIR has no representation for items like \code{struct}s or \code{trait}s." \cite[p. 1]{noauthor_thir_nodate}
+The HIR is then used as the basis for type checking returning the typed high-level intermediate representation (short THIR), which annotates every node with its type. THIR also lowers some additional constructs like automatic dereferencing and overloading and more. In contrast to the previous representations, "[t]he THIR only represents bodies, i.e. the executable code; this includes function bodies [..]. Consequently, the THIR has no representation for items like \code{struct}s or \code{trait}s." \cite[p. 1]{noauthor_thir_nodate}
 THIR will then be used to create the mid-level IR by drastically simplifying the language: The tree structure with complex expression of the THIR is turned in to a control-flow graph (short CFG) with basic blocks containing simple (i.e. non-nested) expressions.
 
 Finally Rustc uses external tools \- like llvm \- to generate executable files and link them.
@@ -656,18 +656,17 @@ Luckily the data from function definitions and parameters can complete the pictu
 When it comes to local variables, Rust users are more liberal in their use of mutability:
 About 30\% of local variables are defined mutable.
 
-For verification this means that the use of mutability is wide spread. Especially local variables are often mutable and should therefore a verification system should try to minimize the effort for the user. Mutable parameters are less common, but still need to be accounted for in verification.
+For verification this means that the use of mutability is wide spread. Especially local variables are often mutable and therefore a verification system should try to minimize the effort for the user. Mutable parameters are less common, but still need to be accounted for in verification.
 
 \section{Conclusions}
 
 For this thesis the following conclusion can be drawn:
 
 \begin{itemize}
-  \item Even though uses of \code{unsafe} are not rare, it is acceptable to ignore in favour of a simpler type system.
+  \item Even though uses of \code{unsafe} are not rare, it is acceptable to ignore them in favour of a simpler type system.
   \item Mutable variables are used very often and should therefore have very little associated specification effort.
   \item Mutable parameters are used less frequently justifying a higher specification effort, but their specification must still be possible.
 \end{itemize}
-\fi
 
 \chapter{The MiniCorten Language} \label{ch:language} 
 
@@ -683,6 +682,7 @@ ANF normalizes the syntactic structure by requiring that arguments of expression
 
 There are two namespaces for identifiers: $x \in \text{PVar}$ for variables of program variables and $\alpha \in \text{LVar}$ for variable in the refinement predicates. The syntax is defined by the following BNF-Grammar:
 
+% TODO: set floating
 \begin{bnfgrammar}
   $program$  ::=
     $func\_decl$ * : function declarations
@@ -873,7 +873,7 @@ To make the examples more readable, we will take the liberty to use parts from t
 
 \subsection{Decidable, Conservative Subtyping}
 
-Having a decidable subtyping system is essential to making it feasible in practice: A developer expects type checking to be automatic and part of compilation without additional effort. There is no need for user interaction, if the SMT solver can automatically verify the program.
+Having a decidable subtyping system is essential for making it feasible in practice: A developer expects type checking to be automatic and part of compilation without additional effort. There is no need for user interaction, if the SMT solver can automatically verify the program.
 The refinement predicates are translated into assertions of satisfiability of formulae in predicate logic with the theories of linear arithmetic and equality. Thus, an SMT solver can be used to decide if the formula is satisfiable.
 
 
@@ -884,7 +884,7 @@ First of all, the type system retains the basic features of the refinement type 
 In particular that it is path sensitive, meaning that the type system is aware of necessary guards that need to be passed for a statement to be evaluated. For example \cref{lst:max-path-sensitive} shows a function computing the maximum of its inputs. 
 The return type requires, that the result must be at least as big as both inputs\footnote{Corten can also prove the characteristic property of the maximum function. The simpler specification is used for brevity.}. In the then branch, $a$ is only a maximum of $a$ and $b$, because the condition $a > b$ implies it. Corten will symbolically evaluate the condition and store it in its typing context.
 
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize]{rust}
     fn max(a : ty!{ av: i32 }, b: ty!{ bv: i32 })
         -> ty!{ v: i32 | v >= av && v >= bv} {
@@ -904,7 +904,7 @@ The return type requires, that the result must be at least as big as both inputs
 
 Because inference is explicitly not the goal of the thesis, our type system is not able to infer, that both branches of the if expression must have the same type as the return type. By adding adding the type relaxation to one branch of the expression, we assist our limited inference system in proving the program type correct.
 
-It should be noted, that path sensitivity is not limited to the value of the expression, but also applies to the mutable effects.
+It should be noted, that path sensitivity is not limited to the value of the expression, but also applies to the mutable effects. \Cref{sec:eval-max} will expand on this example to demonstrate this.
 
 \subsection{Mutable Values}
 
@@ -917,10 +917,10 @@ That means that the number of predicates in the context increases with every new
 In the example, the typing context initially contains the predicate $v_1 > 0$ and the association of $\{\code{i} \mapsto v_1\}$. After the assignment, the predicate $v_2 = v_1 - 1$ is \textit{added} to the context and the association is \textit{changed} to $\{i \mapsto v_2\}$, resulting in the context $\Gamma' = (\{\code{i} \mapsto v_2\}, v_1 > 0 \wedge v_2 \doteq v_1 +-1)$.
 % In the example, the typing context at the end of the function body contains $v_1$, $v_2$ and their predicates and the association of \code{i} to $v_2$.
 
-There are other approaches for handling changing values in refinement types, which will be described and compared in \ref{subsec:related-work-mutability}.
+There are other approaches for handling changing values in refinement types, which will be described in \ref{ch:related-work}.
 
 
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize, texcomments]{rust}
     fn decr() -> ty!{ v: i32 | v >= 0 } {
         let mut i = ...;    // i : $\{ v_1 : i32 \mid v_1 > 0 \}$
@@ -949,7 +949,7 @@ When a new value is assigned to \code{*b}, the type system will look at the typi
 
 This is sensible, because in Rust's ownership system, \code{a} must be the unique owner of the memory belonging to \code{a}, meaning no other value predicate can be affected by the change.
 
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize, texcomments]{rust}
     fn client() -> ty!{ v: i32 | v == 4 } {
         let a = 2;       // a : $\{ v_1 : i32 \mid v_1 == 2 \}$
@@ -971,7 +971,7 @@ To also support these use cases, Corten features supports for weak updates, whic
 Naturally, we can weaken the reference type to \code{ty!\{ r1 : \&mut i32 | r1 == \&y || r1 == \&z \}}, meaning \code{res} could refer to either \code{y} or \code{z}.
 Because the destination is ambiguous, assigning to \code{*res} can not change the type of \code{y} or \code{z}, which is the case if the type of the assigned value is at least as specific as the types of all possible reference destinations.
 
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize, texcomments]{rust}
     fn weak_updates(x : ty!{ x1 : i32 }) -> ty!{ v : i32 | v > 2 * x1 + 10 } {
       let mut y = x as ty!{ y1 : i32 | y1 >= x1 };
@@ -1000,7 +1000,7 @@ Conversely, if the callee forgot a possible reference target in the return type,
 
 % \subsection{Strong Type Updates}\label{subsec:strong-type-updates}
 
-% \begin{listing}[ht]
+% \begin{listing}[h]
 %   \begin{minted}[fontsize=\footnotesize]{rust}
 %     fn strong_updates(b: ty!{ bv: i32 | bv > 0}) -> ty!{ v: i32 | v > 2} {
 %         let mut a = 2;
@@ -1021,7 +1021,7 @@ For a verification system to be scalable, it needs to be able modularize a proof
 
 Notice that all of the type information about \code{y} is preserved when \code{inc(x)} is called. There are no further annotations needed to type check this program. This is possible, because in safe Rust, any (externally observable) mutation done by a function must be part of the function signature. Corten expands on this, by enabling the user specify exactly how a referenced value is mutated.
 
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize]{rust}
     fn inc(a: &mut ty!{ a1: i32 | true => a2 | a2 == a1 + 1 }) {
       *a = *a + 1;
@@ -1050,7 +1050,7 @@ If \code{sum} is updated first, we can establish its type, but once \code{i} is 
   For this use-case, it might also be possible to relax a single variable at a time, by renaming the logic variables to their old names after the subtyping relation is shown. This approach was not chosen, because it may only cover some special cases.
 }.
 
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize, autogobble]{rust}
     let sum = 0;
     let i = 0;
@@ -1090,8 +1090,8 @@ When handling mutable references in parameters some subtleties need to be consid
 Instead we introduce $arg^i$, a special variable denoting the initial abstract value (i.e. stack location) that the mutable reference of argument $n$ points to. For the $j$th parameter with the Rust type \code{\&mut i32} we would generate pseudo location $arg_j$. 
 %  $i$ denotes the level of nesting: For the $n$th parameter with the Rust type \code{\&mut \&mut i32} we would generate $arg^1_n$ and $arg^2_n$.
 
-\begin{gather*}
-  \inferrule*[left=Fn-Decl]
+$$
+  \inferrule*[left=Fn-Decl\rulelabel{Fn-Decl}]
     { \mu_{init} = \{ x_i \mapsto \alpha_i, y_j \mapsto \delta_j, arg_j \mapsto \beta_j \}
       \\ \Phi_{init} = \varphi_i, \psi_j, \delta_j \doteq \&arg_j
       \\\\ (\mu_{init}, \Phi_{init}) \vdash s \Rightarrow \Gamma'
@@ -1100,7 +1100,7 @@ Instead we introduce $arg^i$, a special variable denoting the initial abstract v
       \\ \Gamma' \preceq (\{arg_j \mapsto \gamma_j\}, \chi_j )
     }
     {\code{fn } f(x_i : \{ \alpha_i : b_i \mid \varphi_i \}, y_j : \&\code{mut }\{ \beta_j : b_j \mid \psi_j \Rightarrow \gamma_j \mid \chi_j\}) \to \tau \{ s; x_r \}}
-\end{gather*}
+$$
 
 The first two antecedents initialize the context, which contains the preconditions from the function signature $\phi_i$ and $\psi_j$
 and the pseudo variables for the mutable arguments $arg_j$, which are constrained to be the reference destinations for $y_j$.
@@ -1116,11 +1116,11 @@ Next, we introduce the rule for checking the subtype relation, which is introduc
 A type $\tau$ is a subtype of $\tau'$ in the context $\Gamma$, if the predicate of the supertype implies the predicate of the subtype, with the supertype's logic variable substituted for the subtype's variable to the predicate so that they refer to the same variable. The validity check performed in the decidable, propositional logic with the theories of equality and linear arithmetic. 
 Corten uses an SMT solver for deciding these requests. 
 
-\[
-  \inferrule*[left=$\preceq$-Ty]
+$$
+  \inferrule*[left=$\preceq$-Ty\rulelabel{Sub-Ty}]
     {\vDash \Phi \wedge \varphi'[\beta \triangleright \alpha ] \to \varphi}
     {\Gamma = (\mu, \Phi) \vdash \{ \alpha \mid \varphi\} \preceq \{ \beta \mid \varphi' \}}
-\]
+$$
 \end{definition}
 % alternative (should be equivalent):
 
@@ -1375,25 +1375,14 @@ For clarity, \cref{rule:Fn-Call} omits a renaming step done directly after extra
 
 \section{Soundness of the Type System}\label{sec:soundness}
 
-Next, we would like to justify why Corten 
+Next, we will to justify why Corten type system is safe.
+
 
 We will write substitution as $\Phi[ x \tr a ]$ meaning $x$ is replaced by $a$ in $\Phi$ and $\mu[x \mapsto \alpha]$ for the function update meaning $\mu[x \mapsto \alpha](x) = \alpha$ and $\mu(y)$ everywhere else.
 
-For $x_1 \dots x_n \in \dom(\mu)$ 
+To reduce the verbosity of the notation, for $x_1 \dots x_n \in \dom(\mu)$ we will abbreviate
 we shorten $\Phi[\mu(x_1) \tr g(x_1)][\dots][\mu(x_n) \tr g(x_n)]$ to $\Phi[f(x_i) \tr g(x_i) \mid x]$ and $\Phi[\mu(x_i) \tr g(x_i) \mid x \neq y]$ if $x \in \set{ x \mid x \in \dom(\mu), x \neq y }$
 
-As usual, we consider the three properties (see Pierce \cite[p. 95, p.167]{pierce_types_2002}) of a type system when assessing the correctness of MiniCorten:
-
-\begin{definition}
-  Progress:
-    If $t$ is closed and well-typed, then $t$ is a value or $t \leadsto t'$, where $t'$ is a value.
-\end{definition}
-
-\begin{definition}[Preservation]
-  If $\Gamma \vdash e : \tau \Rightarrow \Gamma$ and $e \leadsto e'$, then $\Gamma \vdash e' : \tau \Rightarrow \Gamma$
-\end{definition}
-
-Because MiniCorten is based on Rust, we will assume that progress, as well as preservation for the base-types. This includes preservation of type- and ownership-safety. Thus it is sufficient to prove that assuming these properties hold, preservation of the refinement types is holds.
 
 \begin{definition}[State Conformance]\label{def:state-conformance}
   A state $\sigma$ is conformant with respect to a typing context $\Gamma = (\mu, \Phi)$ (written as $\sigma : \Gamma$), iff:
@@ -1402,6 +1391,24 @@ Because MiniCorten is based on Rust, we will assume that progress, as well as pr
   $$
   I.e. a conformant type context does not contradict the execution state.
 \end{definition}
+
+As usual for a small-step semantic, we will consider progress and preservation based on Wright and Felleisen \cite{wright_syntactic_1994}. 
+We will assume, that the base language (e.g. Rust) satisfies the safety properties and show that relative to the base language Corten also satisfies the type safety properties.
+
+% As usual, we consider the three properties (see Pierce \cite[p. 95, p.167]{pierce_types_2002}) of a type system when assessing the correctness of MiniCorten:
+
+\begin{definition}[Progress]
+    If $\Gamma \vdash s$, $\sigma : \Gamma$ and $s \neq \code{unit}$, then there is a $s'$ and $\sigma'$ with $\tuple{s, \sigma} \leadsto \tuple{s'}{\sigma'}$.
+\end{definition}
+
+\begin{definition}[Preservation]
+  If $\Gamma \vdash s$, $\sigma : \Gamma$ and $\tuple{s}{\sigma} \leadsto \tuple{s'}{\sigma'}$, then $\Gamma \vdash s'$ and $\sigma' : \Gamma$
+\end{definition}
+
+Since Corten's types do not influence the execution semantics of the program and conformance for the base types is assumed, progress not interesting.
+
+In contrast, preservation requires us to show that conformance of $\sigma$ to Corten's (refined) type context is preserved by execution. The proof is structured as follows: We start by showing in \cref{lem:conf-sym-exec}, that the evaluation of expressions preserves state conformance (although expressed slightly unusual way). 
+Next \cref{lem:conservative-ref-tracking} we argue for why reference tracking is conservative, followed by \cref{lem:conservative-subtype} which demonstrates that our notion of sub-contexts is in deed conservative. Using these arguments, \cref{lem:preservation-conformance} will show, that preservation holds for the type system.
 
 \begin{lemma}[Conformance of Symbolic Execution]\label{lem:conf-sym-exec}
   If \hyperref[def:state-conformance]{$\sigma : \Gamma$}, $\Gamma \vdash \alpha \text{ fresh}$ then $\sigma[x \mapsto \bbracket{e} \sigma] : \Gamma[x \mapsto \alpha],(\alpha \simeq \bbracket{e} \Gamma)$
@@ -1557,7 +1564,7 @@ A crucial consequence of \cref{lem:conf-sym-exec} it that references are tracked
   \end{align}
 \end{proof}
 
-\begin{lemma}[Preservation of State Conformance]
+\begin{lemma}[Preservation of State Conformance]\label{lem:preservation-conformance}
   If $\Gamma \vdash s \Rightarrow \Gamma_2$, $\sigma : \Gamma$ and $\tuple{s}{\sigma} \leadsto \tuple{s_1}{\sigma_1}$, then  $\sigma_1 : \Gamma_1$ and $\Gamma_1 \vdash s_1 \Rightarrow \Gamma_2$ for some $\Gamma_1$
 \end{lemma}
 \begin{proof} Rule Induction over $\tuple{s_1}{\sigma} \leadsto \tuple{s_2}{\sigma'}$
@@ -1657,21 +1664,20 @@ A crucial consequence of \cref{lem:conf-sym-exec} it that references are tracked
 \end{itemize}
 \end{proof}
 
-
-\iftrue % shorten
+\fi
 \section{Extensions}\label{sec:extensions}
 
-
-To limit the complexity a few features are not defined as part of the Corten or the implementation.
-Even though these extensions are not part of the scope of the thesis, these extensions were taken into consideration when designing the type system. To show that the type system is capable of handling the additional challenges, we will shortly describe how these extensions are planned to be added to the type system.
-\todo{move to future work?}
+These are some way to further improve the usability and expressiveness of the type system.
+% To limit the complexity a few features are not defined as part of the Corten or the implementation.
+Even though these extensions are not part of the implementation, they were taken into consideration when designing the type system. To show that the type system is capable of handling the additional challenges, we will shortly describe how these extensions could to be added to the type system.
+% \todo{move to future work?}
 
 \subsection{Records / \code{struct}s}
 
 Firstly, a key part of realistic programs are data structures that comprise multiple basic data types. In Rust these are called \code{struct}s and work similar to records or product types in functional languages. 
 
-Once again, we can take advantage of Rust ownership system: Any part of a struct (even nested fields) can only belong to one variable. This means that the proposed system for handling mutable references extends seamlessly to structs: 
-The variable mapping in $\Gamma$ is generalized: $\mu : \text{Path} \to \text{LVar}$. The relevant typing rules will work without major changes:
+Once again, we can take advantage of Rust ownership system: Any part of a \code{struct} (even nested fields) can only belong to one variable. This means that the proposed system for handling mutable references should seamlessly extend to \code{struct}s: 
+The variable mapping in $\Gamma$ is generalized: $\mu : \text{Path} \to \text{LVar}$, which tracks the logic variable assignments for each field of an owned \code{struct}. The relevant typing rules should work without major changes:
 
 \begin{gather*}
   \inferrule*[left=Var]
@@ -1681,25 +1687,55 @@ The variable mapping in $\Gamma$ is generalized: $\mu : \text{Path} \to \text{LV
   \inferrule*[left=Assign-Strong]
     {\Gamma \vdash e : \tau}
     {\Gamma \vdash p.x = e \Rightarrow \Gamma[p.x \mapsto \tau]}
+    \\
+    \dots
 \end{gather*}
+
 \todo{rule for intro: mut ref?}
+
+
+\begin{listing}[h]
+  \begin{minted}[fontsize=\footnotesize, texcomments]{rust}
+    struct Point { x: i32, y: i32 }
+    fn incr(i : &mut ty!{ i1 =>  i2 | i2 == i1 + 1 }) { .. }
+    fn move_up(p : &mut ty!{ p1 : Point => p2 | p2.x > p1.x && p1.y == p2.y }) {
+      // $\Gamma_{init} = (\set{p.x \mapsto v_1, p.y \mapsto v_2}, true)$
+      ... 
+      // $\Gamma_{final} \preceq (\set{p.x \mapsto v_3, p.y \mapsto v_4}, v_3 > v_1 \wedge v_4 \doteq v_2)$
+    }
+    
+    fn client() {
+        let p = Point {x:1, y:2} 
+        // $\Gamma_1 = (\set{p.x \mapsto \alpha, p.y \mapsto \beta}, \alpha \doteq 1 \wedge \beta \doteq 2)$
+        incr(&mut p.x);
+        // $\Gamma_2 = (\set{p.x \mapsto i_2, p.y \mapsto \beta}, \alpha \doteq 1 \wedge \beta \doteq 2 \wedge i_2 \doteq \alpha + 1)$
+        move_up(&mut p);
+        // $\Gamma_3 = (\set{p.x \mapsto v_3, p.y \mapsto v_4, \dots \wedge v_3 > i_2 \wedge v_4 \doteq \beta})$
+    }
+  \end{minted}
+  \caption{Example for how \code{struct}s could be handled in Corten}
+  \label{lst:ext-structs}
+\end{listing}
+
+\Cref{lst:ext-structs} shows how this could work in practice:
+When passing records as argument, we employ the same technique that we used for references: For any reference target without a direct name, we generate one: Referencing $p.x$ in \code{move\_up} will reference a newly generated name associated with $p.x$. The predicates in the signature are immediately desugared to their corresponding logic variable.
 
 \subsection{Algebraic Data Types}
 
 With records added, the only thing missing for support of algebraic data types are sum types.
-Sum types allow the programmer to express that an inhabitant of a type may be one variant of a set of multiple fixed options: For example the result of a fallible computation may either be \code{Ok(V)} meaning a successful computation with the result \code{V} or a failure \code{Err(E)} with a description of the error \code{E}.
-In rust these sum types are called \code{enum}s.
+Sum types allow the programmer to express that an inhabitant of a type may be one variant of a set of multiple fixed options: For example the result of a fallible computation in Rust may either be \code{Ok(V)} meaning a successful computation with the result \code{V} or a failure \code{Err(E)} with a description of the error \code{E}.
+In Rust these sum types are called \code{enum}s.
 
 Sum types influence the type system in two key ways: 
 
-Firstly, the specification of its values. Suppose a programmer would like an authentication function signature to state that the function returns an \code{Err} code "403" if the password was incorrect. This requires the type language to assert what variant is expected as well as access to its fields (if the variant is known).
+Firstly, the specification of its values. Suppose a programmer would like an authentication function signature to state that the function returns an \code{Err(403)} if the provided password was incorrect. This requires the type language to assert that a specific variant is expected as well as granting access to the variant's fields.
 
-Secondly, path sensitivity needs to be extended to cover \code{match} expressions (called \code{case} is most functional programming languages). \code{match} expression allow the programmer to branch depending on the variant of a value.
+Secondly, path sensitivity needs to be extended to cover \code{match} expressions (called \code{case} is most functional programming languages), which allow the programmer to branch depending on the variant of a value.
 
 \subsection{Inference}
 
 While the current implementation is able to type expressions without explicit type annotations, solving a set of type constraints is not implemented. 
-Rondon et al. \cite{rondon_liquid_2008} describe a mechanism to infer complex refined types by combining known predicates from the context. This approach should be adaptable to Corten to reduce the amount of needed type annotations even further.
+Rondon et al. \cite{rondon_liquid_2008} describe a mechanism to infer complex refined types by combining known predicates from the context. This approach should be adaptable to Corten to reduce the amount of needed type annotations even further.\footnote{It turns out that exactly is what Lehmann et al. \cite{lehmann_flux_2022} did. See \cref{sec:flux} for details}
 
 
 \subsection{Predicate Generics}
@@ -1708,29 +1744,31 @@ Vazou et al. \cite{vazou_abstract_2013} found that the expressiveness of refinem
 
 \subsection{Convenience Improvements}
 
-For practical use, it would make sense to relax the distinction between logic variables and program variables for immutable variables. Because these variables can not change, there is no need to introduce replace their types. This also means that relaxing the predicate for immutable variables is never necessary.
+For practical use, it would make sense to relax the distinction between logic variables and program variables for immutable variables. Because these variables can not change, there is no need to introduce or replace their types. This also means that relaxing the predicate for immutable variables is never necessary.
 
-In some cases, the programmer might want to choose an invariant for a variable that any assigned value has to satisfy. In terms of the type system, this would not be challenging, only requiring 
+In some cases, the programmer might want to choose an invariant for a variable that any assigned value has to satisfy. In terms of the type system, this would not be challenging: A set of variable's invariants are added the context and after each update, a subcontext relation between it and newly updated context are checked. If the subtyping relation can not be shown, then the program does not type check.
 
 \chapter{Implementation: CortenC} \label{ch:implementation}
 
-The type system described in the previous chapter was implemented to test the practical feasibility of our approach.
-There are a few differences and details between the type system described above and the implementation CortenC (short for Corten Checker) that will be highlighted in this chapter.
+The type system described in the previous chapter was also implemented for Rust to test the practical feasibility of our approach\footnote{The implementation can be found at \url{https://gitlab.com/csicar/liquidrust}}.
+There are a few differences and details between the type system described above and the implementation CortenC (short for Corten Type Checker) that will be highlighted in this chapter.
 
 In contrast to the MiniCorten and the described type system, CortenC uses actual Rust as its target language. In addition to MiniCorten's features, CortenC also covers expressions with side-effects, non-ANF expressions, statements as well as basic inference.
-These features do not change the expressiveness of the type system, but make it a lot more practical.
+These features do not change the expressiveness of the type system, but make it a lot more amenable in practice.
 
 \paragraph{Target Selection}
 % Target selection: HIR / MIR?
 The architecture of the rustc compiler makes it possible to implement a refinement type system quite cleanly: Rustc's plugin system allows CortenC to access rustc's intermediate representations and also emit diagnostics with source locations. Since the diagnostics from CortenC use the same interface as Rust's diagnostics, other tools like IDEs can handle them without any adaptation.
 
-CortenC uses the HIR. It is a good candidate for extensions to the type system, because it contains source labels, allowing accurate problem reporting to the user. Secondly, in HIR all names are resolved making and types can be queried for HIR nodes, which means the Rustc plugin can reuse a lot of work done in the Rustc Compiler. Thirdly, non-executable segments of the program, like type declarations, are represented in the HIR.
+CortenC uses the HIR as its base language. It is a good candidate for extensions to the type system, because it contains source labels, allowing accurate problem reporting to the user. Secondly, in HIR all names are resolved meaning the types of expressions can be queried for HIR nodes, which means the Rustc plugin can reuse a lot of work done in the Rustc Compiler. Thirdly, non-executable segments of the program, like type declarations, are represented in the HIR.
 
-Using MIR is also a sensible option: The MIR is a drastically simplified representation of just the executable segments of the program as a CFG with non-nested expressions. Because of the simplicity, it would be appealing to use the MIR as the basis for the implementation. 
+Using MIR is also a sensible option: The MIR is a drastically simplified representation of just the executable segments of the program as a CFG with non-nested expressions, which would have reduced the implementation effort.
+Because of the simplicity, it would be appealing to use the MIR as the basis for the implementation. 
 An additional advantage of MIR could be that ownership analysis is done on MIR, which would allow the refinement type system to use that information. Surprisingly, we did not encounter any situation, where ownership information is necessary for typing refined types.
 
 Ultimately, it was decided against using the MIR for the following reasons:
 Firstly a concern for the quality of diagnostics: The MIR code is quite distant from the user-provided code. For example, when trying to explain a error when typing a while-loop, the implementation may need to reconstruct the original source code structure from the CFG, which could be inaccurate and error-prone. 
+MIR construction only occurs after HIR construction and rust type checking is completed. This means that just a single (unrelated) type error may keep the refinement system from starting to produce any errors, which can be quite annoying in practise, as can be seen by Rust borrow checking system, which already displays this kind of behaviour.
 In addition, source locations may be less accurate or unavailable. 
 Finally the MIR does not contain type declarations, which could make it hard to extend the implementation for algebraic data type or predicate generics (see section \ref{sec:extensions})
 
@@ -1744,7 +1782,7 @@ There are additional short forms of these macro calls, which where cut from the 
 
 Note that, because the \code{ty!} macro takes the place of a Rust type, normal IDE features, like "Goto Type Definition" still work on the base types without any adaptation.
 
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize, autogobble]{rust}
   pub type Refinement<
     T,                      // Rust type
@@ -1776,110 +1814,119 @@ Note that, because the \code{ty!} macro takes the place of a Rust type, normal I
   \label{lst:macro-definition}
 \end{listing}
 
-For the second macro \code{relax\_ctx!} takes the place of a statement. 
-It is translated to a function call that can then be used to reconstruct the described context.
+The second macro \code{relax\_ctx!} takes the place of a statement and expands into a function call that contains the specified types as arguments. CortenC uses the arguments to reconstruct the described context for the type system.
+
+When CortenC reads the type aliases, the predicates are simple strings that need to be parsed before CortenC can use them.
+Serendipitously, Rust's tooling for procedural macros can also help here: The Rust crates \code{syn} and \code{quote} allow the programmer to easily parse and generate Rust source code. We use \code{syn} to parse the predicates, which not only lets the user express the predicates in a familiar syntax, but also makes the implementation of CortenC cleaner. Using Rustc's parser for this purpose would probably be too involved.
 
 \paragraph{Architecture}
-CortenC follows the structure implied by the type system: All concepts and type checking rules have a correspondence in CortenC:
-\code{RContext} is the representation of $\Gamma$ in CortenC, with the main difference being that predicates stay associated with a logic variable (and potentially a program variable). The purpose being that in the future, CortenC could create better error messages, by associating "blame" to a type checking failure: If the predicate of a logic variable is part of the reason why a subtyping check fails, it would be useful to convey that information to the user. 
-\code{RefinementType} is the representation of $\tau$ in CortenC.
+CortenC follows the structure implied by the type system: All concepts and type checking rules have a correspondence in CortenC: For instance \code{RContext} is the representation of $\Gamma$, which only differs by the fact that predicates stay associated with a logic variable (and potentially a program variable). The purpose is that in the future, CortenC could create better error messages, by associating "blame" to a type checking failure: If the predicate of a logic variable is part of the reason why a subtyping check fails, it would be useful to convey that information to the user.
 
 CortenC registers a callback in Rustc to run after HIR construction. The callback calls \code{type\_check\_function} for each function in the HIR, which either returns \code{Result::Ok} indicating that the function type checks or \code{Result::Err} if type checking failed. In that case, the callback will emit a diagnostic to rustc to inform the user about the refinement type error.
-Listing \ref{lst:architecture-cortenc} shows the core functions signatures involved in type checking. \code{type\_check\_function} corresponds to the \textsc{Fn-Decl} rule by constructing the initial context and delegating checking of the body to \code{type\_expr}. 
+\Cref{lst:architecture-cortenc} shows the core functions signatures involved in type checking\footnote{Lifetimes were removed for clarity}. \code{type\_check\_function} corresponds to the \cref{rule:Fn-Decl} rule by constructing the initial context and delegating checking of the body to \code{type\_expr}. 
 Since Rust expressions can contain statements, \code{type\_expr} will use \code{transition\_stmt} to type check these statements before returning the final type context.
 Both \code{type\_expr} and \code{transition\_stmt} carry a collection of parameters that contain the Rust type checking data (The global type context \code{TyCtxt} and the local type context \code{TypeckResults}), the refinement type context \code{RContext}, a handle to the SMT solver \code{SmtSolver} and a way to generate fresh logic variable names \code{Fresh}.
 
-These function utilize \code{require\_is\_sub\_context} and \code{require\_is\_subtype\_of} to dispatch the actual SMT solver requests. These functions are also responsible for encoding the predicates and substituting variable names where necessary. 
+These function utilize \code{require\_is\_sub\_context} (corresponding to \cref{rule:Sub-Ctx}) and \code{require\_is\_subtype\_of} (corresponding to \cref{rule:Sub-Ty}) to dispatch the actual SMT solver requests. These functions are also responsible for encoding the predicates and substituting variable names where necessary. 
 The following paragraph will give an example for how these SMT solver requests look like.
 
-\begin{listing}[ht]
-  \begin{minted}[fontsize=\footnotesize, autogobble, texcomments]{rust}
-  fn type_check_function(
-    function: &hir::Item,
-    tcx: &TyCtxt,
-  ) -> Result<RefinementType> { .. }
+\begin{listing}[h]
+  \begin{minipage}[t]{0.48\linewidth}
+    \begin{minted}[autogobble, texcomments, fontsize=\footnotesize]{rust}
+      // $\Sigma \vdash \code{fn }f$
+      fn type_check_function(
+        function: &hir::Item,
+        tcx: &TyCtxt,
+      ) -> Result<RefinementType> { .. }
+    
+      // $\Gamma \vdash s \Rightarrow \Gamma'$
+      fn transition_stmt( 
+        stmts: &[hir::Stmt],
+        tcx: &TyCtxt,
+        ctx: &RContext,
+        local_ctx: &TypeckResults,
+        solver: &mut SmtSolver,
+        fresh: &mut Fresh,
+      ) -> Result<RContext> { .. } 
+    
+      // $\Gamma \vdash e \Rightarrow \Gamma'$ 
+      fn type_expr(
+        expr: &Expr,
+        tcx: &TyCtxt,
+        ctx: &RContext,
+        local_ctx: &TypeckResults,
+        solver: &mut SmtSolver,
+        fresh: &mut Fresh,
+      ) -> Result<(RefinementType, RContext)> { .. }
+    \end{minted}
+  \end{minipage}
+  \begin{minipage}[t]{0.48\linewidth}
+    \begin{minted}[autogobble, texcomments, fontsize=\footnotesize]{rust}
+      // $ \Gamma \preceq \Gamma'$
+      fn require_is_sub_context(
+        super_ctx: &RContext,
+        sub_ctx: &RContext,
+        tcx: &TyCtxt,
+        solver: &mut SmtSolver,
+      ) -> anyhow::Result<()> { .. } 
 
-  fn transition_stmt(
-    stmts: &a [hir::Stmt],
-    tcx: & TyCtxt,
-    ctx: & RContext,
-    local_ctx: & TypeckResults,
-    solver: &mut SmtSolver,
-    fresh: &mut Fresh,
-  ) -> Result<RContext> { .. }
-
-  fn type_expr(
-    expr: &a Expr,
-    tcx: & TyCtxt,
-    ctx: & RContext,
-    local_ctx: & TypeckResults,
-    solver: &mut SmtSolver,
-    fresh: &mut Fresh,
-  ) -> Result<(RefinementType, RContext)> { .. }
-
-  fn require_is_sub_context(
-    super_ctx: &RContext,
-    sub_ctx: &RContext,
-    tcx: &TyCtxt,
-    solver: &mut SmtSolver,
-  ) -> anyhow::Result<()> { .. }
-
-  fn require_is_subtype_of(
-      sub_ty: &RefinementType,
-      super_ty: &RefinementType,
-      ctx: &RContext,
-      tcx: &TyCtxt,
-      solver: &mut SmtSolver,
-  ) -> anyhow::Result<()> { .. }
-  \end{minted}
-  \caption{Overview of the central function CortenC is built from. (Lifetimes were removed for clarity)}
+      // $ \Gamma \vdash \tau \preceq \tau'$
+      fn require_is_subtype_of(
+          sub_ty: &RefinementType,
+          super_ty: &RefinementType,
+          ctx: &RContext, tcx: &TyCtxt,
+          solver: &mut SmtSolver,
+      ) -> anyhow::Result<()> { .. }
+    \end{minted}
+  \end{minipage}
+  \caption{Overview of the Central Functions CortenC is Built from}
   \label{lst:architecture-cortenc}
 \end{listing}
 
 \paragraph{Simple Example}
 
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize, autogobble, texcomments]{rust}
   fn inc(a : ty!{ n : i32 | n > 0}) -> ty!{v : i32 | v > 1} {
-    let b = 1;
-    a + b
+    let b = 1; a + b
   }
   \end{minted}
   \caption{Simple Example Program used for demonstrating the operation of CortenC}
   \label{lst:simple-example-cortenc}
 \end{listing}
 
+To better 
 Consider the example program \ref{lst:simple-example-cortenc}, which returns the increment of the argument.
-Rustc will call the CortenC callback with the item \code{fn inc} once the HIR construction is completed. Next, the callback calls \code{type\_check\_function} where the initial context $\Gamma = ( a \mapsto n, \left\{ n > 0\right\})$ is constructed and calls \code{type\_expr} with the the function body expression. Base the function body is a sequence \code{transition\_stmt} is called for all expect the last expression in the sequence. \code{let b = 1} updates the context to $\Gamma_1 = ( a \mapsto n, b \mapsto v_1, \left\{ n > 0, v_1 = 1\right\})$ ($v_1$ is a name generated by \code{Fresh}). 
-Finally \code{type\_expr} types the expression \code{a + b} according to the typing rules described above resulting in the type $\left\{ v_2 : i32 \mid v_2 = n + v_1\right\}$.
+Rustc will call the CortenC callback with the item \code{fn inc} once the HIR construction is completed. Next, the callback calls \code{type\_check\_function} where the initial context $\Gamma = ( a : \set{n \mid n > 0})$ is constructed and calls \code{type\_expr} with the the function body expression. Base the function body is a sequence \code{transition\_stmt} is called for all expect the last expression in the sequence. \code{let b = 1} updates the context to $\Gamma_1 = (a : \set{n \mid n > 0}, b \mapsto \set{v_1 \mid v_1 \doteq 1})$ ($v_1$ is a name generated by \code{Fresh}). 
+Finally \code{type\_expr} types the expression \code{a + b} according to the typing rules described above resulting in the type $\set{ v_2 : i32 \mid v_2 \doteq n + v_1}$.
 This type is then returned as the overall type of the body expression to \code{type\_check\_function}, which has the responsibility of checking that in the context $\Gamma_1$, the actual return type is a subtype of the specified type in the signature. 
 Thusly \code{require\_is\_subtype\_of} is called with the two types and subsequently dispatches the SMT shown in listing \ref{smt-sample-output}. 
 Because the SMT call returned \code{unsat}, the subtype relation is valid and the function type checking was successful.
 
 
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize, autogobble]{lisp}
   (declare-datatypes () ((Unit unit)))
   ; <Context>
     ; decl for <fud.rs>:79:73: 79:74 (#0) local b
-    (declare-const _0 Int)
+    (declare-const v_0 Int)
     
     ; decl for <fud.rs>:79:9: 79:10 (#0) local a
     (declare-const n Int)
     
-    ; predicate for _0: local b     ty!{ _0 : i32 | _0 == 1 }
-    (assert (= |_0| 1))
+    ; predicate for v_0: local b     ty!{ v_0 : i32 | v_0 == 1 }
+    (assert (= |v_0| 1))
     
     ; predicate for n: local a     ty!{ n : i32 | n > 0 }
     (assert (> |n| 0))
   ; </Context>
 
-  (declare-const _1 Int)
-  (assert (= (+ |n| |_0|) |_1|))
+  (declare-const v_1 Int)
+  (assert (= (+ |n| |v_0|) |v_1|))
   
-  (assert (not (> |_1| 1)))
+  (assert (not (> |v_1| 1)))
   
-  ; checking: ty!{ _1 : i32 | n + _0 == _1 } <=  ty!{ v : i32 | v > 1 }
+  ; checking: ty!{ v_1 : i32 | n + v_0 == _1 } <=  ty!{ v : i32 | v > 1 }
   (check-sat)
   ; done checking is_subtype_of! is sat: false
   \end{minted}
@@ -1902,31 +1949,31 @@ Because the SMT call returned \code{unsat}, the subtype relation is valid and th
 
 \chapter{Evaluation} \label{ch:evaluation}
 
-In this chapter Corten will be tested on a selection of examples to test the practicality.
+In this chapter will conduct an evaluation on CortenC to test its practicality. 
+Most of the example were defined at the start of writing the thesis and are accompanied by some examples from other papers in the field as well as some benchmarks to show the extend of what is possible in CortenC.
 
-\section{Maximum using Path Conditions}
+\section{Maximum using Path Conditions}\label{sec:eval-max}
 
-The first example will show how a the \code{max} function can be implemented and fully verified in CortenC. The mathematical maximum is defined as $r = \max(a, b) \text{iff} r \geq a \wedge r \geq b \wedge (r = a \vee r = b)$. Listing \ref{lst:eval-max} shows how this can be expressed in CortenC.
+The first example is based by Rondon et al. \cite{rondon_liquid_2008}. It demonstrates that the \code{max} function can be implemented and fully verified using path sensitivity. The mathematical maximum is defined as $r = \max(a, b) \text{ iff } r \geq a \wedge r \geq b \wedge (r = a \vee r = b)$. Listing \ref{lst:eval-max} shows how this can be expressed in CortenC.
 
 
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize, autogobble, texcomments]{rust}
-  fn max(a: ty!{ a: i32 }, b: ty!{ b: i32}) 
+  fn max(a: ty!{ a: i32 }, b: ty!{ b: i32 }) 
     -> ty!{ v: i32 | v >= a && v >= b && (v == a || v == b) } {
     if a > b {
         a as ty!{ x: i32 | x >= a && x >= b && (x == a || x == b) }
-    } else {
-        b
-    }
+    } else { b }
   }
   \end{minted}
   \caption{Example demonstrating a fully specified \code{max} function using Corten's path sensitivity}
   \label{lst:eval-max}
 \end{listing}
 
-Of course an incorrect implementation will produce a type judgement error. If, for example, the else branch returned \code{a} instead of \code{b}, the system would return the error shown in listing \ref{lst:eval-max-error}. The exact location of where the error occurred is also the current implementation does not expose this data yet.
+CortenC will automatically check the type specification matches the implementation, which succeeds in this case.
+Of course an incorrect implementation will produce a type judgement error. If, for example, the else branch returned \code{a} instead of \code{b}, the system would return the error shown in listing \ref{lst:eval-max-error}. The exact program line where the error occurred is also by CortenC. To help the user, CortenC also extract the counter example generated by the SMT solver and displays it to the user understand what when wrong. It is a fortunate coincidence, that when generating counter example Z3 will often leave out variable, that are irrelevant to contradiction, which automatically creates a kind of minimal working counter example.
 
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize, autogobble]{text}
   Subtyping judgement failed: 
   ty!{ _1 : i32 | true && _1 == a } is not a sub_ty of 
@@ -1945,11 +1992,11 @@ Of course an incorrect implementation will produce a type judgement error. If, f
   \label{lst:eval-max-error}
 \end{listing}
 
-Path sensitivity is not limited to the return value: Effect on the type context can also be path sensitive as demonstrated by listing \ref{lst:eval-clamp}, which implements a clamping function. The function \code{clamp} ensures that the reference passed to it will be at most \code{max} or stay the same. \code{client} uses \code{clamp} and can use the facts from \code{clamp}'s mutation specification when proving its own return type specification.
+Path sensitivity is not limited to the return value: Effects on the type context can also be path sensitive as demonstrated by listing \ref{lst:eval-clamp}, which implements a clamping function. The function \code{clamp} ensures that the reference passed to it will be at most \code{max} or stay the same. The \code{client} function uses \code{clamp} and can use the facts from \code{clamp}'s mutation specification when proving its own return type specification.
 
-Note that when typing \code{client}, CortenC needs to match \code{\&mut x} with \code{a} and thusly \code{x} with \code{s} to correctly handle the effects of calling \code{clamp}. Because of this reason, function calls require all arguments to be variables or reference to variables. This is not a restriction of the type system, but a simplification for the implementation.
+Note that when typing \code{client}, CortenC matches \code{\&mut x} with \code{a} and thusly \code{x} with \code{s} to correctly handle the effects of calling \code{clamp}. Because of this reason, function calls require all arguments to be variables or reference to variables. This is not a restriction of the type system, but a simplification for the implementation.
 
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize, autogobble, texcomments]{rust}
   fn clamp(
       a: &mut ty!{ a1: i32 | true => s | (s <= max) && (s == a1 || s == max) }, 
@@ -1973,20 +2020,17 @@ Note that when typing \code{client}, CortenC needs to match \code{\&mut x} with 
 
 \section{Recursion: Fibonacci-Numbers}\label{sec:eval-fibonacci}
 
-Thanks to Corten's modular approach, handling recursive functions is straitforward in CortenC. Listing \ref{lst:eval-fib} demonstrates this by implementing a function that returns the $n$th fibonacci number $F_n$ and asserting that $10\cdot F_n \geq n^2$\footnote{The specification is not technically in linear arithmetic, but CortenC can allow some leeway, as long as SMT-Solver are still able to solve it.}. Because $n$ is arbitrary, this proves that the Fibonacci sequence grows faster than the $n^2\over10$.
+Thanks to Corten's modular approach, handling recursive functions is straightforward in CortenC. Listing \ref{lst:eval-fib} demonstrates this by implementing a function that returns the $n$th fibonacci number $F_n$ and asserting that $10\cdot F_n \geq n^2$. Because $n$ is arbitrary, this proves\footnote{The specification is not technically in linear arithmetic, but CortenC can allow some leeway, as long as SMT-Solver are still able to solve it.} that the Fibonacci sequence grows faster than $n^2\over10$.
 
 
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize, autogobble, texcomments, fontsize=\footnotesize]{rust}
     fn fib(n: ty!{ nv: i32 | nv >= 0}) -> ty!{ v: i32 | 10 * v >= nv * nv } {
       if n >= 2 {
           let n1 = n - 1; let n2 = n - 2;
-
           let f1 = fib(n1); let f2 = fib(n2);
           (f1 + f2) as ty!{ r : i32 | 10 * r >= nv * nv }
-      } else {
-          1
-      }
+      } else { 1 }
     }
   \end{minted}
   \caption{Example demonstrating recursive function calls by proving a divergence property of the fibonacci sequence}
@@ -1997,17 +2041,18 @@ Thanks to Corten's modular approach, handling recursive functions is straitforwa
 \section{Loop Invariants: Proof of the Gauß Summation Formula}\label{sec:evaluation-gauss} 
 
 The next example demonstrates that CortenC can also verify loop invariants. Listing \ref{lst:gauss} shows a function that calculates the sum $\sum_{i = 1}^N i$ by repeatedly increment a variable by $i$. 
-Of course there exists a closed formula computing the same result: $n \cdot (n + 1) \over 2$, which is given as the specification. CortenC will therefore proof that the closed form return the same result compared to the iterative summation.
+Of course there exists a closed formula computing the same result: $n \cdot (n + 1) \over 2$, which is given as the specification. CortenC will therefore proof that the closed form returns the same result as the iterative summation.
 
 This example is quite challenging, because of interdependencies between \code{i} and \code{sum} in the invariant as well as the old value of \code{i} and old values of \code{sum} in the loop body. 
 
-To proof that the invariant holds after each loop body execution, we need the exact information that \code{i} was incremented by one and \code{sum} by \code{i} as well as the knowledge that \code{i} and \code{sum} satisfied the predicates. Corten solves this problem by treating predicates as immutable and retaining unassociated predicates (i.e. no longer associated with a program variable).
+To proof that the invariant holds after each loop body execution, we need the exact information that \code{i} was incremented by one and \code{sum} by \code{i} as well as the knowledge that \code{i} and \code{sum} satisfied the predicates. 
+Corten's solution of treating predicates as immutable while retaining unassociated predicates shows its practicability here. 
 
-The second challenge is establishing the loop invariant in the first place: Relaxing the type of \code{i} from $= 0$ to $\leq nv$ is only valid, because we know relaxing the type of \code{sum} from $= 0$ to $ 2 * sv == iv * (iv + 1)$ is valid if $iv = 0$ and vice versa: To update the type of \code{sum} first, we need the knowledge that $iv = 0$, but once we relax the type of \code{i}, \code{i} gets a new logic variable, which is distinct from the logic variable used in the type of \code{sum}. Thus the loop invariant needs to be established atomically.
+The second challenge is establishing the loop invariant in the first place: Relaxing the type of \code{i} from $= 0$ to $\leq nv$ is only valid, because we know relaxing the type of \code{sum} from $= 0$ to $ 2 * sv == iv * (iv + 1)$ is valid if $iv = 0$ and vice versa: To update the type of \code{sum} first, we need the knowledge that $iv = 0$, but once we relax the type of \code{i}, \code{i} gets a new logic variable, which is distinct from the logic variable used in the type of \code{sum}. Thus the loop invariant is established atomically.
 
-For this purpose, CortenC provides the \code{relax\_ctx!} macro that allows the programmer to change the type of multiple variables at a time, as long as the previous state \textit{as a whole} implies the newly chosen predicates.
+For this purpose, CortenC's \code{relax\_ctx!} macro is used, which the programmer (or an inference system) can use to change the type of multiple variables at a time.
 
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize, autogobble, texcomments]{rust}
   fn gauss(n: ty!{ nv : i32 | nv > 0 }) 
   -> ty!{ v : i32 | 2 * v == nv * (nv + 1) } {
@@ -2033,43 +2078,70 @@ For this purpose, CortenC provides the \code{relax\_ctx!} macro that allows the 
 
 \label{subsec:evaluation-complex-mutable-ref}\section{Complex Mutable References}
 
-\Cref{lst:evaluation-swap} shows that CortenC can handle complex mutation patterns in a modular way. 
-The \code{swap} function replaces the value of x with y and vice versa. The specification states that for any values \code{x1} and \code{y1} at the reference target of \code{x} and \code{y}, swap will update their values to satisfy the predicates \code{== y1} and \code{== x1}.
-Notable is that CortenC can use these facts in the \code{client} function: For \code{*a} to resolve to the required type, we have to infer that \code{b} is a reference to \code{j} with is associated with logic variable \code{j1} and \code{swap} ensures that the value referenced by \code{a} now references the value of \code{j1}. Therefore \code{a} must now refer to \code{j}, which is associated with logic variable \code{j1}.
+\Cref{lst:evaluation-swap} shows that CortenC can correctly track mutation patterns across function boundaries in a modular way. 
+The \code{swap} function replaces the value of x with y and vice versa. The specification states that for any values \code{x1} and \code{y1} at the reference target of \code{x} and \code{y}, swap will update their values to satisfy the predicates \code{x2 == y1} and \code{y2 == x1}.
+Notice that CortenC can use these facts in the \code{client} function: For \code{*a} to resolve to the required type, we have to infer that \code{b} is a reference to \code{j} with is associated with logic variable \code{j1} and \code{swap} ensures that the value referenced by \code{a} now references the value of \code{j1}. Therefore \code{a} must now refer to \code{j}, which is associated with logic variable \code{j1}.
 
-\begin{listing}[ht]
-  \begin{minted}[fontsize=\footnotesize, autogobble, texcomments]{rust}
-    fn swap(
-      x : &mut ty!{ x1: i32 | true => x2 | x2 == y1 },
-      y : &mut ty!{ y1: i32 | true => y2 | y2 == x1 }
-  )  -> ty!{ v: () }  {
-      let tmp = *x;
-      *x = *y;
-      *y = tmp;
-      ()
-  }
+\begin{listing}[h]
+  \begin{minipage}[t]{0.52\linewidth}
+    \begin{minted}[autogobble, texcomments, fontsize=\footnotesize]{rust}
+      fn swap(
+        x: &mut ty!{ x1: i32 => x2 | x2 == y1 },
+        y: &mut ty!{ y1: i32 => y2 | y2 == x1 }
+      ) -> ty!{ v: () }  {
+        let tmp = *x;
+        *x = *y;
+        *y = tmp;
+        ()
+      }
+    \end{minted}
+  \end{minipage}
+  \begin{minipage}[t]{0.5\linewidth}
+    \begin{minted}[autogobble, texcomments, fontsize=\footnotesize]{rust}
+      fn client(
+        mut i: ty!{ i1 : i32 },
+        mut j: ty!{ j1 : i32 }
+      ) -> ty!{ v: i32 | v == j1-i1 } {
+        let mut a = &mut i;
+        let mut b = &mut j;
+        swap(a, b);
+        *a - *b
+      }
+    \end{minted}
+  \end{minipage}
+  % \begin{minted}[fontsize=\footnotesize, autogobble, texcomments]{rust}
+  %   fn swap(
+  %       x : &mut ty!{ x1: i32 | true => x2 | x2 == y1 },
+  %       y : &mut ty!{ y1: i32 | true => y2 | y2 == x1 }
+  %   )  -> ty!{ v: () }  {
+  %       let tmp = *x;
+  %       *x = *y;
+  %       *y = tmp;
+  %       ()
+  %   }
 
-  fn client(
-      mut i: ty!{ i1 : i32 }, mut j: ty!{ j1 : i32 }
-  ) -> ty!{ v: i32 | v == j1 - j1 } {
-      let mut a = &mut i;
-      let mut b = &mut j;
-      swap(a, b);
-      *a - *b
-  }
-  \end{minted}
+  %   fn client(
+  %       mut i: ty!{ i1 : i32 }, mut j: ty!{ j1 : i32 }
+  %   ) -> ty!{ v: i32 | v == j1 - j1 } {
+  %       let mut a = &mut i;
+  %       let mut b = &mut j;
+  %       swap(a, b);
+  %       *a - *b
+  %   }
+  % \end{minted}
   \caption{Example demonstrating modularity and ease of specification for complex mutation patterns}
   \label{lst:evaluation-swap}
 \end{listing}
 
 \section{Pseudo Vectors}
 
-The next example will demonstrate that CortenC would be able to specify and verify the absence of index-out-of-bounds errors on vectors. To this end, \cref{lst:evaluation-vec} the type alias \code{IntVec} is introduced, where its value represents the vector length. This example is inspired by a example for the Flux paper by Lehmann et al. \cite{lehmann_flux_2022}, where they specify a \code{Vec<T>} with elements and show, that the index is kept in bounds.
-Similarly, the functions below are part of the interface of vectors and ensure that the length is never negative. 
+The next example will demonstrate that CortenC would be able to specify and verify the absence of index-out-of-bounds errors on vectors. To this end, \cref{lst:evaluation-vec} the type alias \code{IntVec} is introduced, where its value represents the vector length. This example is inspired by a example for the Flux paper by Lehmann et al. \cite{lehmann_flux_2022}, where the authors specify a \code{Vec<T>} with elements of type \code{T} and show, that the index is kept in bounds.
+Similarly, the functions in \cref{lst:evaluation-vec} are part of the interface of vectors and ensure no index outside the bounds is read or written to.
+The example also demonstrates that CortenC can also check that mutable reference are in fact unchanged. For instance the function \code{len} and \code{get} take the vector \code{v} as a mutable reference, but CortenC can still show that these functions do not change the value and therefore all properties from before the function call carry over to after the function call.
 
-If \code{pop} was called on a vector that could not be shown to have sufficient length, CortenC would reject the program.
+CortenC will automatically typecheck the program. If \code{pop} was called on a vector that could not be shown to have sufficient length, CortenC would reject the program.
 
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize, autogobble, texcomments]{rust}
     type IntVec = i32;
 
@@ -2081,8 +2153,9 @@ If \code{pop} was called on a vector that could not be shown to have sufficient 
         *v
     }
 
-    fn get(v : &mut ty!{ b: IntVec | true => a | a == b }, index: ty!{i : i32 | 0 <= i && i < b}) -> ty!{ r: () } {
-        ()
+    fn get(
+        v : &mut ty!{ b: IntVec | true => a | a == b }, 
+        index: ty!{i : i32 | 0 <= i && i < b}) -> ty!{ r: () } { ()
     }
 
     fn is_empty(v : &mut ty!{ v1 : i32 => v2 | v2 == v1 }) 
@@ -2120,7 +2193,7 @@ Rust has built-in functions for aborting execution \- called \code{panic} \- and
 The \code{client} just needs to make sure that the proof of \code{c} is stored in the context by storing the value in the variable \code{\_witness}: If the returned value is discarded, it will not be stored in the context and therefore will not be available when proving the return value specification.
 
 
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize, autogobble, texcomments]{rust}
   fn panic() -> ty!{ v : () | false } {
       while(true) { () }
@@ -2147,220 +2220,44 @@ The \code{client} just needs to make sure that the proof of \code{c} is stored i
 
 \section{Interoperability with Other Tools}
 
-- Corten: only safe
-- Expend Corten by using external tools to verify unsafe
-- use assert to tell Corten what to assume and external tool what to verify
+Corten can only verify safe Rust, but as we discovered in \cref{ch:analysis}, unfortunately \code{unsafe} Rust is used at times.
+For use-cases where the unsafe code exposes a safe interface, CortenC could be used to verify the safe part and delegating the verification of the rest to a more complex verification systems. 
 
-\chapter{Related Work} \label{ch:related-work}
-
-Relevant papers originate from two lines of work. Firstly additions to refinement types for mutability, asynchronous execution etc. and secondly other verification frameworks for Rust.
-
-For example, Lanzinger \cite{lanzinger_property_2021} successfully adapted refinement types to Java, which allows the user to check that property types described by java annotations hold true throughout the program. At this point in time, specification and verification is limited to immutable (\code{final}) data.
+To facilitate this usage pattern, CortenC provides a builtin macro (shown in \cref{lst:evaluation-external}), that will instruct CortenC to assume a predicate is true without checking it, named \code{assume\_corten}. CortenC will extract the path condition from the call and leave it up to an external tool to show, that the \code{unreachable!} macro is in fact unreachable. For instance, Prusti\cite{astrauskas_leveraging_2019} is able to use such conditions to generate appropriate proof obligations to ensure the statement is unreachable.
 
 
-
-Refinement types are also used in other applications. For example Graf et al. \cite{graf_lower_2020} use refinement types to check the exhaustiveness of pattern matching rules over complex (G)ADT types in Haskell. To check the exhaustiveness of patterns in Liquid Rust with ADTs may require similar approaches.
-
-In terms of alternative verification approaches, Prusti\cite{astrauskas_leveraging_2019} is notable, because of their work on formalizing the full Rust semantics, including \code{unsafe}. Prusti is a heavy-weight functional verification framework for Rust; based on separation logic.
-
-Alternative verification approaches also exists: For example RustHorn\cite{matsushita_rusthorn_2020} employs constrained horn clauses based verification to Rust. Particularity relevant for this thesis is the novel formalization for mutable references used in the paper. 
-% The authors stipulate that mutable references should be specified by a pre- and post-state from before a reference is borrowed to after it is returned.
-The authors stipulate that lending of a variable should have a contract between the lender and the borrower: The borrower requires some precondition to be satisfied about the mutable reference and upon returning the borrow, the borrower ensures that a postcondition is met. 
-
-
-\section{Alternative Approaches for Handling Mutability} \label{subsec:related-work-mutability} 
-
-Of course the design space permits choosing other tradeoffs. For example, Rondon et al. \cite{rondon_low-level_2010} chooses 
-  - only interdependence in single record using fold mechanism
-  - 
-
-this is not the only way to deal with mutability: 
-
-\paragraph*{Rust verification}
-
-Given Rust's ownership system and predestined position as language for writing future safety critical software, Rust has sparked interest in the software verification field. There are several papers with a variety of approaches.
-
-
-Ullrich \cite{ullrich_simple_nodate} translates Rust's MIR to the theorem prover / dependently typed language Lean (\cite{de_moura_lean_2015}), forgoing automation, but offering a clean modelling and extensive coverage of the Rust language.
-
-A key observation made by Ullrich is that with Rust's ownership system, mutable references can be encoded as a linear state monad, meaning a mutable reference parameter can be translated in to a immutable initial value and a returned value representing the mutated type. Corten's syntax for mutable refinement parameters is inspired by this fact.
-
-\paragraph*{Refinement Types}
-
-- bmc
-- kani
-
-Refinement Types were originally developed for verification in functional languages by Freeman and Pfenning \cite{freeman_refinement_1991}, who define a subtyping relation for ML types on a lattice of possible union and intersection of types and check them using a system called tree automata. 
-Xi and Pfenning \cite{xi_dependent_1999} rephrase this notion subtype refinement as a restricted dependent type, where the constraints less expressive than the base language, making automatic verification attainable. They show that type checking is decidable (relative to a decidable domain), but inference is not.
-
-Taking advantage of the advances in SMT solvers, Rondon et al. \cite{rondon_liquid_2008} devised a type system that combines the ideas of refinement subtyping and restricted dependent types with the novel inference system to create a path sensitive and decidable type inference system.
-
-Vazou et al. \cite{vazou_abstract_2013} extend the refinement language to allow for uninterpreted predicates to be placed in the refinement predicate, which retain the decidability of type checking, while at the same time offering significant benefits to expressiveness. 
-
-\paragraph*{Refinement Types and Mutability} 
-
-Rondon et al. \cite{rondon_low-level_2010} extend Liquid Types to a reduced subset of C featuring mutable aliased pointers. Their type system CSolve extends Refinement Types to enable verification of low-level program with pointer arithmetic.
-Bakst and Jhala \cite{bakst_predicate_2016} present a type system based on Refinement Types named Alias Refinement Types, which combines alias types with Refinement Types.
-Both approaches focus on a C-like target language that provides little guarantees, which is not conducive to reasoning about aliasing, necessitating ad-hoc mechanisms to control aliasing.
-
-Recognizing the fact, Sammler et al. \cite{sammler_refinedc_2021} devise an ownership type system for C used that is combined with a Refinement Types. 
-Besides automatic verification, their type system can also translate their proofs to Coq, following the approach of RustBelt.
-RefinedC ownership model differs from Rust.
-
-Kloos et al. \cite{kloos_asynchronous_2015} extended refinement types to mutable and asynchronous programs. The paper explores how changes to possibly aliased memory cells can be tracked throughout a OCaml program. For that purpose the types are extended by a set of requirements on memory objects, which track distinctness and refined types of these memory cells. In contrast to OCaml, Rust offers extensive guarantees, which offers substantial advantages in terms of simplicity to specification and verification of Rust programs.
-
-
-\section{Comparison to Flux} \label{sec:flux}
-
-During the writing of the thesis, Lehmann et al. \cite{lehmann_flux_2022} published a preprint for a paper that is especially relevant. Lehmann et al. describe a implementation of Liquid Types for Rust called Flux, covering the same solution and problem space to Corten. 
-For the purpose of plurality in design and implementation of such a system, is was decided to only read the paper after finishing the Corten type system.
-
-Flux distinguished between three different kinds of references: 
-Shared (immutable) references, mutable weak (unique) references and strong references.
-
-\begin{listing}[ht]
+\begin{listing}[h]
   \begin{minipage}[t]{0.48\linewidth}
-    
-    \begin{minted}[fontsize=\footnotesize, autogobble, fontsize=\footnotesize]{rust}
-    #[lr::sig(fn(i32<@n>) 
-      -> bool<0 < n>)]
-    fn is_pos(n: i32) -> bool {
-      if 0 < n { true } else { false }
-    }
+    \begin{minted}[autogobble, texcomments, fontsize=\footnotesize]{rust}
+      macro_rules! corten_assume {
+          ( $pred:expr ) => {
+              builtin_assume($pred, if(!$pred) { unreachable!(); } else {()});
+          };
+      }
+      pub fn builtin_assume(formula: bool, proof: ()) {}
 
-    #[lr::sig(fn(i32<@x>) 
-      -> bool{v: x <= x && 0 <= v>)]
-    fn add(x: i32) -> i32 {
-      if x < 0 { -x } else { x }
-    }
+      fn client() { ... corten_assume!(a > 0); ... }
     \end{minted}
   \end{minipage}
-  \begin{minipage}[t]{0.48\linewidth}
-    \begin{minted}[fontsize=\footnotesize, autogobble, fontsize=\footnotesize]{rust}
-    fn is_pos(n: ty!{ n : i32}) 
-      -> ty!{ v: bool | v == 0 < n } {
-      if 0 < n { true as ... } else { false }
-    }
-
-    fn add(x: ty!{ x: i32}) 
-      -> ty!{ v: i32 | x <= x && 0 <= v } {
-      if x < 0 { -x as ... } else { x }
-    }
-    \end{minted}
-  \end{minipage}
-  
-  \caption{Example demonstrating the Ownership System: \code{greet(a)} transfers ownership of \code{a} to \code{greet}}
-  \label{lst:compare-flux-fundamentals}
+  \caption{Macro provided by CortenC to offload verification to other tools}
+  \label{lst:evaluation-external}
 \end{listing}
 
-- Flux: explicit variable bind \code{@x}. Corten: every logic var implicitly
-- Flux: separate attribute. Corten: embed in types
-- Flux same observations: Exclusive Ownership => strong updates
-- Flux distinguish between strong and mut references
-  - Corten: same, but mut passing references explicit modification
-
-
-To demonstrate the difference in the handling of strong updates, consider the signatures of incrementing and decrementing functions of a datatype \code{Nat}. The functions are fully specifications and ensure the invariant that a natural number is a positive.
-
-\begin{listing}[ht]
-  \begin{minipage}[t]{0.48\linewidth}
-    
-    \begin{minted}[fontsize=\footnotesize, autogobble, fontsize=\footnotesize]{rust}
-    fn increment(&strg v : Nat<n>) -> ()
-      ensures *self: Nat<n+1>;
-    fn decrement(&strg v : Nat<n>) -> ()
-      requires n > 0
-      ensures *self: Nat<n-1>;
-    \end{minted}
-  \end{minipage}
-  \begin{minipage}[t]{0.48\linewidth}
-    \begin{minted}[fontsize=\footnotesize, autogobble, fontsize=\footnotesize]{rust}
-      fn increment(n: &mut ty!{
-       n1: Nat => n1 | n1 == n1+1 }
-      ) -> ();
-
-      fn decrement(n: &mut ty!{ 
-       v1: Nat | v1 > 0 => v2 | v2 == v1-1 }
-      ) -> ();
-    \end{minted}
-  \end{minipage}
-  
-  \caption{Comparison of specifying Type Changes Caused by a strong mutation. Flux on the left; Corten on the right}
-  \label{lst:compare-flux-strong-updates}
-\end{listing}
-
-Flux type system has the function body judgement $\Sigma, \Delta \mid K;T \vdash F$, which "checks if a function body is well typed under a global environment $\Sigma$" \cite[p. 11]{lehmann_flux_2022}
-
-$\Delta$ in Flux is analogous to to Corten's $\Phi$. Both contain the constraints on refinement variables and are initialized with the function preconditions. 
-Flux's $T$ maps locations to types, and serves a similar purpose to $\mu$ in Corten: Keeping track of the current properties that are known for a location. Corten's type system does not associate constraints with locations with specific predicate, like Flux does, because in the typing rules of Corten, the origin of the constraint is irrelevant\footnote{interestingly our implementation, like Flux, does have that distinction to improve error messages}.
-
-
-Flux has a separate type syntax for references: $\&_{\text{mut}} \tau$ that denotes that the referenced location has type $\tau$. Corten uses a similar syntax for specifying mutable references, but in terms of the semantics delegates the type constraint to the referenced value and even disallows reference types to constrain th referenced type. Because the reference location can change during the program execution, constraining a reference can have many possible meanings and unintuitive consequences. Flux avoids this problem by restricting to weak references, which can not change their type.
-Presumably for the same reasons, Flux \- like Corten \- chose to forbid type specification on strong references, but their handling differs a bit: Even though strong reference destinations are specified with a similar syntax $\text{ptr}\left(l\right)$ (equivalent to $\&l$ in Corten), Corten allows multiple possible destinations to be specified. In that case, the reference may only be update weakly. 
-Importantly, Corten allows the type to change, meaning a reference can be unambiguous and therefore strongly updatable and later ambiguous in its target meaning only weakly updatable.
-
-Function signatures are expressed quite similarly. 
-Flux function signatures have the form $\forall \bar{v : \sigma}. \text{fn}\left(r ; \bar{x}. T_i\right) \to \rho_0.T_0$
-Consider the function decrease from \cref{lst:compare-flux-strong-updates}. In Flux the function signature would be encoded as:
-
-\[\forall n : \text{int}, \rho : \text{loc}.
-  \text{ fn}\left(n > 0, 
-    x.\{ \rho \mapsto \text{nat}_{\tau}\langle n \rangle, x \mapsto \text{prt}(\rho)\}
-    \rightarrow 
-    \rho_0. \{\rho_0 \mapsto (), \rho \mapsto \text{nat}_{\tau}\langle n - 1 \rangle \}
-    \right)
-\]
-
-The rule \textsc{T-Def} initializes the context to 
-  $\Delta = (n > 0, v : \text{loc}, n : \text{int})$
-  , $K = (x \mapsto \text{prt}(\rho), \rho \mapsto \text{nat}_{\tau}\langle n \rangle)$
-  and the expected return value $T_0 = \{\rho_0 \mapsto (), \rho \mapsto \text{nat}_{\tau}\langle n - 1 \rangle \}$
-
-Corten would generate an initial context $\Gamma = (\mu, \Phi)$ with $\mu = \{n \mapsto \&arg_0, arg_0 \mapsto v_1\}$, $\Phi = \{v_1 > 0\}$ and expected return type $\{ v_r : () \mid \text{true}\}$ and end context $\mu' = \{arg_0 \mapsto v_2\}$,
-$\Phi' = \{v_2 \doteq v_1 - 1, v_1 > 0\}$.
-
-What Corten calls a sub-context relation, is referred to as context inclusion in Flux.
-Though Flux is significantly more conservative with its rules: Only allowing permutations (\textsc{C-Perm}), removal (\textsc{C-Weaken}) of predicates and subtyping of just individual types (\textsc{C-Sub}) and only if they can be separated (\textsc{C-Frame}), meaning they do not depend on other predicates.
-Flux should thusly is seems that Flux, can only show inclusion for a subset of what the logic and theories allow.
-As an example consider the sets displayed in \cref{fig:flux-context-space}, which are described by the constraints super-context $x > y - 1 \wedge x > y + 1$, which allows $x$ to vary from $y$ by at most $1$. A sensible sub-context would be $x=y$, which satisfies the constraints, but there is no possible proof for this fact. Flux can only prove context inclusion, if the subcontext is included an the axis aligned containment box, meaning the set $\{(x_1, \dots, x_n) \mid (\forall \xi. (\xi, x_2, \dots x_n) \in D) \wedge \dots \wedge (\forall \xi. (x_1, \dots, x_{n-1}, \xi) \in D)\}$. In this example, it would be $[-0.5, 0.5] \times [-0.5, 0.5]$. 
-Because Corten delegates sub-context checking to SMT, handling these dependencies are no problem.
-
-\begin{figure}[h]
-	\centering
-	\includegraphics[width=0.5\linewidth]{../context-space.png}
-	\caption{Figure showing a value space, where inclusion can not be shown}
-	\label{fig:flux-context-space}
-\end{figure}
-
-The subtyping rules are quite similar. To the degree applicable, \textsc{S-Exists} is analogous to \textsc{$\preceq$-Ty}.
-
-Another difference is the choice of target language: Flux chose $\lambda_{\text{Rust}}$ by Jung et al. \cite{jung_rustbelt_2018} as a basis for the formalization, which expresses the semantics in a continuation passing style over a language based on Rustc's MIR. 
-On the other hand Corten based the formalization on a language based on Rustc's HIR and semantics expressed in a small-spec semantic. 
-
-The corresponding implementations also use the MIR and HIR respectively. The advantages and disadvantages are discussed in \cref{ch:implementation}. Flux takes advantage of the MIR to cover a greater variety of control-flow scenarios.
-Lehmann et al. also found that "the refinement annotations [..] do not appear in Rust's MIR" \cite[p. 17]{lehmann_flux_2022}, which poses a challenge for the implementation.
-
-Lastly Lehmann et al. evaluate Flux against Prusti proofing properties like "the absence of index-overflow error in a suite of vector-manipulating programs." \cite[p. 2]{lehmann_flux_2022}
-Lehmann et al. found that the liquid type inference system is powerful enough to infer necessary invariants for this use case, partly because "loop invariants express either simple inequalities or tedious bookkeeping" \cite[p. 21]{lehmann_flux_2022}
-In these cases Prusti still required invariants to be specified, which Lehmann et al. party attribute to the fact, for every unchanged mutable reference, the invariant needs to state that the reference was not modified. By using \code{mut}, but not \code{strg} references, Flux could avoid that problem.
-Even though Corten does not share the the strong references mechanism with Flux, the argument still applies: Corten would also not require additional invariants for the unchanging mutable references.
-Because Corten does not support vectors (yet), a direct comparison is not possible.
-
-
+\input{sections/related_work.tex}
 
 \chapter{Conclusion \& Future Work} \label{ch:conclusion}
 
 The goal of this thesis is to show that Refinement Types can be idiomatically adapted to languages with unique mutable references. 
-The thesis has show that CortenC can type check Refinement Types in Rust, enforcing properties over mutable data and references and that these types fit idiomatically into Rust, if an inference system was added to CortenC.
+The thesis has show that CortenC can typecheck Refinement Types in Rust, enforcing properties over mutable data and references and that these types fit idiomatically into Rust, if an inference system was added to CortenC.
 The type system was sufficiently expressive for verifying complex properties about mutable data, recursive functions and loop invariants. 
 In addition, the thesis analyzed the use of mutability in Rust and reaffirmed the limited prevalence of \code{unsafe} in Rust code.
-For a subset of Rust (named Corten), a formal description of the syntax and small-step semantics was described.
-A syntax for Refinement Types for Rust was devised and an accompanying type system was designed.
-Based in the formal description, a proof-of-concept implementation shows that automatic type checking of this type system is possible and feasible. The implementation also shows that using the interface provided by Rustc is practical and beneficial for user-friendliness.
+For a subset of Rust (named MiniCorten), a formal description of the syntax and small-step semantics was described.
+A syntax for Refinement Types for Rust was devised and an accompanying type system was devised. The thesis also provides justification for its soundness in the form of preservation (and progress) properties.
+Based in the formal description, a proof-of-concept implementation shows that automatic type checking of this type system is feasible and practical. The implementation also shows that using the interface provided by Rustc is sensible and beneficial for user-friendliness.
 
 The evaluations has shown that meaningful specifications can be automatically type checked. 
 As planned and suspected, the lack of an inference system, calls for some avoidable specification, otherwise the evaluation has demonstrated that the required specification effort is limited.
-The breath of features implemented in the thesis is limited, mainly because getting the foundations right took some experimenting, though the foundations layed in the thesis are purposefully designed with these extensions in mind. Therefore covering more language features should be unproblematic.
+The breath of features implemented in the thesis is limited, mainly because getting the foundations right took some experimenting, though the foundations layed in the thesis are purposefully designed with these extensions in mind. Therefore covering more language features should not be hard to achieve.
 
 
 In terms of future work, there are two axis to work on: 
@@ -2368,7 +2265,6 @@ On one hand covering more language features, like records or algebraic data type
 
 On the other hand expanding the expressiveness of the type system would also be interesting: Introducing abstract predicates would allow a whole new set of properties to be specified. In particular developing a model of concurrency patterns could be a great application for them in Rust.
 
-\fi
 
 %% content
 

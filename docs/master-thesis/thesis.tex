@@ -1352,6 +1352,56 @@ The second rule allows updates to the value only if the type is not affected by 
 The rule states that resulting context will be the starting context with updated the association for the mutated arguments $y_j$ and new association for $r$ and the addition of the predicates the function ensures to be true after execution. Because these predicates can use the variables from the immutable values, we also need to substitute the logic variable.
 
 For clarity, \cref{rule:Fn-Call} omits a renaming step done directly after extracting the function signature from the declaration context $\Sigma$. It ensures that the logic variable names from the function call signature do not conflict with the any variable in the current context by renaming them if necessary. An an example take \cref{sec:eval-fibonacci}: If the variables were not renamed, the second call to \code{fib(n2)} would conflict with the first.
+
+
+\begin{listing}[h]
+  % \begin{tikzpicture}[overlay]
+  %   \node[anchor=north west,inner sep=0] at (0.6,0.8) {\includegraphics[width=1.06\textwidth]{../master-thesis/overlay.pdf}};
+  %   % \path[->, thick] (0, 0) edge (15, 20);
+  %   % \filldraw[fill=cyan!5, draw=cyan!50, very thick, anchor=southwest] (0.8,-4.5) rectangle (6.5,-1.2);
+  %   % \fill[red] (0, 0) circle (5pt);
+  %   \draw[step=1cm,gray,very thin] (-5,-5) grid (10,6);
+  % \end{tikzpicture}
+  \begin{minipage}[t]{0.48\linewidth}
+    \begin{minted}[autogobble, escapeinside=||,mathescape=true, texcomments, fontsize=\footnotesize]{rust}
+      ...
+      let x = 4;
+      let mut y = 5;
+      
+      
+      // $\Gamma_1 = (\set{x \mapsto v_1, y \mapsto v_2 }, v_1 \doteq 4 \wedge v_2 \doteq 5)$
+      relax_ctx!{ /* ${\color{black} \Gamma_{init} }$ */ } /*---------->*/
+
+      fn receiver(x, &mut y);
+
+      
+      assume_ctx!{ /* ${\color{black} \Gamma_{r} }$ */ } /*<-----------*/
+      ...
+    \end{minted}
+  \end{minipage}
+  \begin{minipage}[t]{0.48\linewidth}
+    \begin{minted}[autogobble, texcomments, fontsize=\footnotesize]{rust}
+      fn receiver(
+        a: ty!{ a1:i32 | a1 > 0 },
+        b : &mut ty!{ b1 : i32 | true
+        => b2 | b2 > b1 + a1 }) 
+      {
+        // $\Gamma_{init} = (\set{a \mapsto a_1, b \mapsto b_1}, a_1 > 0 \wedge true)$
+        assume_ctx!{ /* ${\color{black}\Gamma_{init}} $*/ }
+
+        ...
+
+        // $\Gamma_r = (\set{a \mapsto a_1, b \mapsto b_2}, a_2 > 0 \wedge true)$
+        relax_ctx! { /* ${\color{black}\Gamma_r}$ */ }
+      }
+    \end{minted}
+  \end{minipage}
+  \caption{Example Showing the Correspondence between Function Calls and Context Assumptions}
+  \label{lst:example-correspondence-subcontext}
+\end{listing}
+
+A different intuition for function calls handling in Corten may also gained by understanding calls in terms of assumptions \code{assume\_ctx!} and assertions \code{relax\_ctx!} that Corten replaces a function call with. \Cref{lst:example-correspondence-subcontext} shows how this might look like: The caller abstracts the concrete call by requiring the current context $\Gamma_1$ to satisfy the initial context $\Gamma_{init}$ of the callee (modulo renaming). In turn, the callee assumes its initial context to be satisfied and proceeds to modify it, with the end of the function requiring the function body to satisfy the specified post context $\Gamma_r$. Consequently, the caller can assume the final context to be valid (with the addition of the old context of course). As a whole, this creates an unbroken chain of assumes and requires and thusly a sensible design.
+
 \end{definition}
 
 %%%% OLD Must ref rule

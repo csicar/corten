@@ -251,7 +251,7 @@ A feasibility study on minimal examples of challenging use cases shows how usefu
 
 Specifying or verifying complete Rust modules or the entire Rust language is not the goal of the thesis. In particular \code{unsafe} Rust will not be taken into account in specification nor implementation. Implementing Liquid Type inference is also not a goal of the thesis.
 
-The accompanying implementation extends the Rust compiler, enables automatic parsing of the refinement type language and automated type checking of a subset of Rust, as well as limited inference and error reporting. 
+The accompanying implementation extends the Rust compiler, enables automatic parsing of the refinement type language and automated type checking of a subset of Rust, as well as limited inference, some error reporting and a simple counter example generation system. 
 % The thesis also gives a description of the syntax and semantics of the subset of Rust as well as the refinement type system.
 
 The main contributions of this thesis are:
@@ -262,14 +262,14 @@ The main contributions of this thesis are:
   \item Evaluation of the type system on minimal benchmarks
 \end{enumerate}
 
-To accomplish the goal of automated refinement type checking for Rust, we will syntactically analyse open source Rust code.
-To cover mutability, we will extend the Refinement Type system with dynamic contexts and reference predicates, to cover mutable references. The implementation extends the Rust compiler Rustc with our refinement type system and dispatchs subtyping requests to the SMT solver Z3. 
-The evaluation uses Rust code example in an unaltered syntax.
+The empirical analysis uses a parser framework to extract relevant syntactic structures from open-source Rust code.
+To cover mutability, we will extend a path-sensitive Refinement Type system with variable typing context to allow types to change, just like values. Mutable References will be handled by a restricted subset of the refinement language called reference predicates. The implementation extends the Rust compiler Rustc with our refinement type system and dispatches subtyping requests to the SMT solver Z3. 
+The evaluation uses Rust code examples in an unaltered syntax.
 
 
 The thesis is structured as follows: 
 \Cref{ch:foundations} will give an overview of the foundation the thesis builds upon.
-Thereafter in \cref{ch:analysis} an empirical analysis of \code{unsafe} and mutability uses is performed to gain an understanding of how Rust is used.
+Thereafter, in \cref{ch:analysis} an empirical analysis of \code{unsafe} and mutability uses is performed to gain an understanding of how Rust is used.
 \Cref{ch:language} defines the subset of Rust that will be the basis for the type system.
 Next \cref{ch:type-system} explains the actual type system and type checking, as well as justifying its correctness, followed by \cref{ch:implementation}, which will provide additional information about how the type system was implemented.
 The implementation will then be tested on minimal benchmarks in \cref{ch:evaluation}.
@@ -284,10 +284,9 @@ The semantics of our subset of Rust are discussed in \cref{ch:language}.
 \section{Refinement Types}
 
 The type system that this thesis will adapt, is based on the Refinement Type system described by Vazou et al. \cite{vazou_abstract_2013} and Rondon et al. \cite{rondon_liquid_2008}. 
-The central idea of Refinement Types is adding predicates to a language's type: For example, a type \code{i32} might be refined with the predicate $v > 0$. The refined type is written as $\left\{ v : \text{i32} \mid v > 0 \right\}$. In terms of semantics this means that any inhabitant of that type must also satisfy the predicate. 
+The central idea of Refinement Types is adding predicates to a language's type: For example, a type \code{i32} might be refined with the predicate $v > 0$. The refined type is written as $\left\{ v : \text{i32} \mid v > 0 \right\}$ and represent the set of inhabitants that have the specified base type, but also satisfy the predicate. 
 
-The notion of refinements is embedded into the base language using subtyping: A refined type $\tau$ is a subtype of $\tau'$ if $\tau$'s predicate implies the predicate of $\tau'$ (in the current typing context $\Gamma$).
-As is common with subtyping systems, the subtype can then be used in the place where the super type is expected.
+The notion of refinements is embedded into the base language using subtyping: A refined type $\tau$ is a subtype of $\tau'$ if $\tau$'s predicate implies the predicate of $\tau'$ (in the current typing context $\Gamma$). This matches the general maxime of behavioural subtyping: A value of type $\tau$ can be used a place that expect $\tau'$, because the predicate of $\tau'$ is also satisfied for $\tau$.
 The following rules shows how subtyping is handled by Liquid types \cite[p. 6]{rondon_liquid_2008}\footnote{Names were adapted to better match our notation}. \textsc{LT-Sub} allows a value $e$ to be typed with the type $\tau_2$ if $e$ has type $\tau_1$ and the subtyping relation $\Gamma \vdash \tau_1 \preceq \tau_2$ is satisfied -- for instance by \textsc{$\preceq$-Base}. 
 
 \begin{gather*}
@@ -336,7 +335,7 @@ Liquid types also has a mechanism for enabling path sensitivity: When encounteri
 
 Note, that $e_t$ and $e_e$ need to have the same type, but can use the path condition to create a value of that type. 
 As an example Rondon et al. use the $\max$ function. It is implemented as
-\code{fn max(x, y) \{ if x > y \{ x \} else \{ y \}\}} given the return type $\{ v: \text{i32} \mid x \leq v \wedge y \leq v\}$.
+\code{fn max(x, y) \{ if x > y \{ x \} else \{ y \}\}} and given the return type $\{ v: \text{i32} \mid x \leq v \wedge y \leq v\}$.
 To show that the then-case has the required return type, we must show, that $x>y \vdash x : \{ v: \text{i32} \mid x \leq v \wedge y \leq v\}$, which the following proof tree shows:
 
 {\scriptsize
@@ -360,18 +359,17 @@ To show that the then-case has the required return type, we must show, that $x>y
 \end{gather*}
 }
 
-Refinement Types can also be understood as dependent types, distinguished by the limited expressiveness of the type. Refinement types trade off expressiveness for automatic type checking. Allowed formulas are chosen from a SMT decidable logic. For instance
+Refinement Types can also be understood as dependent types, distinguished by the limited expressiveness of the type. Refinement types trade off expressiveness for automatic type checking. Allowed formulae are chosen from a SMT decidable logic. For instance
 Rondon et al. \cite{rondon_liquid_2008} choose the EUFA as the logic fragment, meaning a propositional logic with the theories of equality, uninterpreted functions and linear arithmetic.
 
 
 \section{Rust}
 
 The Rust programming language \cite{matsakis_rust_2014} is a multi-paradigm systems programming language, originally developed by Graydon Hoare at Mozilla Research.
-Even though Rust is quite young, the first stable release published in 2015, it has attracted interest in a wide area of applications and organizations. It is used everywhere from Volvo building embedded software for cars \cite{foufas_why_2022} to Western Digital implementing a NVMe driver for Linux in Rust \cite{larabel_lpc_2022} and of course the Rust compiler itself.
+Even though Rust is quite young, with the first stable release published in 2015, it has attracted interest in a wide area of applications and organizations. It is used everywhere from Volvo building embedded software for cars \cite{foufas_why_2022} to Western Digital implementing a NVMe driver for Linux in Rust \cite{larabel_lpc_2022} and of course the Rust compiler itself.
 It draws inspiration from functional and imperative programming languages. The core forms a set of features usually found in functional programming languages: Functions, closures, algebraic data types, type classes (called traits in Rust) and pattern matching, immutability are all common place in Rust.
 However, Rust is also influenced by C: Rust extends its ML base with optional mutability of data and references and manual memory management. Many design decisions of Rust can be explained by Rust's ambitions to offer safe and clear ML-like abstractions without compromising on performance compared to C.
-For example, Rust elected to use manual memory management like C, which guarantees faster and predictable execution times when compared to garbage collection. Crucial, Rust does not compromise on safety to accomplish this: To this end, Rust incorporates the notion of affine types into its type system (called \textit{ownership system} in Rust). This additional type system guarantees, 
-Inspired by research language Cyclone introduced by Grossman et al. \cite{grossman_region-based_nodate}, this type system guarantees the absence of memory errors.
+For example, Rust elected to use manual memory management like C, which guarantees faster and predictable execution times when compared to garbage collection. But crucially, Rust does not compromise on safety to accomplish this: To this end, Rust incorporates the notion of affine types into its type system (called \textit{ownership system} in Rust). This additional type system is inspired by research language Cyclone introduced by Grossman et al. \cite{grossman_region-based_nodate} and guarantees the absence of memory errors.
 % The Rust programming language is designed to offer tight control over the amount of mutability and what it mutation can effect. 
 Rust also offers a special language subset called \code{unsafe} Rust, which deactivates the static ownership checking and places the responsibility of ensuring memory safety on the programmer, analogous to C. \code{unsafe} Rust is used to provide low-level primitives that expose a safe interface that can be used in safe Rust. From here on out, we will focus on safe Rust.
 
@@ -381,7 +379,7 @@ The next paragraph will explain how the ownership system works.
 \paragraph{Aliasing XOR Mutabillity}
 
 The ownership system is an implementation of affine types. It uniquely associates each memory object with an owner. 
-The owner of a Rust object is the binding that is responsible for freeing the object. In the listing \ref{lst:ownership-transfer}, first \code{a} is the owner of the \code{User} object. An object may only be used once, at which point it is consumed and ownership is transferred to its new binding. In the example \code{greet(user)} uses \code{a} and transferring ownership to \code{greet}. At the end of \code{greet}, there is no new owner, as a result the user object is freed.
+The owner of a Rust object is the binding that is responsible for freeing the object. In the listing \ref{lst:ownership-transfer}, first \code{a} is the owner of the \code{User} object. An object may only be used once, at which point it is consumed and ownership is transferred to its new binding. In the example \code{greet(user)} uses \code{a} which transfers ownership to \code{greet}. At the end of \code{greet}, there is no new owner, as a result the user object is freed.
 
 \begin{listing}[h]
   \begin{minted}[fontsize=\footnotesize, texcomments]{rust}
@@ -480,13 +478,13 @@ In contrast, languages with instance-of-checks allow an implementation of a poly
 
 \paragraph*{Explicit Mutable Access} A consequence of the ownership rules is that a function can only mutate (part of) the state that is passed to it as a parameter. There is no global state and there is no implicit access to an object instance. Thus any intention of mutating state must already be expressed in the function signature, which makes the specification of this mutation quite natural.
 
-\paragraph*{Explicit Nullability} Rust will ensure definite assignment, meaning variable can only be accessed if they contain a value. For verification this means, that there is no need to prove that a variable is defined. If nullability is desired, Rust offers normal sum type \code{Option<T>} type with the variants \code{None} and \code{Some(T)}. 
-By handling the general case of sum types verification system can get handling of nullable data for free.
+\paragraph*{Explicit Nullability} Rust will ensure definite assignment, meaning variables can only be accessed if they contain a value. For verification this means, that there is no need to prove that a variable is defined. If nullability is desired, Rust offers normal sum type \code{Option<T>} type with the variants \code{None} and \code{Some(T)}. 
+By handling the general case of sum types, verification systems can get the handling of nullable data for free.
 
 \paragraph*{Minimal subtyping} In contrast to object oriented languages, Rust has no user-extendable notion of object subtyping. 
 Rust does have a notion of subtyping for its permission system, which serves the purpose of coercing mutable references \code{\&mut T} to immutable references \code{\& T} etc. where needed. 
 At the type level Rust also has a concept of subtyping for \code{traits}.
-Because of the limited, well-known scope, these subtyping relations create no ambiguity with a refinement type system.
+Because of the limited, well-known scope, these subtyping relations create no ambiguity with a refinement type system. 
 
 \paragraph*{What Rust does not solve} Even though Rust simplifies reasoning about mutability and aliasing of mutable data, Rust does not eliminate the need to reason about their interaction. For example, \cref{lst:alias-mut} shows how \code{cell}'s value is influenced by changes to another variable \code{r}. This does not mean that the ownership rule  \textit{mutability XOR aliasing} are broken: Even though both \code{cell} and \code{r} are mutable, \code{cell} becomes inaccessible while \code{r} is live.
 This form of aliasing is very restrictive: there may only be one owner and one borrower alive at a time. Once the borrow is returned, a new reference may be created.
@@ -510,7 +508,7 @@ Unfortunately Rust is also quite a big language with a lot of features and detai
 Since the implementation interacts with Rustc, the reference implementation of a Rust compiler, this section will summarize the relevant parts of Rustc mainly based on the Rustc dev guide \cite{noauthor_overview_nodate}.
 
 At a high level, rustc is built with stages that incrementally lower the source code to an executable binary. Rustc has multiple stages and associated data structures. 
-Relevant for the thesis are the first few stages: Firstly the AST, which is a representation of the source code after lexing and parsing, 
+Figure \ref{fig:rust-stages} shows the the main compiler stages of Rustc and the associated data structure.
 
 \begin{figure}[h]
 	\centering
@@ -519,22 +517,22 @@ Relevant for the thesis are the first few stages: Firstly the AST, which is a re
 	\label{fig:rust-stages}
 \end{figure}
 
-Figure \ref{fig:rust-stages} shows the the main compiler stages of Rustc and the associated data structure. The first data structure that is extracted from the source code is the AST (short for abstract syntax tree), which is the result of parsing and expanding macros. 
-Based on the AST, the high-level intermediate representation (short HIR) is created by resolving the names and desugaring some language constructs. The HIR contains accurate source labels, which map all nodes in the HIR to their source code locations. 
-The HIR is then used as the basis for type checking returning the typed high-level intermediate representation (short THIR), which annotates every node with its type. THIR also lowers some additional constructs like automatic dereferencing and overloading and more. In contrast to the previous representations, "[t]he THIR only represents bodies, i.e. the executable code; this includes function bodies [..]. Consequently, the THIR has no representation for items like \code{struct}s or \code{trait}s." \cite[p. 1]{noauthor_thir_nodate}
+The first data structure that is extracted from the source code is the AST (short for abstract syntax tree), which is the result of parsing and expanding macros. 
+Based on the AST, the high-level intermediate representation (HIR for short) is created by resolving the names and desugaring some language constructs. The HIR contains accurate source labels, which map all nodes in the HIR to their source code locations. 
+The HIR is then used as the basis for type checking returning the typed high-level intermediate representation (THIR for short), which annotates every node with its type. THIR also lowers some additional constructs like automatic dereferencing and overloading and more. In contrast to the previous representations, "[t]he THIR only represents bodies, i.e. the executable code; this includes function bodies [..]. Consequently, the THIR has no representation for items like \code{struct}s or \code{trait}s." \cite[p. 1]{noauthor_thir_nodate}
 THIR will then be used to create the mid-level IR by drastically simplifying the language: The tree structure with complex expression of the THIR is turned in to a control-flow graph (short CFG) with basic blocks containing simple (i.e. non-nested) expressions.
 
 Finally Rustc uses external tools \- like llvm \- to generate executable files and link them.
 
-An especially useful feature for this work is that Rustc offers an APIs for writing compiler plugins, which can access the intermediate languages of Rust at different stages during the compilation and allows the plugin to emit warnings and errors. 
+An especially useful feature for this thesis is that Rustc offers an APIs for writing compiler plugins, which can access the intermediate languages of Rust at different stages during the compilation and allows the plugin to emit warnings and errors. 
 Plugins can either wrap the Rustc compiler and hook into callback after each compiler stage or expose a lint pass, that can be registered to be called on different AST items.
 Although the linting API is not guaranteed to be stable, some parts of Rust's official tooling depends on it. In particular, the popular Rust linter clippy uses the interface.
 
 \chapter{Empirical Analysis of Use-Cases} \label{ch:analysis} 
 
 Before designing a system for Rust, it makes sense to gain some understanding of how Rust is used. For this purpose we will look at two key features of Rust that influence how an approachable verification should look like.
-Firstly \code{unsafe} Rust, with a similar lack of guarantees to C, would make verification and specification significantly harder. But if the use of \code{unsafe} is limited, like intended by the language designers, it would allow us to focus on the save part of Rust and leave the verification of \code{unsafe} Rust to more complex verification systems, like Prusti \cite{astrauskas_leveraging_2019}.
-Secondly with mutability being the main difference to the traditional domain of Refinement Types, estimating the need for covering this language feature is interesting. The prevalence of mutability should also inform the acceptable level of user effort.
+Firstly \code{unsafe} Rust, with a similar lack of guarantees to C, would make verification and specification significantly harder. But if the use of \code{unsafe} is limited, like intended by the language designers, it would allow us to focus on the save part of Rust and leave the verification of \code{unsafe} Rust to more complex verification systems.
+Secondly with mutability being the main difference to the traditional domain of Refinement Types, estimating the need for covering this language feature is sensible. The prevalence of mutability should also inform the acceptable level of user effort.
 
 Thus, the use-case analysis should answer the following questions about Rust code:
 \begin{enumerate}
@@ -560,7 +558,7 @@ We analyzed all published Rust crates (Rust's version packages) on February 2nd 
 % XML                                    5142          25277          25773        4807556
 % Assembly                               4146         534785         582345        2631991
 
-The analysis parses these files and searches for certain AST patterns, which are subsequently extracted and saved.
+The analysis parses all rust files and searches for certain AST patterns, which are subsequently extracted and saved.
 Thanks to using the tree-sitter parsing framework, the analysis framework can easily be extended to other queries and languages.
 
 \section{Unsafe Rust}\label{ss:unsafe-rust}
@@ -579,7 +577,8 @@ In our analysis we found that expectedly crates.io contains significantly more l
 We also found that libraries are much more likely to use \code{unsafe} Rust.
 
 
-\Cref{fig:unsafe-scatter} gives an overview over how \code{unsafe} sections are distributed in the crates.
+\Cref{fig:unsafe-scatter} gives an overview over how \code{unsafe} sections are distributed in the crates. Each point represents a Rust crate with the x-coordinate representing the number of unsafe section and the y-coordinate representing the ratio of unsafe LOC relative to the total LOC in that crate. The plots for crates containing an executable look empty, but in fact most points are clustered around zero unsafe uses. Also notice the different scales of the x- and y-axis.
+
 \begin{figure}[h]
 	\centering
 	\includegraphics[width=0.99\linewidth, clip, trim={0.2cm 0.2cm 0.2cm 0.2cm}]{../scatter-occurences-vs-loc.png}
@@ -588,9 +587,9 @@ We also found that libraries are much more likely to use \code{unsafe} Rust.
 \end{figure}
 
 
-\Cref{tab:unsafe-uses-by-crate} shows the result of our analysis: The total number of unsafe uses in an order of magnitude higher for binaries compared to libraries.
+\Cref{tab:unsafe-uses-by-crate} shows the totaled result of our analysis: The total number of unsafe uses in an order of magnitude higher for binaries compared to libraries.
 The data in the table includes all crates except the outlier \code{windows-0.32.0}, which alone contains \numprint{233608} uses of \code{unsafe}. Nearly $2 / 3$ of all other library uses of \code{unsafe} combined.
-Looking at the distribution of unsafe uses in Figure \ref{fig:unsafe-ecdf}, we can see that this is an exception: Most other libraries do not use that much unsafe statements. We can also see that even if a executable crate uses \code{unsafe}, it uses few. Note the difference in x- and y-axis scaling: No executable contains more than 63 occurrences on \code{unsafe} blocks, but more than 10\% of libraries contain more than 63 \code{unsafe} sections.
+Looking at the distribution of unsafe uses in Figure \ref{fig:unsafe-ecdf}, we can see that this is an exception: Most other libraries do not use that much unsafe statements. We can also see that even if an executable crate uses \code{unsafe}, it uses few. Note the difference in x- and y-axis scaling: No executable contains more than 63 occurrences on \code{unsafe} blocks, but more than 10\% of libraries contain more than 63 \code{unsafe} sections.
 On average, a library contains about 63 \code{unsafe} sections, while crates with binaries contain on average about 6 \code{unsafe} sections.
 
 
@@ -634,25 +633,25 @@ The frequency of usage will inform the acceptable level of specification effort.
 To analyse the dataset for usage patterns, we search the dataset for certain syntactical structures to infer mutability information about the following AST items:
 \begin{itemize}
 	\item \textbf{Local Variable Definitions} can be tracked with high confidence. They occur in function bodies and take the form: \code{let mut a = <expr>}
-	\item \textbf{Parameters}, which are considered immutable if they are passed as immutable references or owned. They take the syntactic form: \code{mut a: i32} or \code{b: \&mut i32}
-	\item \textbf{Function Definitions}, which are considered immutable, if all parameters considered immutable. They take the syntactic form: \code{fn f(mut a: i32, b: \&mut i32) \{ ... \}}
-	\item \textbf{Arguments} are parts of a function call and can be arbitrary expression, which makes the tracking hard.
-	\item \textbf{Function Calls}, which are considered immutable, if all arguments are considered immutable.
+	\item \textbf{Parameters} are considered mutable if either the owned value or the reference is mutable. They take the syntactic form: \code{mut a: i32} or \code{b: \&mut i32}
+	\item \textbf{Function Definitions} are considered immutable, if all parameters considered immutable. They take the syntactic form: \code{fn f(mut a: i32, b: \&mut i32) \{ ... \}}
+	\item \textbf{Arguments} are parts of a function call and can be arbitrary expression, which makes the tracking hard. We consider arguments mutable if are syntactically passed as a mutable reference (for example \code{\&mut i}) and immutable if they are passed as immutable references or literals.
+	\item \textbf{Function Calls} are considered immutable, if all arguments are considered immutable.
 \end{itemize}
 
 A total of around 52 million of these items were found in the dataset.
 
-\Cref{fig:mutabillity_percentages} shows the ratio of mutable to immutable items. For each syntactical category, the percentages are relative to the total number of occurrences in the dataset.
+\Cref{fig:mutabillity_percentages} shows the ratio of mutable to immutable items. For each syntactical category, the percentages are relative to the total number of occurrences in the dataset. The grey bar represents data points that cound not be determined to be mutable nor immutable.
 
 
 \begin{figure}[h]
 	\centering
 	\includegraphics[width=0.9\linewidth, clip, trim={0.5cm 0.5cm 0.5cm 0.5cm}]{../mutability_by_category.pdf}
-	\caption{Ratio of Immutable to Mutable Items of Different AST Nodes. Ratio is Relative to Total Number Of Occurrences}
+	\caption{Ratio of Immutable to Mutable Items of Different AST Nodes.}
 	\label{fig:mutabillity_percentages}
 \end{figure}
 
-Unfortunately there are some areas, where the syntactic analysis is not sufficient. Namely the analysis of function calls and arguments, which is mainly caused by the uncertainty of mutability of complex arguments.
+As expected there are some areas, where the syntactic analysis is not sufficient. Namely the analysis of function calls and arguments, which is mainly caused by the uncertainty of mutability of complex arguments.
 Luckily the data from function definitions and parameters can complete the picture: About 80\% of parameters are immutable and between about 10 and 20\% of parameters are mutable. And less than 10\% of functions have mutable parameters at all.
 When it comes to local variables, Rust users are more liberal in their use of mutability:
 About 30\% of local variables are defined mutable.
@@ -678,10 +677,10 @@ The goal is to remove as much incidental complexity as possible without compromi
 \section{Syntax}
 
 This subsection will introduce the syntax of MiniCorten\footnote{Corten is named after a alloy of steel, named COR-TEN, that forms an unusually stable and strong form of rust when oxidized (a "refined" rust, if you will).}, a language modelled after a simplified version of Rust, with the addition of refinement types.
-To simplify the formal definitions and proofs, the language is restricted to A-Normal Form (short ANF), as described by Sabry and Felleisen.
+To simplify the formal definitions and proofs, the language is restricted to A-Normal Form (short ANF), as described by Sabry and Felleisen\cite{sabry_reasoning_1993}.
 ANF normalizes the syntactic structure by requiring that arguments of expressions must be variables. Nested expression are translated into variable declaration for each subexpression. Note that the implementation (for the most part) does not have this restriction.
 
-There are two namespaces for identifiers: $x \in \text{PVar}$ for variables of program variables and $\alpha \in \text{LVar}$ for variable in the refinement predicates. The syntax is defined by Backus-Naur Form grammar in \cref{fig:mini-corten-syntax}
+There are two namespaces for identifiers: $x \in \text{PVar}$ for variables of program variables and $\alpha \in \text{LVar}$ for variable in the refinement predicates. The syntax is defined by Backus-Naur Form grammar in \cref{fig:mini-corten-syntax}.
 
 \begin{figure}[h]
   \centering
@@ -767,14 +766,14 @@ The statement \code{relax\_ctx!\{...\}} allows the user (or a future inference s
 %  The main difference being that Rust and our simplified language enable most statements to be used in place of an expression. 
 % The value is determined by the last statement in the sequence. For example If-Expressions, sequences of statements and function all follow this rule: Their (return) value is determined by the last statement or expression in the sequence.
 
-The semantics loosely based on Jung's MiniRust \cite{jung_minirust_2022}, but greatly reduce the complexity by removing stack frames, pointer among other things.
+The semantics are loosely based on Jung's MiniRust \cite{jung_minirust_2022}, but greatly reduce the complexity by removing stack frames, pointer among other things.
 However, we of course added refinement types to the language, which do not influence the execution semantics.
 
 In terms of the formal description, the rules are similar to Pierce's \cite[p. 166f]{pierce_types_2002-3} "Reference" language. % Also: Semantik von programmiersprachen WhileT p.45
-The main difference is that in Rust, every piece of data has a unique, known owner. This fact makes the concept of locations redundant. Instead we treat $\code{ref}(x)$ as a value itself. The following definitions show the new execution rules.
+The main difference is that in Rust, every piece of data has a unique, known owner. This fact makes the concept of locations redundant. Instead we treat $\code{ref}(x)$ as a value itself where $x$ is the owner. The following definitions show the new execution rules.
 
 \begin{definition}[Execution-State]
-  The execution state is a function from program variables to values: $\sigma : \text{PVar} \rightharpoonup \text{Value}$. 
+  The execution state is a function from program variables to values: $\sigma : \text{PVar} \rightarrow \text{Value}$. 
 \end{definition}
 
 
@@ -792,7 +791,7 @@ Evaluation of an expression $e$ in a state $\sigma$ is mostly standard. $\bbrack
  
 
 \begin{definition}[Declaration Environment: $\Sigma$]
-  The environment of function declarations is constant and globally known. It is defined as a partial function $\Sigma : \text{Fn-Name} \to \text{Fn-Decl}$. A function declaration $\code{fn}(\overline{a_i}) {s, r}$ contains the function parameters $\overline{a_i}$, the function body $s$ and the local variable $r$, that contains the return value.
+  The environment of function declarations is constant and globally known. It is defined as a partial function $\Sigma : \text{Fn-Name} \to \text{Fn-Decl}$. A function declaration $\code{fn}(\overline{a_i}) \set{s; r}$ contains the function parameters $\overline{a_i}$, the function body $s$ and the local variable $r$, that contains the return value.
 \end{definition}
 
 \begin{definition}[Small-Step Semantics of MiniCorten: $\tuple{s}{\sigma} \leadsto \tuple{s'}{\sigma'}$]
@@ -866,7 +865,7 @@ The rule \cref{rule:SS-Call} executes functions by inlining them after renaming 
 \chapter{The Refinement Type System} \label{ch:type-system}
 
 Based on the description of the base language in \cref{ch:language}, we will define a describe the proposed refinement type system "Corten". 
-Before describing the typing rules itself in \cref{sec:type-system}, the next section will give an overview over the features of the type system, which will also help to explain why certain design decisions were made.
+Before describing the typing rules itself in \cref{sec:type-system}, the next section will give an overview over the features of the type system, which will also help in understanding why certain design decisions were taken.
 \Cref{sec:soundness} will then justify, why the typing rules are sensible, followed by \cref{sec:extensions} which describes how the type system could be extended.
 
 \section{Features}
@@ -874,7 +873,7 @@ Before describing the typing rules itself in \cref{sec:type-system}, the next se
 % This section will explain some of the key features of the Corten type system. 
 
 % Instead of phrasing the features in MiniCorten, we will use the Rust syntax of the implementation "CortenC", which is designed for practical use rather than as a framework for the formal description.
-The type system is surfaces in two ways in the language, which can be directly embedded in Rust using two macros. Firstly the macro \code{ty!} can be used in place of a Rust type and adds a predicate to the Rust type that any inhabitant of that type must satisfy. For example, the type \code{ty!\{ v : i32 | v >= 0\}} stipulates that a value of Rust type \code{i32} is positive. The second macro is \code{relax\_ctx!\{ ... \}} for relaxing the context, which will be explained in the subsection \ref{subsec:atomic-updates}.
+The type system surfaces in two ways in the language, which can be directly embedded in Rust using two macros. Firstly the macro \code{ty!} can be used in place of a Rust type and adds a predicate to the Rust type that any inhabitant of that type must satisfy. For example, the type \code{ty!\{ v : i32 | v >= 0\}} stipulates that a value of Rust type \code{i32} is positive. The second macro \code{relax\_ctx!\{ ... \}} is used for relaxing the context, which will be explained in the subsection \ref{subsec:atomic-updates}.
 To make the examples more readable, we will take the liberty to use parts from the implementation CortenC if the formal language is not elaborate enough.
 
 \subsection{Decidable, Conservative Subtyping}
@@ -943,14 +942,14 @@ There are other approaches for handling changing values in refinement types, whi
 Besides the mutation of values, mutable references are also common in Rust, which is underpinned by the analysis, which found more than 10\% of parameters to be mutable.
 % The key difference to Refinement Type Systems for functional languages to Rust it the pervasive use of mutation. Therefore the most important feature of Corten it the support for mutation and also mutable references.
 
-Corten has two ways of dealing with assignment to mutable references: If the reference destination is known, the destination's type will be updated with the assigned values type (i.e. strong update). If there are multiple possible reference destinations, Corten will require the assigned value to satisfy the predicates of all possible destinations (i.e. weak updates). This is a standard approach (e.g. \cite{kloos_asynchronous_2015}), but more precise in Rust: The set of possible destinations only grows, when it depends on the execution of an optional control flow path. This means most of the time, strong updates are possible and weak updates are only needed if the reference destination is actually dynamic (i.e. dependent on the execution) 
+Corten has two ways of dealing with assignment to mutable references: If the reference destination is known, the destination's type will be updated with the assigned values type (i.e. strong update). If there are multiple possible reference destinations, Corten will require the assigned value to satisfy the predicates of all possible destinations (i.e. weak updates). This is a standard approach (e.g. Kloos et al. \cite{kloos_asynchronous_2015}), but more precise in Rust: The set of possible destinations only grows, when it depends on the execution of an optional control flow path. This means most of the time, strong updates are possible and weak updates are only needed if the reference destination is actually dynamic (i.e. dependent on the execution) 
 
 The problem with mutable references is the possibility of aliasing. Aliasing is problematic, because it might create interdependencies between the types of different variables: If one variable is changed, it might affect wether another variable is typed correctly. In \cref{lst:mutation-strong} the return value \code{a} is affected by changes done to a different variable \code{b}. Conservative approximation requires that all possible effects must be tracked. 
 
 % A consequence of the ownership system is, that at any time, the owner's and at most one mutable reference's type could be affected by a mutation. The owner's type is changed if the value is changed and the mutable reference borrows the value and updates the owner's value once the reference dropped. If there was another variable's type affected by mutating the value, it would imply that the references alias, which is not allowed by the ownership system.
 
 References are tracked by recognizing the fact that it is sufficient to let the reference's type solely constrain the reference target, while the value owner's type constrains the value.
-In the example, \code{b = \&mut a} will have inferred type \code{\{ r : \&mut | r == \& a \}}, meaning any inhabitant of this type can at most refer to the variable \code{y}\footnote{It would also be possible to encode the path condition in the reference type, but this was decided against for the stated goal of simplicity for the user. This why no new construct needs to be introduced}.
+In the example, \code{b = \&mut a} will have inferred type \code{\{ r : \&mut | r == \& a \}}, meaning any inhabitant of this type can at most refer to the variable \code{a}\footnote{It would also be possible to encode the path condition in the reference type, but this was decided against for the stated goal of simplicity for the user. This why no new construct needs to be introduced}.
 When a new value is assigned to \code{*b}, the type system will look at the typing context to find out what \code{b} might refer to. In this case \code{a} is the \textit{only} possible target und we can therefore \textit{update} its type. I.e. in type system, \code{*b = 0} will change the type of \code{a} to \code{\{ s : i32 | s == 0 \}}, but the type of \code{b} stays the same (because it still refers to the same location). We call this kind of assignment a strong assignment, as it can change the type.
 
 This is sensible, because in Rust's ownership system, \code{a} must be the unique owner of the memory belonging to \code{a}, meaning no other value predicate can be affected by the change.
@@ -1000,7 +999,7 @@ Because the destination is ambiguous, assigning to \code{*res} can not change th
 
 An intricacy about conservative reference tracking are functions that return references. In Rust this is possible, if the reference was passed as an argument: The function signature \code{fn f(a : \&mut T, b : \&mut T) -> \&mut T} would allow \code{f} to return either a reference to \code{a} or \code{b}. For the callee knowing where the returned value points to, is important because the type of dereferencing it depends on that knowledge. 
 Consequently, for the return type to be conservative, it must state every possible reference destination.
-Our approach naturally extends to this problem: If the callee does not specify the target (i.e. the return type is $\{ v : \text{T} \mid \text{true}\}$), then any assignment to it would need to show, that it satisfies the predicate of all possible targets, which in this case would be every target, so no assignment to the return type is possible.
+Our approach naturally can be naturally extended to covert this problem: If the callee does not specify the target (i.e. the return type is $\{ v : \text{T} \mid \text{true}\}$), then any assignment to it would need to show, that it satisfies the predicate of all possible targets, which in this case would be every target, so no assignment to the return type is possible.
 Conversely, if the callee forgot a possible reference target in the return type, then type checking of the body would fail, because the actual (supposedly weaker) type (e.g. $\{ r : \&\code{mut T} \mid r \doteq \&y \}$) does not imply the required (supposedly stronger) type (e.g. $\{ r : \&\code{mut T} \mid r \doteq \&y \vee r \doteq \&z \}$).
 
 
@@ -1080,11 +1079,11 @@ For this purpose, Corten provides a mechanism for the programmer to instruct Cor
 The following section will introduce the type checking rules of Corten. We assume the program has passed the Rust type checking rules, meaning (non-refined) type- and ownership\Hyphdash{}checking was successful.
 
 \begin{definition}[Typing Context $\Gamma = (\mu, \Phi)$]
-  The typing context consist of an injective function $\mu : \text{PVar} \to \text{LVar}$ that is used for tracking the current logic variable associated with a program variables and a set of predicates $\Phi$
-  It is used to constrain the logic variables in the image of $\mu$ and holds the relevant variable context for the various type checking rules.
+  The typing context consist of an injective function $\mu : \text{PVar} \to \text{LVar}$ that is used for tracking the current logic variable associated with a program variables and a set of predicates $\Phi$.
+  It is used to constrain the logic variables in the image of $\mu$ and holds the relevant varying context for the various type checking rules.
   $\mu$ must contain a logic variable for every program variable and $\Phi$ can contain additional logic variables not found in the image of $\mu$.
 
-  We abbreviate $(\mu, \Phi \wedge \varphi)$ to $\Gamma, \varphi$ for the addition of $\varphi$ to the constraint set, $(\mu[x \mapsto \alpha], \Phi)$ to $\Gamma[x \mapsto \alpha]$ for the update of the mapping for program variable $x$ to $\alpha$ and 
+  For $\Gamma = (\mu, \Phi)$ we abbreviate $(\mu, \Phi \wedge \varphi)$ to $\Gamma, \varphi$ for the addition of $\varphi$ to the constraint set, $(\mu[x \mapsto \alpha], \Phi)$ to $\Gamma[x \mapsto \alpha]$ for the update of the mapping for program variable $x$ to $\alpha$ and 
   $\mu(x)$ to $\Gamma(x)$ for accessing to the logic variable associated with $x$.
 \end{definition}
 
@@ -1147,7 +1146,7 @@ In contrast to other refinement type systems, Corten allows types in the context
 For example the type specifications \code{a : \{ $\alpha$ : i32 | $\alpha$ > $\beta$\}, b:  \{ $\beta$: i32 | $\beta$ != $\alpha$\}} are considered well formed in Corten and result in the context $\Gamma = (\{\code{a} \mapsto \alpha, \code{b} \mapsto \beta\}, \alpha \neq \beta \wedge \beta \geq \alpha)$. In the example, the value $0$ is a valid inhabitant of \code{a}'s type as long as $\code{b} \geq 1$.
 
 The rule \textsc{$\preceq$-Ctx} serves the purpose of allowing these interdependencies between predicates while still providing an applicable concept of subtyping: As long as the set of predicates in $\Gamma'$ imply the predicates for $\Gamma$, the sub-context relation is satisfied and $\Gamma'$ and $\Gamma$ is called the super-context and sub-context respectively. 
-To be more precise, the rule needs to relate the predicates for each \textit{program} variable with the opposing predicates for that program variable. The substitution $\Phi'[\mu'(x) \triangleright \mu(x)\ \mid x \in \dom(\mu)]$ forces the logic variable associated with \code{x} in $\Gamma'$ to be substituted by the logic variable $\mu(x)$ , which is associated with \code{x} in $\Gamma'$.
+To be more precise, the rule needs to relate the predicates for each \textit{program} variable with the opposing predicates for that program variable. The substitution $\Phi'[\mu'(x) \triangleright \mu(x)\ \mid x \in \dom(\mu)]$ forces the logic variable associated with \code{x} in $\Gamma'$ to be substituted by the logic variable $\mu(x)$ , which is associated with $x$ in $\Gamma'$.
 
 The domain restriction ensures that the sub-context does not contain additional program variables, which would leave unconstrained variables in the antecedent.
 
@@ -1162,6 +1161,7 @@ $$
 \end{definition}
 
 \begin{example}[Sub-Context Relations]
+  To get a idea of how the sub-context relation works, consider the following examples:
   \begin{align*}
     (\set{ a \mapsto \alpha }, \alpha \doteq 2) 
       &\preceq (\set{ a \mapsto \beta}, \beta > 0) 
@@ -1455,7 +1455,7 @@ Next, we will to justify why Corten type system is safe.
 We will write substitution as $\Phi[ x \tr a ]$ meaning $x$ is replaced by $a$ in $\Phi$ and $\mu[x \mapsto \alpha]$ for the function update meaning $\mu[x \mapsto \alpha](x) = \alpha$ and $\mu(y)$ everywhere else.
 
 To reduce the verbosity of the notation, for $x_1 \dots x_n \in \dom(\mu)$ we will abbreviate
-we shorten $\Phi[\mu(x_1) \tr g(x_1)][\dots][\mu(x_n) \tr g(x_n)]$ to $\Phi[f(x_i) \tr g(x_i) \mid x]$ and $\Phi[\mu(x_i) \tr g(x_i) \mid x \neq y]$ if $x \in \set{ x \mid x \in \dom(\mu), x \neq y }$
+we shorten $\Phi[\mu(x_1) \tr g(x_1), \dots, \mu(x_n) \tr g(x_n)]$ to $\Phi[f(x_i) \tr g(x_i) \mid x]$ and $\Phi[\mu(x_i) \tr g(x_i) \mid x \neq y]$ if $x \in \set{ x \mid x \in \dom(\mu), x \neq y }$
 
 
 
@@ -1505,10 +1505,10 @@ Next \cref{lem:conservatice-reference-typing} we argue for why reference trackin
   Let $\sigma' = \sigma[x \tr \bbracket{e} \sigma]$.
   As a model we select $m' = m[\beta \tr \sigma(x)]$ where $\mu(x) = \beta$ and show that the proof obligation is satisfied for $m'$.
   
-  Split the goal on the conjunction; if both sides are valid then the conjunction is valid (for the given model).
+  Split the goal on the conjunction; if both sides are valid then the conjunction is valid (for the same model).
   \begin{itemize}
     \item \textsc{Part I} Show $m' \vDash \Phi[\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]$.
-      In essence, we show that the satisfiability of $\Phi$ is not changed by the addition of fresh variable $\alpha$. We start by splitting the substitution into the part of concerned with $x$ and a part that is not ($x \neq y$). We then introduce a useless substitution for $\alpha$ that cannot the formula because it does not contain $\alpha$ (and the substitution on the left explicitly excludes $x$). After some bookkeeping, we use the fact that substitution in expression can be rephrased as a function update on the model $m$ to arrive at our goal.
+      In essence, we show that the satisfiability of $\Phi$ is not changed by the addition of fresh variable $\alpha$. We start by splitting the substitution into the part of concerned with $x$ and a part that is not ($x \neq y$). We then introduce a useless substitution for $\alpha$ that can not change the formula because it does not contain $\alpha$ (and the substitution on the left explicitly excludes $x$). After some bookkeeping, we use the fact that substitution in expression can be rephrased as a function update on the model $m$ to arrive at our goal.
       \begin{align*}
           &\phantom{=}\ \ \Phi[\mu(y) \tr \bbracket{\sigma(y)} \mid y]
           \\   &= \Phi[\mu(y) \tr \bbracket{\sigma(y)} \mid y \neq x][\mu(x) \tr \bbracket{\sigma(x)}]
@@ -1600,7 +1600,7 @@ Next \cref{lem:conservatice-reference-typing} we argue for why reference trackin
 % \end{proof}
 
 The next lemma not only shows that predicate types can not have no existential bindings, but also -- crucially -- that the typing assigned to mutable references is conservative, in the sense that it covers all possible reference destinations.
-\begin{lemma}[Reference Predicate do not admit existential typing]\label{lem:conservatice-reference-typing}
+\begin{lemma}[Reference Predicate are Conservative]\label{lem:conservatice-reference-typing}
   If $\sigma : \Gamma $ and $\Gamma \vdash *x \in \set{y_1, \dots, y_n}$ then $\bbracket{\sigma(x)} = \&y_i$ for some $i \in 1, \dots, n$ 
 \end{lemma}
 
@@ -1627,14 +1627,14 @@ The next lemma not only shows that predicate types can not have no existential b
   \end{align*}
 \end{proof}
 
-\begin{lemma}[Sub context relation is conservative]\label{lem:conservative-subtype}
+\begin{lemma}[Sub-Context Relation is Conservative]\label{lem:conservative-subtype}
   If \hyperref[rule:Sub-Ctx]{$\Gamma \preceq \Gamma'$} and $\sigma : \Gamma$ then $\sigma : \Gamma'$
 \end{lemma}
 
 \begin{proof}
   Given $\Gamma \preceq \Gamma'$, $\sigma : \Gamma$ show $\sigma : \Gamma'$. Let $x \in \mu$ denote $x \in \dom(\mu)$ and $v_x$ denote $\bbracket{\sigma(x)}$.
 
-  We need to show that for a given model of $\sigma : \Gamma$ we can find a model, that satisfies $\sigma : \Gamma'$. We use the preconditions of the \ref{rule:Sub-Ctx} rule, which yields an implication relation between the type contexts \eqref{eq:sub-i} and the fact that only some variables, namely $\dom(\mu') \setminus \dom(\mu)$, are fresh and therefore unconstrained by $\Gamma$ and therefore these variables can be chosen to suit our needs: The logic variables that become unbound in $\Gamma'$ relative to $\Gamma$ are instead constrained to the required value by the chosen context $m$. 
+  We need to show that for a given model of $\sigma : \Gamma$ we can find a model, that satisfies $\sigma : \Gamma'$. We use the preconditions of the \cref{rule:Sub-Ctx} rule, which yields an implication relation between the type contexts \eqref{eq:sub-i} and the fact that only some variables, namely $\dom(\mu') \setminus \dom(\mu)$, are fresh and therefore unconstrained by $\Gamma$ and therefore these variables can be chosen to suit our needs: The logic variables that become unbound in $\Gamma'$ relative to $\Gamma$ are instead constrained to the required value by the chosen context $m$. 
   Also recall that $\mu$ is injective.
 
   Rule inversion on $\Gamma \preceq \Gamma'$ yields:
@@ -1686,18 +1686,18 @@ The next lemma not only shows that predicate types can not have no existential b
 \end{proof}
 
 
-\begin{lemma}[Subtyping is Conservative]\label{lem:conservative-subtype-type}
-  If \hyperref[rule:Sub-Ctx]{$\Gamma \vdash \tau \preceq \tau'$} and $\sigma : \Gamma$ then $\sigma : \Gamma'$
-\end{lemma}
+% \begin{lemma}[Subtyping is Conservative]\label{lem:conservative-subtype-type}
+%   If \hyperref[rule:Sub-Ctx]{$\Gamma \vdash \tau \preceq \tau'$} and $\sigma : \Gamma$ then $\sigma : \Gamma'$
+% \end{lemma}
 
-\begin{proof}[Proof Sketch]
+% \begin{proof}[Proof Sketch]
 
-\end{proof}
+% \end{proof}
 
 \begin{lemma}[Preservation of State Conformance]\label{lem:preservation-conformance}
   If $\Gamma \vdash s \Rightarrow \Gamma_2$, $\sigma : \Gamma$ and $\tuple{s}{\sigma} \leadsto \tuple{s_1}{\sigma_1}$, then  $\sigma_1 : \Gamma_1$ and $\Gamma_1 \vdash s_1 \Rightarrow \Gamma_2$ for some $\Gamma_1$
 \end{lemma}
-To ensure that the proof structure is correct, this proof as well as the type rules and some other lemmata were also partially formalized in the theorem prover Lean\cite{de_moura_lean_2015}. Most branches were also proven in Lean.\footnote{The Lean Code can be found here \url{https://gitlab.com/csicar/liquidrust/-/tree/main/docs/lean-proof}}
+To ensure that the proof structure is correct, this proof as well as the type rules and some other lemmata were also partially formalized in the theorem prover Lean\cite{de_moura_lean_2015}. Most branches were also proven with Lean\footnote{The Lean Code can be found here \url{https://gitlab.com/csicar/liquidrust/-/tree/main/docs/lean-proof}}.
 \begin{proof}[Proof Sketch] Rule Induction over $\tuple{s}{\sigma} \leadsto \tuple{s_1}{\sigma_1}$
   
 \begin{itemize}
@@ -1722,7 +1722,7 @@ To ensure that the proof structure is correct, this proof as well as the type ru
       \item \textsc{Case \cref{rule:Intro-Sub}}
         gives $\Gamma \vdash e': \tau'$ and $\Gamma \vdash \tau' : \tau$ as well as the induction hypothesis for the inner expression $e'$.
         
-        The argument for why this should hold is similar to the Sub-Context a few cases further down.
+        The argument for why this should hold should be similar to the Sub-Context a few cases further down.
         % $ m' \vDash \varphi[\mu[x \mapsto \gamma](y) \tr \bbracket{\sigma(y)} \mid y]$.
 
         % \begin{align*}
@@ -1750,7 +1750,7 @@ To ensure that the proof structure is correct, this proof as well as the type ru
 
     % Because $e'$ is \code{unit}, the second proof obligation is trivially true, because $\Gamma' = \Gamma''$
   \item \textsc{Case \cref{rule:SS-Seq-Inner}}:
-    Given: $\tuple{s}{\sigma} \leadsto \tuple{s_1}{\sigma_1}$, \\
+    Given: $\tuple{s}{\sigma} \leadsto \tuple{s_1}{\sigma_1}$, 
      $\Gamma \vdash s; r \Rightarrow \Gamma_2$, \\
      $\forall \Gamma_2, \Gamma \vdash s \Rightarrow \Gamma_2 \wedge \sigma : \Gamma \to \exists \Gamma_1, \sigma_1 : \Gamma_1 \wedge \Gamma_1 \vdash s_1 \Rightarrow \Gamma_2$ \\
     show $\exists \Gamma_1, \sigma_1 : \Gamma_1 \wedge \Gamma_1 \vdash s_1 ; r  \Rightarrow \Gamma_2$.
@@ -1826,7 +1826,7 @@ To ensure that the proof structure is correct, this proof as well as the type ru
 \fi
 \section{Extensions}\label{sec:extensions}
 
-These are some way to further improve the usability and expressiveness of the type system.
+These are some ways to further improve the usability and expressiveness of the type system.
 % To limit the complexity a few features are not defined as part of the Corten or the implementation.
 Even though these extensions are not part of the implementation, they were taken into consideration when designing the type system. To show that the type system is capable of handling the additional challenges, we will shortly describe how these extensions could to be added to the type system.
 % \todo{move to future work?}
@@ -1964,7 +1964,8 @@ Note that, because the \code{ty!} macro takes the place of a Rust type, normal I
     };
     ($i:ident : $base_ty:ty | $pred:expr => $i2: ident | $pred2:expr) => {
         $crate::MutRefinement< $base_ty, 
-          {stringify! { $i }}, {stringify! { $pred }}, {stringify! { $i2 }}, {stringify! { $pred2 }}>
+          {stringify! { $i }}, {stringify! { $pred }},
+             {stringify! { $i2 }}, {stringify! { $pred2 }}>
     };
     // -- snip --
   }
@@ -2420,7 +2421,7 @@ The breath of features implemented in the thesis is limited, mainly because gett
 
 
 In terms of future work, there are two axis to work on: 
-On one hand covering more language features, like records or algebraic data types, would greatly improve the practicality of CortenC. 
+On one hand covering more language features, like records or algebraic data types, would greatly improve the practicality of CortenC. Of course the extensions outlined in \cref{ch:language} are also prime candidates for future improvements.
 
 On the other hand expanding the expressiveness of the type system would also be interesting: Introducing abstract predicates would allow a whole new set of properties to be specified. In particular developing a model of concurrency patterns could be a great application for them in Rust.
 

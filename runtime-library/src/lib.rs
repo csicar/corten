@@ -48,6 +48,24 @@ macro_rules! ctx {
 pub fn assert_ctx(_formulas: &[&'static str], _entries: &[(&dyn Any, &'static str, &'static str)]) {
 }
 
+macro_rules! corten_assume {
+    ( $pred:expr ) => {
+        assume(
+            $pred,
+            if (!$pred) {
+                unreachable!();
+            } else {
+                ()
+            },
+        );
+    };
+}
+
+#[inline(always)]
+pub fn assume(formula: bool, proof: ()) {
+    assert!(formula)
+}
+
 #[inline(always)]
 pub fn assert(formula: bool) {
     assert!(formula)

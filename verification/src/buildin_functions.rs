@@ -2,12 +2,14 @@ pub enum CtxSpecFunctions {
     AssertCtx,
     UpdateCtx,
     AssertFormula,
+    AssumeFormula,
 }
 
-static VARIANTS: [CtxSpecFunctions; 3] = [
+static VARIANTS: [CtxSpecFunctions; 4] = [
     CtxSpecFunctions::AssertCtx,
     CtxSpecFunctions::UpdateCtx,
     CtxSpecFunctions::AssertFormula,
+    CtxSpecFunctions::AssumeFormula,
 ];
 
 impl CtxSpecFunctions {
@@ -20,6 +22,7 @@ impl CtxSpecFunctions {
             CtxSpecFunctions::AssertCtx => "assert_ctx",
             CtxSpecFunctions::UpdateCtx => "update_ctx",
             CtxSpecFunctions::AssertFormula => "assert",
+            CtxSpecFunctions::AssumeFormula => "assume",
         }
     }
 

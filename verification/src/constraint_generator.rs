@@ -442,6 +442,19 @@ where
                         new_ctx,
                     ))
                 }
+                Some(CtxSpecFunctions::AssumeFormula) => {
+                    let formula = symbolic_execute(&args[0], tcx, ctx, local_ctx)?;
+                    trace!("found assertion to add to ctx");
+                    let new_ctx = ctx.assume_formula(formula);
+                    anyhow::Ok((
+                        RefinementType::new_empty_refinement_for(
+                            expr,
+                            local_ctx,
+                            fresh.fresh_ident(),
+                        ),
+                        new_ctx,
+                    ))
+                }
                 // Normal Function Call
                 None => {
                     let sig = func_decl.fn_sig().unwrap();

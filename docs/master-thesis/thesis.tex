@@ -20,6 +20,7 @@
 % \usepackage{ amssymb }
 \usepackage{listings}
 \usepackage{xargs}
+\usepackage[]{extdash}
 \usepackage{simplebnf}
 \usepackage{numprint}
 \usepackage[pdf]{graphviz}
@@ -1076,7 +1077,7 @@ For this purpose, Corten provides a mechanism for the programmer to instruct Cor
 
 \section{Type System} \label{sec:type-system}
 
-The following section will introduce the type checking rules of Corten. We assume the program has passed the Rust type checking rules, meaning (non-refined) type- and ownership-checking was successful.
+The following section will introduce the type checking rules of Corten. We assume the program has passed the Rust type checking rules, meaning (non-refined) type- and ownership\Hyphdash{}checking was successful.
 
 \begin{definition}[Typing Context $\Gamma = (\mu, \Phi)$]
   The typing context consist of an injective function $\mu : \text{PVar} \to \text{LVar}$ that is used for tracking the current logic variable associated with a program variables and a set of predicates $\Phi$
@@ -2441,7 +2442,7 @@ In terms of the analysis, it would also be interesting to correlate unsafe code 
 %% ----------------
 \appendix
 
-
+\chapter{Additional Graphs from the Use-Case Analysis}
 \begin{figure}[h]
 	\centering
 	\includegraphics[width=0.99\linewidth, clip, trim={0.2cm 0.2cm 0.2cm 0.2cm}]{../unsafe-occurences-vs-no-crates.pdf}

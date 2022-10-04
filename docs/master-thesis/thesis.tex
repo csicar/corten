@@ -15,7 +15,7 @@
 %% Available page modes: oneside, twoside
 %% Available languages: english, ngerman
 %% Available modes: draft, final (see README)
-\documentclass[twoside, english]{sdqthesis}
+\documentclass[twoside, english, final]{sdqthesis}
 
 % \usepackage{ amssymb }
 \usepackage{listings}
@@ -133,7 +133,7 @@
 \thesistype{Master's Thesis}
 
 %% Change the institute here, ``IPD'' is default
-\myinstitute{Institute of Theoretical Informatics (ITI)}
+\myinstitute{Institute of Information Security and Dependability (\textsc{KASTEL})}
 
 %% You can put a logo in the ``logos'' directory and include it here
 %% instead of the SDQ logo
@@ -149,10 +149,10 @@
 \advisorone{Dr. Mattias Ulbrich}
 %% The second advisor can be omitted
 \advisortwo{Sebastian Graf, M.Sc.}
-\advisorthree{Florian Lanzinger, M.Sc}
+\advisorthree{Florian Lanzinger, M.Sc.}
 
 %% Please enter the start end end time of your thesis
-\editingtime{4.4.2022}{4.10.2022}
+\editingtime{4th April 2022}{4th Oktober 2022}
 
 \settitle
 
@@ -585,8 +585,7 @@ We also found that libraries are much more likely to use \code{unsafe} Rust.
 	\caption{Scatter plot of a point representing creates, relating the number of unsafe occurrences to the number of unsafe LOC}
 	\label{fig:unsafe-scatter}
 \end{figure}
-\todo{Plots in Figure 3.1 sind ein bisschen klein
-- Außerdem ist in Figure 3.1 vielleicht eher die durchschnittliche unsafe-Block-Größe interessant? Dann bräuchte die y-Achse keine Log-Skala}
+
 
 \Cref{tab:unsafe-uses-by-crate} shows the result of our analysis: The total number of unsafe uses in an order of magnitude higher for binaries compared to libraries.
 The data in the table includes all crates except the outlier \code{windows-0.32.0}, which alone contains \numprint{233608} uses of \code{unsafe}. Nearly $2 / 3$ of all other library uses of \code{unsafe} combined.
@@ -681,9 +680,10 @@ This subsection will introduce the syntax of MiniCorten\footnote{Corten is named
 To simplify the formal definitions and proofs, the language is restricted to A-Normal Form (short ANF), as described by Sabry and Felleisen.
 ANF normalizes the syntactic structure by requiring that arguments of expressions must be variables. Nested expression are translated into variable declaration for each subexpression. Note that the implementation (for the most part) does not have this restriction.
 
-There are two namespaces for identifiers: $x \in \text{PVar}$ for variables of program variables and $\alpha \in \text{LVar}$ for variable in the refinement predicates. The syntax is defined by the following BNF-Grammar:
+There are two namespaces for identifiers: $x \in \text{PVar}$ for variables of program variables and $\alpha \in \text{LVar}$ for variable in the refinement predicates. The syntax is defined by Backus-Naur Form grammar in \cref{fig:mini-corten-syntax}
 
-% TODO: set floating
+\begin{figure}[h]
+  \centering
 \begin{bnfgrammar}
   $program$  ::=
     $func\_decl$ * : function declarations
@@ -752,9 +752,13 @@ There are two namespaces for identifiers: $x \in \text{PVar}$ for variables of p
     ::=                     : binary operation
     | $\wedge \ \mid \ \vee \ \mid \ \geq \ \mid \ + \ \mid \ ==$
 \end{bnfgrammar}
+\caption{Syntax of MiniCorten expressed in Backus-Naur Form}
+	\label{fig:mini-corten-syntax}
+\end{figure}
 
-Most constructs are standard, the main difference being the addition of refinement types that consist of a logic variable $\alpha$, a base type $b$ (from the target language) and a predicate $\varphi$. Intuitively this means that the value inhabiting that type satisfied the $\varphi$ in $\alpha$ represents the value. 
+Most constructs are quite standard, the main difference being the addition of refinement types that consist of a logic variable $\alpha$, a base type $b$ (from the target language) and a predicate $\varphi$. Intuitively this means that the value inhabiting that type satisfied the $\varphi$ in $\alpha$ represents the value. 
 The statement \code{relax\_ctx!\{...\}} allows the user (or a future inference system) to relax the restrictions in the current typing context (as long as they do not conflict with the actual context). The details will be explained in \cref{ch:type-system}.
+
 
 \section{Semantics}
 
@@ -1075,7 +1079,7 @@ For this purpose, Corten provides a mechanism for the programmer to instruct Cor
 The following section will introduce the type checking rules of Corten. We assume the program has passed the Rust type checking rules, meaning (non-refined) type- and ownership-checking was successful.
 
 \begin{definition}[Typing Context $\Gamma = (\mu, \Phi)$]
-  The typing context consist of an injective function $\mu : \text{PVar} \rightharpoonup \text{LVar}$ that is used for tracking the current logic variable associated with a program variables and a set of predicates $\Phi$
+  The typing context consist of an injective function $\mu : \text{PVar} \to \text{LVar}$ that is used for tracking the current logic variable associated with a program variables and a set of predicates $\Phi$
   It is used to constrain the logic variables in the image of $\mu$ and holds the relevant variable context for the various type checking rules.
   $\mu$ must contain a logic variable for every program variable and $\Phi$ can contain additional logic variables not found in the image of $\mu$.
 
@@ -1488,8 +1492,8 @@ We will assume, that the base language (e.g. Rust) satisfies the safety properti
 
 Since Corten's types do not influence the execution semantics of the program and conformance for the base types is assumed, progress not interesting.
 
-In contrast, preservation requires us to show that conformance of $\sigma$ to Corten's (refined) type context is preserved by execution. The proof is structured as follows: We start by showing in \cref{lem:conf-sym-exec}, that the evaluation of expressions preserves state conformance (although expressed slightly unusual way). 
-Next \cref{lem:conservative-ref-tracking} we argue for why reference tracking is conservative, followed by \cref{lem:conservative-subtype} which demonstrates that our notion of sub-contexts is in deed conservative. Using these arguments, \cref{lem:preservation-conformance} will show, that preservation holds for the type system.
+In contrast, preservation requires us to show that conformance of $\sigma$ to Corten's (refined) type context is preserved by execution. The proof sketch is structured as follows: We start by showing in \cref{lem:conf-sym-exec}, that the evaluation of expressions preserves state conformance (although expressed slightly unusual way). 
+Next \cref{lem:conservatice-reference-typing} we argue for why reference tracking is conservative, followed by \cref{lem:conservative-subtype} which demonstrates that our notion of sub-contexts is in deed conservative. Using these arguments, \cref{lem:preservation-conformance} will show, that preservation holds for the type system.
 
 \begin{lemma}[Conformance of Symbolic Execution]\label{lem:conf-sym-exec}
   If \hyperref[def:state-conformance]{$\sigma : \Gamma$}, $\Gamma \vdash \alpha \text{ fresh}$ then $\sigma[x \mapsto \bbracket{e} \sigma] : \Gamma[x \mapsto \alpha],(\alpha \simeq \bbracket{e} \Gamma)$
@@ -1622,7 +1626,7 @@ The next lemma not only shows that predicate types can not have no existential b
   \end{align*}
 \end{proof}
 
-\begin{lemma}[Subtyping is Conservative]\label{lem:conservative-subtype}
+\begin{lemma}[Sub context relation is conservative]\label{lem:conservative-subtype}
   If \hyperref[rule:Sub-Ctx]{$\Gamma \preceq \Gamma'$} and $\sigma : \Gamma$ then $\sigma : \Gamma'$
 \end{lemma}
 
@@ -1680,6 +1684,15 @@ The next lemma not only shows that predicate types can not have no existential b
   \end{align}
 \end{proof}
 
+
+\begin{lemma}[Subtyping is Conservative]\label{lem:conservative-subtype-type}
+  If \hyperref[rule:Sub-Ctx]{$\Gamma \vdash \tau \preceq \tau'$} and $\sigma : \Gamma$ then $\sigma : \Gamma'$
+\end{lemma}
+
+\begin{proof}[Proof Sketch]
+
+\end{proof}
+
 \begin{lemma}[Preservation of State Conformance]\label{lem:preservation-conformance}
   If $\Gamma \vdash s \Rightarrow \Gamma_2$, $\sigma : \Gamma$ and $\tuple{s}{\sigma} \leadsto \tuple{s_1}{\sigma_1}$, then  $\sigma_1 : \Gamma_1$ and $\Gamma_1 \vdash s_1 \Rightarrow \Gamma_2$ for some $\Gamma_1$
 \end{lemma}
@@ -1705,7 +1718,10 @@ To ensure that the proof structure is correct, this proof as well as the type ru
         \Cref{lem:conf-sym-exec} for $\gamma$ implies $\sigma[x \mapsto \bbracket{y}\sigma] : \Gamma[x \mapsto \gamma], \gamma \simeq \bbracket{y}\Gamma$.
 
         Choose $\Gamma_1 = \Gamma_2$ which implies the goal
-      \item \textsc{Case \cref{Intro-Sub}} should work similarly to Sub-Context a few cases further down.
+      \item \textsc{Case \cref{rule:Intro-Sub}}
+        gives $\Gamma \vdash e': \tau'$ and $\Gamma \vdash \tau' : \tau$ as well as the induction hypothesis for the inner expression $e'$.
+        
+        The argument for why this should hold is similar to the Sub-Context a few cases further down.
         % $ m' \vDash \varphi[\mu[x \mapsto \gamma](y) \tr \bbracket{\sigma(y)} \mid y]$.
 
         % \begin{align*}
@@ -1819,21 +1835,21 @@ Even though these extensions are not part of the implementation, they were taken
 Firstly, a key part of realistic programs are data structures that comprise multiple basic data types. In Rust these are called \code{struct}s and work similar to records or product types in functional languages. 
 
 Once again, we can take advantage of Rust ownership system: Any part of a \code{struct} (even nested fields) can only belong to one variable. This means that the proposed system for handling mutable references should seamlessly extend to \code{struct}s: 
-The variable mapping in $\Gamma$ is generalized: $\mu : \text{Path} \to \text{LVar}$, which tracks the logic variable assignments for each field of an owned \code{struct}. The relevant typing rules should work without major changes:
+The variable mapping in $\Gamma$ is generalized: $\mu : \text{Path} \to \text{LVar}$, which tracks the logic variable assignments for each field of an owned \code{struct}. The relevant typing rules should work without major changes.
+%  For example:
 
-\begin{gather*}
-  \inferrule*[left=Var]
-    {\beta \text{ fresh} \\ \mu(p.x) = \alpha}
-    {\Gamma \vdash p.x : \{ \beta : b \mid \beta \doteq \alpha \} \Rightarrow \Gamma}
-    \\
-  \inferrule*[left=Assign-Strong]
-    {\Gamma \vdash e : \tau}
-    {\Gamma \vdash p.x = e \Rightarrow \Gamma[p.x \mapsto \tau]}
-    \\
-    \dots
-\end{gather*}
+% \begin{gather*}
+%   \inferrule*[left=Var]
+%     {\beta \text{ fresh} \\ \mu(p.x) = \alpha}
+%     {\Gamma \vdash p.x : \{ \beta : b \mid \beta \doteq \alpha \} \Rightarrow \Gamma}
+%   \inferrule*[left=Assign-Strong]
+%     {\Gamma \vdash e : \tau}
+%     {\Gamma \vdash p.x = e \Rightarrow \Gamma[p.x \mapsto \tau]}
+%     \\
+%     \dots
+% \end{gather*}
 
-\todo{rule for intro: mut ref?}
+% \todo{rule for intro: mut ref?}
 
 
 \begin{listing}[h]
@@ -2042,7 +2058,7 @@ Consider the example program \ref{lst:simple-example-cortenc}, which returns the
 Rustc will call the CortenC callback with the item \code{fn inc} once the HIR construction is completed. Next, the callback calls \code{type\_check\_function} where the initial context $\Gamma = ( a : \set{n \mid n > 0})$ is constructed and calls \code{type\_expr} with the the function body expression. Base the function body is a sequence \code{transition\_stmt} is called for all expect the last expression in the sequence. \code{let b = 1} updates the context to $\Gamma_1 = (a : \set{n \mid n > 0}, b \mapsto \set{v_1 \mid v_1 \doteq 1})$ ($v_1$ is a name generated by \code{Fresh}). 
 Finally \code{type\_expr} types the expression \code{a + b} according to the typing rules described above resulting in the type $\set{ v_2 : i32 \mid v_2 \doteq n + v_1}$.
 This type is then returned as the overall type of the body expression to \code{type\_check\_function}, which has the responsibility of checking that in the context $\Gamma_1$, the actual return type is a subtype of the specified type in the signature. 
-Thusly \code{require\_is\_subtype\_of} is called with the two types and subsequently dispatches the SMT shown in listing \ref{smt-sample-output}. 
+Thusly \code{require\_is\_subtype\_of} is called with the two types and subsequently dispatches the SMT shown in listing \ref{lst:smt-sample-output}. 
 Because the SMT call returned \code{unsat}, the subtype relation is valid and the function type checking was successful.
 
 
@@ -2407,6 +2423,8 @@ On one hand covering more language features, like records or algebraic data type
 
 On the other hand expanding the expressiveness of the type system would also be interesting: Introducing abstract predicates would allow a whole new set of properties to be specified. In particular developing a model of concurrency patterns could be a great application for them in Rust.
 
+In terms of the analysis, it would also be interesting to correlate unsafe code blocks with the frequency of changes using, for example the git history. If unsafe code changes often, that probably means that this \code{unsafe} use is more problematic as it clearly needs to change often.
+
 
 %% content
 
@@ -2417,6 +2435,7 @@ On the other hand expanding the expressiveness of the type system would also be 
 %% Add entry to the table of contents for the bibliography
 \printbibliography[heading=bibintoc]
 
+\newpage
 %% ----------------
 %% |   Appendix   |
 %% ----------------
@@ -2440,4 +2459,4 @@ On the other hand expanding the expressiveness of the type system would also be 
 
 \end{document}
 
-\todos
+% \todos

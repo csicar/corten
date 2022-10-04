@@ -20,11 +20,11 @@ However existing approaches for adapting Refinement Types from functional to imp
 % However existing approaches for adapting Refinement Types from functional to imperative languages proved hard without compromising on at least one of core features of Refinement Types.
 
 % I argue that a base language restricted to unique mutable references will make
-This thesis presents a Refinement Type system minimal compromises by taking advantage of Rust's restriction to unique mutable references.
+This thesis presents a Refinement Type system with minimal compromises by taking advantage of Rust's restriction to unique mutable references.
 
 
-To this end, we augment a flow-sensitive Refinement Type system with a variable typing context that facilitates type updates and tracks reference destinations. We define a notion of subtyping on this context and argue for the soundness of our typing rules. 
-Furthermore we implement a prototype verifier for an extended version of our type system as a plugin to the Rust compiler to evaluate the efficacy of the approach on a selection of examples demonstrating automatic verification and minimal, approachable specification.
+To this end, we augment a flow-sensitive Refinement Type system with a varying typing context that facilitates type updates and tracks reference destinations. We define a notion of subtyping on this context and argue for the soundness of our typing rules. 
+Furthermore we implement a prototype verifier for an extended version of our type system as a plugin to the Rust compiler and evaluate its efficacy on a selection of examples, demonstrating automatic verification and minimal, approachable specification.
 
 Our work provides insights into the unique advantages that Rust's ownership system provides for a Refinement Type system. Additionally we analyse a large dataset of existing Rust code to gauge how relevant language features are used in practice.
 

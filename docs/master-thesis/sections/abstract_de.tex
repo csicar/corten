@@ -11,4 +11,18 @@
 %% Version 1.3.5, 2020-06-26
 
 \Abstract
-Deutsche Zusammenfassung
+Die Korrektheit von Software ist ein zentrales Ziel der Softwareentwicklung.
+Eine Möglichkeit die Korrektheit zu verbessern, ist die Verwendung starker und deskriptiver Typen, die Korrektheitseigenschaften als Typen ausdrücken, und das Verifizieren ihrer Kompatibilität mit den Programm mit Hilfe von Typsystemen.
+Insbesondere Refinement Types haben gezeigt, dass selbst mit einem Verifikationssystem, das auf eine entscheidbare Logik beschränkt ist, komplizierte Eigenschaften leicht ausgedrückt und automatisch verifiziert werden können.
+
+Bestehende Ansätze zur Anpassung von Refinement Types von funktionalen an imperative Sprachen haben jedoch gezeigt, dass das die Existenz von veränderbaren Daten und Referenzen Kompromisse bei mindestens einer der Kerneigenschaften von Refinement Types mit sich bringt, nämlich der automatisierten, entscheidbaren Verifikation und einer minimalen, leicht verständlichen Spezifikation.
+% Bestehende Ansätze zur Anpassung von Refinement Types von funktionalen an imperative Sprachen haben sich jedoch als schwierig erwiesen, ohne Kompromisse bei mindestens einer der Kerneigenschaften von Refinement Types einzugehen.
+
+% Ich argumentiere, dass eine Basissprache, die sich auf eindeutige, veränderbare Referenzen beschränkt, den Einsatz von Refinement Types in funktionalen Sprachen erleichtert.
+In dieser Arbeit wird ein Refinement-Type-System mit geringfügigen Kompromissen vorgestellt, indem Rusts Beschränkung auf unique mutable Referenzen ausgenutzt wird.
+
+
+Zu diesem Zweck erweitern wir ein flusssensitives Refinement-Typsystem um einen variierenden Typisierungskontext, der Typaktualisierungen erleichtert und Referenzen rückverfolgt. Dafür wird der Begriff der Subtypisierung auf diesem Kontext definiert und die Korrektheit der Typregeln begründet.
+Darüber hinaus wurde Prototyp ein Typ-Checkers als Rust-Compiler Plugin entwickelt, der mit Hilfe einer erweiterten Version des vorgestellten Typsystems, zur Evaluation der Effektivität des Ansatzes anhand einer Auswahl von Beispielen verwendet wird, welche die automatische Verifikation, den geringen Spezifikationsaufwand und die leichte Zugänglichkeit demonstrieren.
+
+Unsere Arbeit bietet Erkenntnisse in die ungewöhnlichen Vorteile, die das Rust-Ownership-System für ein Refinement-Typsystem bietet. Zusätzlich analysieren wird auch ein großer Datensatz von existierendem Rust-Code analysiert, um festzustellen, wie relevante Sprachmerkmale in der Praxis verwendet werden.

@@ -22,6 +22,7 @@
 \usepackage{xargs}
 \usepackage{simplebnf}
 \usepackage{numprint}
+\usepackage[pdf]{graphviz}
 \usepackage{ amsmath }
 \usepackage{mathpartir}
 \usepackage{minted}
@@ -722,9 +723,9 @@ There are two namespaces for identifiers: $x \in \text{PVar}$ for variables of p
     | $ref\_pred$                                         : predicate for a reference type
     | $value\_pred$                                       : predicate for a value type
   ;;
-  $ref\_pred$ ::=
-    $logic\_ident$ = \& $ident$
-    | $ref\_pred$ \cdisj $ref\_pred$         : mutable reference
+  $ref\_pred$ ::=                                                   : mutable reference predicate
+    | $\alpha$ = \& $x_1$ \cdisj ... \cdisj $\alpha$ = \&$x_n$  : proper reference constraint
+    | $\alpha_1$ = $\alpha_2$                                       : reference predicate delegation
   ;;
   $value\_pred$ ::=
     $\alpha$                                 : variable
@@ -748,8 +749,8 @@ There are two namespaces for identifiers: $x \in \text{PVar}$ for variables of p
     | ()                    : unit value
   ;;
   $\odot$
-    ::=                     : bin\_op 
-    | $\wedge$ | $\vee$ | $\geq$ | $+$ | $=$
+    ::=                     : binary operation
+    | $\wedge \ \mid \ \vee \ \mid \ \geq \ \mid \ + \ \mid \ ==$
 \end{bnfgrammar}
 
 Most constructs are standard, the main difference being the addition of refinement types that consist of a logic variable $\alpha$, a base type $b$ (from the target language) and a predicate $\varphi$. Intuitively this means that the value inhabiting that type satisfied the $\varphi$ in $\alpha$ represents the value. 
@@ -1202,35 +1203,34 @@ In some cases, it may not be possible to generate the strongest type in the pred
 
 \end{definition}
 
-\begin{definition}[Expressions Typing: $\Gamma \vdash e : \tau$]
+\begin{definition}[Expression Typing: $\Gamma \vdash e : \tau$]
 
 
 $$ \begin{gathered}
   \inferrule*[left=Lit\rulelabel{Lit}]
-    {\alpha \text{ fresh}}
+    {\Gamma \vdash \alpha \text{ fresh}}
     {\Gamma \vdash v: \{ \alpha : b \mid \alpha \simeq \bbracket{v}\Gamma\} }
   %
   \quad
   \inferrule*[left=Add\rulelabel{Add}]
     {
-      \alpha \text{ fresh}
+      \Gamma \vdash \alpha \text{ fresh}
     }
     {\Gamma \vdash x_1 \odot x_2 : \{ \alpha: b \mid \alpha \simeq \bbracket{x_1 \odot x_2}\Gamma \} }
   %
   \\
   \inferrule*[left=Var\rulelabel{Var}]
-    {\alpha \text{ fresh}}
-    {(\mu, \Phi)\vdash x : \{ \alpha : b \mid \alpha \simeq \bbracket{x}\Gamma \} }
+    {\Gamma \vdash \alpha \text{ fresh}}
+    {\Gamma \vdash x : \{ \alpha : b \mid \alpha \simeq \bbracket{x}\Gamma \} }
   %
-  \inferrule*[left=Var-Deref\rulelabel{Var-Deref}]
-    {\Gamma \vdash *x \set{y} \\ \Gamma \vdash y : \tau }
-    {\Gamma \vdash *x : \tau }
+  \inferrule*[left=Ref\rulelabel{Ref}]
+  {\Gamma \vdash \alpha \text{ fresh}}
+  {\Gamma \vdash \&x : \{ \alpha : \&b \mid \alpha \simeq \bbracket{\&x}\Gamma\}}
   %
   \\
-  \inferrule*[left=Ref\rulelabel{Ref}]
-    {\Gamma \vdash \alpha \text{ fresh}}
-    {\Gamma \vdash \&x : \{ \alpha : \&b \mid \alpha \simeq \bbracket{\&x}\Gamma\}}
-  %
+  \inferrule*[left=Var-Deref\rulelabel{Var-Deref}]
+    {\Gamma \vdash *x \in \set{y} \\ \Gamma \vdash y : \tau }
+    {\Gamma \vdash *x : \tau }
   \quad
   \inferrule*[left=Intro-Sub\rulelabel{Intro-Sub}]
     {
@@ -1247,7 +1247,7 @@ Because we assume that the base language type checking already accepted the prog
 
 
 
-\begin{definition}[Statement Type Checking $\Gamma \vdash s \Rightarrow \Gamma'$]
+\begin{definition}[Statement Type Checking $\Gamma \vdash s \Rightarrow \Gamma'$]\label{def:statement-checking}
 
 $$ \begin{gathered}
   \inferrule*[left=If\rulelabel{If}]
@@ -1375,16 +1375,19 @@ For clarity, \cref{rule:Fn-Call} omits a renaming step done directly after extra
 \begin{definition}[Reference Destination Judgement $\Gamma \vdash *x \in \set{\dots}$]
 
 To complete the type system, two more judgements need to be defined. In the statement and expression typing rules, it is necessary to gain some information about the reference target. The rule \Cref{rule:May-Ref} ensures that the set $\set{y_1, \dots, y_n}$ contains all possible reference targets. The special case $\set{y}$ implies, that $x$ must reference exactly $y$, because a reference without a target is impossible.
-\Cref{rule:May-Ref} stipulates that 
-$$ \begin{gathered}
+
+$$\begin{gathered}
   \inferrule*[left=May-Ref\rulelabel{May-Ref}]
-    {\mu(x) = \alpha \\ \vDash \Phi \to \alpha \doteq \&y_1 \vee \dots \vee \alpha \doteq \&y_n}
+    {\mu(x) = \alpha \\  (\beta \doteq \&y_1 \vee \dots \vee \beta \doteq \&y_n) \in \Phi\Downarrow\alpha}
     {(\mu, \Phi)\vdash *x \in \{ y_1, \dots,y_n \} }
   %
   \\
 \end{gathered}$$
 
-Although the rules might not suggest it, in practise inferring good candidates for sets of reference targets can usually be done by a some syntactic analysis that checks the set of logic variables equal to $\alpha$ for a reference predicate. This is easy because the syntax for predicate refinements is very limited.
+$\Phi\Downarrow\alpha$ computes the set of equivalent values in $\Gamma$'s constraint set. The function satisfies the three properties of equivalence classes: $\alpha \in \Phi\Downarrow\alpha$, $\alpha \in \Phi\Downarrow\beta \Leftrightarrow \beta \in \Phi\Downarrow\alpha$ and $\alpha \in \Phi\Downarrow\beta \wedge \beta \in \Phi\Downarrow\gamma \implies \gamma \in \Phi\Downarrow\gamma$. This property holds because of the limited expressiveness of reference predicates, which can only directly specify equality with another logic variable or a reference target constraint, which ends the chain. Reference predicates can not be nested or further constrained by other predicates.
+The equivalence set is constructed by iteratively computing the fixpoint $\beta \in \Phi\Downarrow\alpha \wedge (\dots \wedge \beta \doteq \gamma \wedge \dots) = \Gamma \implies \gamma \in \Phi\Downarrow\alpha$.
+This is safe because each iteration monotonically appends to the set and the set of formulae and variables is finite.
+Well-formedness requires that there to be exactly one reference target constraint. Thus the reference constraint is unique and can be inferred.
 
 \end{definition}
 
@@ -1400,6 +1403,7 @@ To reduce the verbosity of the notation, for $x_1 \dots x_n \in \dom(\mu)$ we wi
 we shorten $\Phi[\mu(x_1) \tr g(x_1)][\dots][\mu(x_n) \tr g(x_n)]$ to $\Phi[f(x_i) \tr g(x_i) \mid x]$ and $\Phi[\mu(x_i) \tr g(x_i) \mid x \neq y]$ if $x \in \set{ x \mid x \in \dom(\mu), x \neq y }$
 
 
+
 \begin{definition}[State Conformance]\label{def:state-conformance}
   A state $\sigma$ is conformant with respect to a typing context $\Gamma = (\mu, \Phi)$ (written as $\sigma : \Gamma$), iff:
   $$
@@ -1408,6 +1412,17 @@ we shorten $\Phi[\mu(x_1) \tr g(x_1)][\dots][\mu(x_n) \tr g(x_n)]$ to $\Phi[f(x_
   I.e. a conformant type context does not contradict the execution state.
 \end{definition}
 
+The state conformance rule is quite different to a standard state conformance rule. It is owed to the fact that firstly, the context contains formulae and secondly, the context may contain free variables, which are not bound by any variable in $\sigma$.
+To get an idea of the behaviour of this definition consider the following properties:
+\begin{itemize}
+  \item If $\sigma : (\emptyset, \Phi)$ then $\Phi$ is satisfiable
+  \item If $\sigma : (\mu, \Phi_1 \wedge \Phi_2)$ then $\sigma : (\mu, \Phi_1)$ and $\sigma : (\mu, \Phi_1)$.
+  \item If $\sigma : (\mu, \Phi)$ and $\text{FV}(\Phi) \subseteq \dom(\mu)$, then $\vDash \Phi[\mu(x) \triangleright \bbracket{\sigma(x)} \mid x \in \dom(\mu)]$
+\end{itemize}
+
+Especially interesting is the last one, which follows from the fact, by definition a $\Phi$ without any free variables, will have all variables replaced by constants, making the entire predicate constant. Because the definition of state conformance was satisfied for some $m$ it does not depend on, $\Phi$ is also valid.
+
+With the notion of conformance established, next we will introduce our definition of safety.
 As usual for a small-step semantic, we will consider progress and preservation based on Wright and Felleisen \cite{wright_syntactic_1994}. 
 We will assume, that the base language (e.g. Rust) satisfies the safety properties and show that relative to the base language Corten also satisfies the type safety properties.
 
@@ -1437,8 +1452,8 @@ Next \cref{lem:conservative-ref-tracking} we argue for why reference tracking is
   
   Split the goal on the conjunction; if both sides are valid then the conjunction is valid (for the given model).
   \begin{itemize}
-    \item \textsc{Part I} show: $m' \vDash \Phi
-    [\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]$
+    \item \textsc{Part I} Show $m' \vDash \Phi[\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]$.
+      In essence, we show that the satisfiability of $\Phi$ is not changed by the addition of fresh variable $\alpha$. We start by splitting the substitution into the part of concerned with $x$ and a part that is not ($x \neq y$). We then introduce a useless substitution for $\alpha$ that cannot the formula because it does not contain $\alpha$ (and the substitution on the left explicitly excludes $x$). After some bookkeeping, we use the fact that substitution in expression can be rephrased as a function update on the model $m$ to arrive at our goal.
       \begin{align*}
           &\phantom{=}\ \ \Phi[\mu(y) \tr \bbracket{\sigma(y)} \mid y]
           \\   &= \Phi[\mu(y) \tr \bbracket{\sigma(y)} \mid y \neq x][\mu(x) \tr \bbracket{\sigma(x)}]
@@ -1462,7 +1477,10 @@ Next \cref{lem:conservative-ref-tracking} we argue for why reference tracking is
             [\mu[x \mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]
       \end{align*}
     \item \textsc{Part II} show $m' \vDash (\alpha \simeq \bbracket{e}\Gamma)[\mu[x\mapsto \alpha](y) \tr \bbracket{\sigma'(y)} \mid y]$
-      
+      In part two we need to show that our symbolic execution does not conflict with $\sigma$. 
+      The problematic case is handling of reassignments to a variable. In that case, the old logic variable becomes unbound, forcing us to show that we can choose a appropriate model.
+      A multitude of case distinctions ensures none of these cases are missed.
+
       Case distinction on $\alpha \simeq \bbracket{e}\Gamma$
 
       \begin{itemize}
@@ -1510,20 +1528,47 @@ Next \cref{lem:conservative-ref-tracking} we argue for why reference tracking is
   \end{itemize}
 \end{proof}
 
-A crucial consequence of \cref{lem:conf-sym-exec} it that references are tracked conservatively:
-\begin{lemma}[Conservative Reference Tracking]\label{lem:conservative-ref-tracking}
- If $\sigma : \Gamma$, $\Gamma \vdash x : \{ \alpha : \&b \mid \alpha \doteq \&y_i \}$ and $ \Gamma \vdash \alpha \text{ fresh}  $ then $\bbracket{\sigma(x)} = \&y_i$
+% \begin{lemma}[Conservative Reference Tracking]\label{lem:conservative-ref-tracking}
+%  If $\sigma : \Gamma$, $\Gamma \vdash x : \{ \alpha : \&b \mid \alpha \doteq \&y_i \}$ and $ \Gamma \vdash \alpha \text{ fresh}  $ then $\bbracket{\sigma(x)} = \&y_i$
+% \end{lemma}
+
+% \begin{proof}
+%   \begin{align*}
+%     &\phantom{\implies}\ \ \sigma : \Gamma 
+%     \\ &\implies \sigma : \Gamma[x \mapsto \alpha], \alpha \doteq \&y_i \quad (\cref{lem:conf-sym-exec})
+%     \\ &\implies m \vDash (\Phi \wedge \alpha \doteq \&y_i)[\mu(z) \tr \bbracket{\sigma(z)} \mid z] \quad \text{for some }m
+%     \\ &\implies m \vDash (\alpha \doteq \&y_i)[\mu(x) \tr \bbracket{\sigma(x)} \mid x]
+%     \\ &\implies m \vDash (\alpha \doteq \&y_i)[\alpha \tr \bbracket{\sigma(x)} \mid x]
+%     \\ &\implies m \vDash \bbracket{\sigma(x)} \doteq \&y_i \quad \text{independent of $m$}
+%     \\ &\implies  \bbracket{\sigma(x)} = \&y_i
+%   \end{align*}
+% \end{proof}
+
+The next lemma not only shows that predicate types can not have no existential bindings, but also -- crucially -- that the typing assigned to mutable references is conservative, in the sense that it covers all possible reference destinations.
+\begin{lemma}[Reference Predicate do not admit existential typing]\label{lem:conservatice-reference-typing}
+  If $\sigma : \Gamma $ and $\Gamma \vdash *x \in \set{y_1, \dots, y_n}$ then $\bbracket{\sigma(x)} = \&y_i$ for some $i \in 1, \dots, n$ 
 \end{lemma}
 
-\begin{proof}
+\begin{proof}[Proof Sketch]
+  Rule inversion of the \cref{rule:May-Ref} rule yields $\mu(x) = \alpha \text{ (I)}$ and $\Gamma\Downarrow \alpha \ni \set{y_1, \dots, y_n}$. 
+  Let $\varphi_\alpha = (\alpha \doteq \&y_1 \vee \dots \vee \alpha \doteq \&y_n)$. By using the definition of the $\Gamma\Downarrow \alpha$ we can show that $\varphi_\alpha[\mu(x) \tr \bbracket{\sigma(x)} \mid x \in \dom(\mu)] \text{ (II)}$ is satisfiable, because $\varphi_\alpha$ is less restrictive than $\Phi$ (being directly constructed from a subset of terms in a conjunction) and $\Phi$ already satisfies the state conformance property. 
+
+  Keep in mind that $\varphi_\alpha$ has no free variables wrt. $\mu$ as it only refers to the logic variable $\alpha$, which by assumption $\text{(I)}$ is not free and program variables $y_i$, which as -- as far as the logic is concerned -- mere constants (III). 
+  The argument from the state conformance examples also applies here: If we can show a formula to be independent from the rest and the model, then showing satisfiability for a model that $\varphi_\alpha$ does not depends on, yields validity $\text{(IV)}$. 
+
+  Therefore, for some $m$:
   \begin{align*}
-    &\phantom{\implies}\ \ \sigma : \Gamma 
-    \\ &\implies \sigma : \Gamma[x \mapsto \alpha], \alpha \doteq \&y_i \quad (\cref{lem:conf-sym-exec})
-    \\ &\implies m \vDash (\Phi \wedge \alpha \doteq \&y_i)[\mu(z) \tr \bbracket{\sigma(z)} \mid z] \quad \text{for some }m
-    \\ &\implies m \vDash (\alpha \doteq \&y_i)[\mu(x) \tr \bbracket{\sigma(x)} \mid x]
-    \\ &\implies m \vDash (\alpha \doteq \&y_i)[\alpha \tr \bbracket{\sigma(x)} \mid x]
-    \\ &\implies m \vDash \bbracket{\sigma(x)} \doteq \&y_i \quad \text{independent of $m$}
-    \\ &\implies  \bbracket{\sigma(x)} = \&y_i
+    &\phantom{\implies}\ m \vDash \Phi[\mu(z) \tr \bbracket{\sigma(z)} \mid z \in \dom(\mu)] \\
+    &\overset{\text{(II)}}{\implies} m \vDash \varphi_\alpha[\mu(z) \tr \bbracket{\sigma(z)} \mid z \in \dom(\mu)] \\
+    &\overset{\text{}}{\implies} m \vDash \varphi_\alpha[\mu(x) \tr \bbracket{\sigma(x)}][\mu(z) \tr \bbracket{\sigma(z)} \mid z \in \dom(\mu) \setminus \set{x}] \\
+    &\overset{\text{(III)}}{\implies} m \vDash \varphi_\alpha[\mu(x) \tr \bbracket{\sigma(x)}] \\
+    % &\overset{\text{(I)}}{\implies} m \vDash \varphi_\alpha[\alpha \tr \bbracket{\sigma(x)}][\mu(z) \tr \bbracket{\sigma(z)} \mid z \in \dom(\mu)] \\
+    &\overset{\text{}}{\implies} m \vDash (\alpha \doteq \&y_1 \vee \dots \vee \alpha \doteq \&y_n)[\mu(x) \tr \bbracket{\sigma(x)}] \\
+    &\overset{\text{(I)}}{\implies} m \vDash (\alpha \doteq \&y_1 \vee \dots \vee \alpha \doteq \&y_n)[\alpha \tr \bbracket{\sigma(x)}] \\
+    &\overset{\text{(IV)}}{\implies} \vDash (\bbracket{\sigma(x)} \doteq \&y_1 \vee \dots \vee \bbracket{\sigma(x)} \doteq \&y_n) \\
+    %
+    &\ \ \,\overset{\text{}}{\Leftrightarrow} \bbracket{\sigma(x)} \doteq \&y_i \text{ for some $i \in 1,\dots,n$} \\
+    %
   \end{align*}
 \end{proof}
 
@@ -1534,40 +1579,45 @@ A crucial consequence of \cref{lem:conf-sym-exec} it that references are tracked
 \begin{proof}
   Given $\Gamma \preceq \Gamma'$, $\sigma : \Gamma$ show $\sigma : \Gamma'$. Let $x \in \mu$ denote $x \in \dom(\mu)$ and $v_x$ denote $\bbracket{\sigma(x)}$.
 
+  We need to show that for a given model of $\sigma : \Gamma$ we can find a model, that satisfies $\sigma : \Gamma'$. We use the preconditions of the \ref{rule:Sub-Ctx} rule, which yields an implication relation between the type contexts \eqref{eq:sub-i} and the fact that only some variables, namely $\dom(\mu') \setminus \dom(\mu)$, are fresh and therefore unconstrained by $\Gamma$ and therefore these variables can be chosen to suit our needs: The logic variables that become unbound in $\Gamma'$ relative to $\Gamma$ are instead constrained to the required value by the chosen context $m$. 
+  Also recall that $\mu$ is injective.
+
   Rule inversion on $\Gamma \preceq \Gamma'$ yields:
   \begin{align}
       &m \vDash \Phi'[\mu'(x) \tr \mu(x) \mid x \in \mu] \to \Phi \quad \text{forall }m\label{eq:sub-i}
     \\ 
-      & \dom(\mu) \subseteq \dom(\mu)\label{eq:sub-ii}
+      & \dom(\mu') \subseteq \dom(\mu)\label{eq:sub-ii}
     \\ 
       \sigma : \Gamma 
       &\implies m^\star \vDash \Phi[\mu(x) \tr v_x \mid x \in \mu] \quad \text{for some }m^\star
     \\
-      &\implies m^\star \vDash \Phi[\mu(x) \tr v_x \mid x \in \mu]
-    \\ 
-      \intertext{$\mu' \setminus \mu$  is fresh wrt. $\Gamma$}
-      &\implies m^\star[\mu'(x) \tr v_x \mid x\in\mu'\setminus\mu] 
+      \intertext{$\dom(\mu') \setminus \dom(\mu)$  is fresh wrt. $\Gamma$}
+      &\implies m^\star[\mu'(x) \mapsto v_x \mid x\in\mu'\setminus\mu] 
       \vDash \Phi[\mu(x) \tr v_x \mid x \in \mu] 
     \\
-      &\implies  m^\star[\mu'(x) \tr v_x \mid x\in\mu'\setminus\mu][\mu(x) \tr v_x \mid x \in \mu] 
+      &\implies  m^\star[\mu'(x) \mapsto v_x \mid x\in\mu'\setminus\mu][\mu(x) \mapsto v_x \mid x \in \mu] 
       \vDash \Phi
     \\
-      \intertext{Let $m=m^\star[\mu'(x) \tr v_x \mid x \in \mu'\setminus\mu]$}
-      &\implies  m[\mu(x) \tr v_x \mid x \in \mu] 
+      \intertext{Let $m=m^\star[\mu'(x) \mapsto v_x \mid x \in \mu'\setminus\mu]$}
+      &\implies  m[\mu(x) \mapsto v_x \mid x \in \mu] 
       \vDash \Phi\label{eq:sub-iv}
     \\
-      \intertext{\cref{eq:sub-i} for $m$}
-      &\implies m[\mu(x) \tr v_x \mid x \in \mu] 
+      \intertext{\cref{eq:sub-i} for $m[\mu(x) \mapsto v_x \mid x \in \mu]$}
+      &\implies m[\mu(x) \mapsto v_x \mid x \in \mu] 
       \vDash \Phi'[\mu'(x) \tr \mu(x) \mid x \in \mu] \to \Phi
     \\
       \intertext{Using \cref{eq:sub-iv}:}
-      &\implies m[\mu(x) \tr v_x \mid x \in \mu] 
+      &\implies m[\mu(x) \mapsto v_x \mid x \in \mu] 
       \vDash \Phi'[\mu'(x) \tr \mu(x) \mid x \in \mu]
     \\
       &\implies m 
       \vDash \Phi'[\mu'(x) \tr \mu(x) \mid x \in \mu][\mu(x) \tr v_x \mid x \in \mu]
     \\
+      \intertext{Composition of the substitutions\footnote{with the same range and no conflicts}: $\dots[a \tr b][b \tr c]$ to $\dots[a \tr c]$}
       &\implies m
+      \vDash \Phi'[\mu'(x) \tr v_x \mid x \in \mu]
+    \\
+      &\overset{\mathclap{Def. m}}{\implies} m^\star[\mu'(x) \mapsto v_x \mid x \in \mu'\setminus\mu]
       \vDash \Phi'[\mu'(x) \tr v_x \mid x \in \mu]
     \\
       &\implies m^\star
@@ -1583,35 +1633,43 @@ A crucial consequence of \cref{lem:conf-sym-exec} it that references are tracked
 \begin{lemma}[Preservation of State Conformance]\label{lem:preservation-conformance}
   If $\Gamma \vdash s \Rightarrow \Gamma_2$, $\sigma : \Gamma$ and $\tuple{s}{\sigma} \leadsto \tuple{s_1}{\sigma_1}$, then  $\sigma_1 : \Gamma_1$ and $\Gamma_1 \vdash s_1 \Rightarrow \Gamma_2$ for some $\Gamma_1$
 \end{lemma}
-\begin{proof} Rule Induction over $\tuple{s}{\sigma} \leadsto \tuple{s_1}{\sigma_1}$
+To ensure that the proof structure is correct, this proof as well as the type rules and some other lemmata were also partially formalized in the theorem prover Lean\cite{de_moura_lean_2015}. Most branches were also proven in Lean.\footnote{The Lean Code can be found here \url{https://gitlab.com/csicar/liquidrust/-/tree/main/docs/lean-proof}}
+\begin{proof}[Proof Sketch] Rule Induction over $\tuple{s}{\sigma} \leadsto \tuple{s_1}{\sigma_1}$
+  
 \begin{itemize}
-  \item \textsc{Case SS-Assign}:
-    Given $\sigma : \Gamma$, $\Gamma \vdash x = e \Rightarrow \Gamma_2$
+  \item \textsc{Case \cref{rule:SS-Assign}}:
+    Given $\sigma : \Gamma$, $\Gamma \vdash x = e \Rightarrow \Gamma_2$, $\Gamma_2 = \Gamma[x \mapsto \alpha], \varphi$
     show $\exists \Gamma_1, \sigma[ x \mapsto \llbracket e \rrbracket \sigma] : \Gamma_1 \wedge \Gamma_1 \vdash \code{unit} \Rightarrow \Gamma_2 $
 
-    Rule inversion over $\Gamma \vdash x = e \Rightarrow \Gamma_2$:
+    Rule inversion over $\Gamma \vdash e : \set{\alpha : b \mid \varphi }$:
     \begin{itemize}
-      \item \textsc{Case Sym}: rule inversion yields $\Gamma \vdash e: \{ \alpha : b \mid \alpha \doteq \llbracket e \rrbracket \}$ and $\Gamma_2 = (\Gamma[x \mapsto \alpha], \alpha \doteq \llbracket e \rrbracket)$
+      \item \textsc{Cases with Symbolic Execution (\cref{rule:Lit}, \cref{rule:Add}, \cref{rule:Var}, \cref{rule:Ref})}: rule inversion yields $\Gamma \vdash \alpha \text{ fresh}$ and $\Gamma_2 = \Gamma[x \mapsto \alpha], \alpha \simeq \bbracket{e}\Gamma$
 
-      With $\Gamma_1 = \Gamma_2$, the goal is: $\sigma[x \mapsto \bbracket{e}\sigma ] : (\Gamma[x \mapsto \alpha], \alpha \doteq \llbracket e \rrbracket)$; \cref{lem:conf-sym-exec} implies the goal.
-      \item \textsc{Case Var-Deref} $e = *y$:
-        rule inversion yields $\Gamma \vdash y : \{\beta : b \mid \beta \doteq \&z\}$, $\Gamma \vdash z : \{\gamma : b \mid \varphi_\gamma\}$ and $\Gamma_2 = \Gamma[x \mapsto \gamma], \varphi_\gamma$
+      With $\Gamma_1 = \Gamma_2$, the goal is: $\sigma[x \mapsto \bbracket{e}\sigma ] : (\Gamma[x \mapsto \alpha], \alpha \simeq \llbracket e \rrbracket \Gamma)$; \cref{lem:conf-sym-exec} implies the goal.
+      
+      \item \textsc{Case \cref{rule:Var-Deref}} $e = *y$:
+        rule inversion yields $\Gamma \vdash *y : \set{z}$, $\Gamma \vdash z : \{\gamma : b \mid \varphi_\gamma\}$ and $\Gamma_2 = \Gamma[x \mapsto \gamma], \varphi_\gamma$
 
-        Choose $\Gamma_1 = \Gamma_2$ and $ m' = m[\mu(x) \mapsto \bbracket{\sigma(x)}] $ to show 
-        $ m' \vDash (\Phi \wedge \varphi_\gamma)[\mu[x \mapsto \gamma](y) \tr \bbracket{\sigma(y)} \mid y]$.
+        Rule inversion over $\Gamma \vdash z : \{\gamma : b \mid \varphi_\gamma\}$ yields $\Gamma \vdash \gamma \text{ fresh}$.
+
+        \Cref{lem:conf-sym-exec} for $\gamma$ implies $\sigma[x \mapsto \bbracket{y}\sigma] : \Gamma[x \mapsto \gamma], \gamma \simeq \bbracket{y}\Gamma$.
+
+        Choose $\Gamma_1 = \Gamma_2$ which implies the goal
+      \item \textsc{Case \cref{Intro-Sub}} should work similarly to Sub-Context a few cases further down.
         % $ m' \vDash \varphi[\mu[x \mapsto \gamma](y) \tr \bbracket{\sigma(y)} \mid y]$.
 
-        \begin{align*}
-          m  &\vDash \varphi[\mu(x) \tr \bbracket{\sigma(x)} \mid y]
-          \\ &= \Phi[\mu(x) \tr \bbracket{\sigma(x)}][\mu(x) \tr \bbracket{\sigma(x)} \mid y \neq x]
-          \\ \text{implies} 
-          \\ m' = m[\mu(x) \mapsto \bbracket{\sigma(x)}] &\vDash \Phi[\mu[x \mapsto \gamma](x) \tr \bbracket{\sigma(x)}][\mu(x) \tr \bbracket{\sigma(x)} \mid y \neq x]
-          \\ &= \Phi[\mu[x \mapsto \gamma](y) \tr \bbracket{\sigma(y)} \mid y]
-          \\ &= \Phi[\mu[x \mapsto \bbracket{z}\sigma](y) \tr \bbracket{\sigma(y)} \mid y]
-          \\ &\overset{\mathclap{absorption}}{=} (\Phi \wedge \varphi_\gamma)[\mu[x \mapsto \bbracket{z}\sigma](y) \tr \bbracket{\sigma(y)} \mid y]
-          \\ &= (\Phi \wedge \varphi_\gamma)[\mu[x \mapsto \gamma](y) \tr \bbracket{\sigma(y)} \mid y]
-          \\ 
-        \end{align*}
+        % \begin{align*}
+        %   m  &\vDash \Phi[\mu(x) \tr \bbracket{\sigma(x)} \mid y]
+        %   \\ &= \Phi[\mu(x) \tr \bbracket{\sigma(x)}][\mu(x) \tr \bbracket{\sigma(x)} \mid y \neq x]
+        %   \\ \text{implies} 
+        %   \\ m' = m[\mu(x) \mapsto \bbracket{\sigma(x)}] &\vDash \Phi[\mu[x \mapsto \gamma](x) \tr \bbracket{\sigma(x)}][\mu(x) \tr \bbracket{\sigma(x)} \mid y \neq x]
+        %   \\ &= \Phi[\mu[x \mapsto \gamma](y) \tr \bbracket{\sigma(y)} \mid y]
+        %   \\ &= \Phi[\mu[x \mapsto \bbracket{z}\sigma](y) \tr \bbracket{\sigma(y)} \mid y]
+        %   \\ \text{implies with \cref{lem:conservatice-reference-typing}}
+        %   \\ m' &\vDash (\Phi \wedge \varphi_\gamma)[\mu[x \mapsto \bbracket{z}\sigma](y) \tr \bbracket{\sigma(y)} \mid y]
+        %   \\ &= (\Phi \wedge \varphi_\gamma)[\mu[x \mapsto \gamma](y) \tr \bbracket{\sigma(y)} \mid y]
+        %   \\ 
+        % \end{align*}
     \end{itemize} 
     
     % Let $v = \llbracket e \rrbracket \sigma$. 
@@ -1625,15 +1683,15 @@ A crucial consequence of \cref{lem:conf-sym-exec} it that references are tracked
 
     % Because $e'$ is \code{unit}, the second proof obligation is trivially true, because $\Gamma' = \Gamma''$
   \item \textsc{Case \cref{rule:SS-Seq-Inner}}:
-    Given: $\tuple{s_1}{\sigma} \leadsto \tuple{s_1'}{\sigma_1}$, \\
-     $\Gamma \vdash s_1 ; s_2 \Rightarrow \Gamma_2$, \\
-     $\forall \Gamma_2, \Gamma \vdash s_1 \Rightarrow \Gamma_2 \wedge \sigma : \Gamma \to \exists \Gamma_1, \sigma_1 : \Gamma_1 \wedge \Gamma_1 \vdash s_1' \Rightarrow \Gamma_2$ \\
-    show $\exists \Gamma_1, \sigma_1 : \Gamma_1 \wedge \Gamma_1 \vdash s_1' ; s_2  \Rightarrow \Gamma_2$.
+    Given: $\tuple{s}{\sigma} \leadsto \tuple{s_1}{\sigma_1}$, \\
+     $\Gamma \vdash s; r \Rightarrow \Gamma_2$, \\
+     $\forall \Gamma_2, \Gamma \vdash s \Rightarrow \Gamma_2 \wedge \sigma : \Gamma \to \exists \Gamma_1, \sigma_1 : \Gamma_1 \wedge \Gamma_1 \vdash s_1 \Rightarrow \Gamma_2$ \\
+    show $\exists \Gamma_1, \sigma_1 : \Gamma_1 \wedge \Gamma_1 \vdash s_1 ; r  \Rightarrow \Gamma_2$.
 
-    Rule inversion over $\Gamma \vdash s_1 ; s_2 \Rightarrow \Gamma_2$ yields $\Gamma \vdash s_1 \Rightarrow \Gamma_1$, $\Gamma_1 \vdash s_2 \Rightarrow \Gamma_2$
+    Rule inversion over $\Gamma \vdash s; r \Rightarrow \Gamma_2$ yields $\Gamma \vdash s \Rightarrow \Gamma_1$, $\Gamma_1 \vdash r \Rightarrow \Gamma_2$
 
-    The preconditions for the third induction hypothesis are satisfied for $\Gamma_1$ and yield 
-    $\exists \Gamma_1', \sigma_1 : \Gamma_1' \wedge \Gamma_1' \vdash s_1' \Rightarrow \Gamma_1$
+    The preconditions for the third induction hypothesis are satisfied for $\Gamma_1$ and yields
+    $\exists \Gamma_1', \sigma_1 : \Gamma_1' \wedge \Gamma_1' \vdash s_1 \Rightarrow \Gamma_1$
 
     State conformance $\sigma_1 : \Gamma_1'$ follows directly from this.
 
@@ -1655,12 +1713,30 @@ A crucial consequence of \cref{lem:conf-sym-exec} it that references are tracked
     Given $ \sigma(x) = \&y $, $\Gamma \vdash *x = z \Rightarrow \Gamma_2$, $\sigma : \Gamma$, show
     $\exists \Gamma_1, \sigma[y \mapsto \bbracket{\sigma(z)}] : \Gamma_1 \wedge \Gamma_1 \vdash \code{unit} \Rightarrow \Gamma_2$
 
-    Rule inversion over $\Gamma \vdash *x = z \Rightarrow \Gamma_2$ yields:
-    $\Gamma(z) = \beta$, $\Gamma \vdash x: \{\alpha : \&b \mid \alpha \doteq \&y\}$, $\Gamma \vdash \gamma \text{ fresh}$
+    Cases of $\Gamma \vdash *x = z \Rightarrow \Gamma_2$:
+    \begin{itemize}
+      \item \textsc{Case \cref{rule:Assign-Strong}} gives:
+        $\Gamma(z) = \beta$, $\Gamma \vdash *x \in \set{y}$, $\Gamma \vdash \gamma \text{ fresh}$.
+    
+        Choose $\Gamma_2 = \Gamma_1 = \Gamma[y \mapsto \gamma], \gamma \doteq \beta$.
+        With $\Gamma \vdash \alpha \text{ fresh}$ using \cref{lem:conservatice-reference-typing} yields $\bbracket{\sigma(x)} = \&y$.
+        \cref{lem:conf-sym-exec} yields $\sigma[y \mapsto \bbracket{\sigma(z)}] : \Gamma[y \mapsto \gamma], \gamma \doteq \beta$
+      \item \textsc{Case \cref{rule:Assign-Weak}} gives:
+        $\Gamma \vdash z: \tau$, $\Gamma \vdash *x \in \set{\bar{y_i}}$
+        $\Gamma \vdash y_i : \set{\beta_i : b_i \mid \varphi_i }$
+        $\Gamma \vdash \tau \preceq \set{\beta_j : b_j \mid \varphi_j}$ for $j \in [1, n]$.
+        
+        \Cref{lem:conservatice-reference-typing} gives $\bbracket{\sigma(x)} = \&y_i$ for some $i \in [1, n]$.
 
-    Choose $\Gamma_1 = \Gamma_2 = \Gamma_1 = \Gamma[y \mapsto \gamma], \gamma \doteq \beta$.
-    With $\Gamma \vdash \alpha \text{ fresh}$ (by rule inversion) using \cref{lem:conservative-ref-tracking} yields $\bbracket{\sigma(x)} = \&y$.
-    \cref{lem:conf-sym-exec} yields $\sigma[y \mapsto \bbracket{\sigma(z)}] : \Gamma[y \mapsto \gamma], \gamma \doteq \beta$
+        At this point it remains to be shown that the assigned type does not change conformance for the post state. We will show this in two steps: First we show that the assigned value preserves conformance, but for a different context. Then we will show that this context is a subcontext of $\Gamma$.
+
+        Using \cref{lem:conf-sym-exec} we get $\sigma[y_j \mapsto \bbracket{z}\sigma] : \Gamma[y_j \mapsto \beta_j], (\alpha \simeq \bbracket{z}\Gamma)$ for all $j \in [1, n]$.
+
+        By assumption $\Gamma \vdash \tau \preceq \set{\beta_j : b_j \mid \varphi_j}$ for every $j \in [1, n]$.
+        Using \cref{lem:conservative-subtype} we get $\sigma[y_j \mapsto \bbracket{\sigma(z)}] : \Gamma$.
+        For $\Gamma = \Gamma_1 = \Gamma_2$ the proof obligation is satisfied.
+    \end{itemize}
+    
 
   \item \textsc{Case \cref{rule:SS-While}}
     Given $\Gamma \vdash \code{while}(x) \{s\} \rightarrow \Gamma_2$, $\sigma : \Gamma$ 
@@ -1676,7 +1752,7 @@ A crucial consequence of \cref{lem:conf-sym-exec} it that references are tracked
 
     Rule inversion over $\Gamma \vdash \code{relax\_ctx!}\{\Gamma'\} \Rightarrow \Gamma_2$ yields $\Gamma_2 \preceq \Gamma$
     For $\Gamma_1 = \Gamma_2$ and \cref{lem:conservative-subtype} implies the goal.
-  \item \textsc{Case \cref{rule:SS-Call}} function calls are executed by renaming and inlining and adding a context relaxation at the start and end of the function pertaining to the entry and exit context specifications. Thereby the argument from context relaxation apply here.
+  \item \textsc{Case \cref{rule:SS-Call}} function calls are executed by renaming and inlining and adding a context relaxation at the start and end of the function pertaining to the entry and exit context specifications. \Cref{def:statement-checking} further justifies this.
 \end{itemize}
 \end{proof}
 

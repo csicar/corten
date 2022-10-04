@@ -1211,11 +1211,6 @@ $$ \begin{gathered}
     {\Gamma \vdash v: \{ \alpha : b \mid \alpha \simeq \bbracket{v}\Gamma\} }
   %
   \quad
-  \inferrule*[left=Var\rulelabel{Var}]
-    {\alpha \text{ fresh}}
-    {(\mu, \Phi)\vdash x : \{ \alpha : b \mid \alpha \simeq \bbracket{x}\Gamma \} }
-  %
-  \\
   \inferrule*[left=Add\rulelabel{Add}]
     {
       \alpha \text{ fresh}
@@ -1223,8 +1218,12 @@ $$ \begin{gathered}
     {\Gamma \vdash x_1 \odot x_2 : \{ \alpha: b \mid \alpha \simeq \bbracket{x_1 \odot x_2}\Gamma \} }
   %
   \\
+  \inferrule*[left=Var\rulelabel{Var}]
+    {\alpha \text{ fresh}}
+    {(\mu, \Phi)\vdash x : \{ \alpha : b \mid \alpha \simeq \bbracket{x}\Gamma \} }
+  %
   \inferrule*[left=Var-Deref\rulelabel{Var-Deref}]
-    {\Gamma \vdash x : \{ \beta : \&b \mid \beta \doteq \&y \} \\ \Gamma \vdash y : \tau }
+    {\Gamma \vdash *x \set{y} \\ \Gamma \vdash y : \tau }
     {\Gamma \vdash *x : \tau }
   %
   \\
@@ -1295,7 +1294,7 @@ $$ \begin{gathered}
   \inferrule*[left=Assign-Strong\rulelabel{Assign-Strong}]
     {
       \Gamma(z) = \beta
-      \\ \Gamma \vdash x: \{ \alpha : \& b \mid \alpha \doteq \&y \}
+      \\ \Gamma \vdash *x \in \set{y} 
       \\ \Gamma \vdash \gamma \text{ fresh}
       % \\ \Gamma, \psi \vdash \alpha \text{ must reference } y
     }
@@ -1305,7 +1304,7 @@ $$ \begin{gathered}
   \inferrule*[left=Assign-Weak\rulelabel{Assign-Weak}]
     {
       \Gamma \vdash e : \tau 
-      \\ \Gamma \vdash x : \{ \alpha : \& b \mid \alpha \doteq \&y_1 \vee \dots \vee \alpha \doteq \&y_n \}
+      \\ \Gamma \vdash *x \in \set{y_1, \dots, y_n}
       \\\\ \fline{ \Gamma \vdash y_i : \{ \beta_i : b_i \mid \varphi_i \} }
       \\ \fline{ \Gamma \vdash \tau \preceq \{ \beta_i : b_i \mid \varphi_i \} }
       }
@@ -1373,6 +1372,23 @@ For clarity, \cref{rule:Fn-Call} omits a renaming step done directly after extra
 % \end{gather*}
 % \todo{In think the first precondition and second precondition should serve the same purpose. Second one should be nicer and correct}
 
+\begin{definition}[Reference Destination Judgement $\Gamma \vdash *x \in \set{\dots}$]
+
+To complete the type system, two more judgements need to be defined. In the statement and expression typing rules, it is necessary to gain some information about the reference target. The rule \Cref{rule:May-Ref} ensures that the set $\set{y_1, \dots, y_n}$ contains all possible reference targets. The special case $\set{y}$ implies, that $x$ must reference exactly $y$, because a reference without a target is impossible.
+\Cref{rule:May-Ref} stipulates that 
+$$ \begin{gathered}
+  \inferrule*[left=May-Ref\rulelabel{May-Ref}]
+    {\mu(x) = \alpha \\ \vDash \Phi \to \alpha \doteq \&y_1 \vee \dots \vee \alpha \doteq \&y_n}
+    {(\mu, \Phi)\vdash *x \in \{ y_1, \dots,y_n \} }
+  %
+  \\
+\end{gathered}$$
+
+Although the rules might not suggest it, in practise inferring good candidates for sets of reference targets can usually be done by a some syntactic analysis that checks the set of logic variables equal to $\alpha$ for a reference predicate. This is easy because the syntax for predicate refinements is very limited.
+
+\end{definition}
+
+
 \section{Soundness of the Type System}\label{sec:soundness}
 
 Next, we will to justify why Corten type system is safe.
@@ -1398,11 +1414,11 @@ We will assume, that the base language (e.g. Rust) satisfies the safety properti
 % As usual, we consider the three properties (see Pierce \cite[p. 95, p.167]{pierce_types_2002}) of a type system when assessing the correctness of MiniCorten:
 
 \begin{definition}[Progress]
-    If $\Gamma \vdash s$, $\sigma : \Gamma$ and $s \neq \code{unit}$, then there is a $s'$ and $\sigma'$ with $\tuple{s, \sigma} \leadsto \tuple{s'}{\sigma'}$.
+    If $\Gamma \vdash s_1$, $\sigma : \Gamma \Rightarrow \Gamma_2$ and $s_1 \neq \code{unit}$, then there is a $s_2$ and $\sigma_2$ with $\tuple{s_1}{\sigma_1} \leadsto \tuple{s_2}{\sigma_2}$.
 \end{definition}
 
 \begin{definition}[Preservation]
-  If $\Gamma \vdash s$, $\sigma : \Gamma$ and $\tuple{s}{\sigma} \leadsto \tuple{s'}{\sigma'}$, then $\Gamma \vdash s'$ and $\sigma' : \Gamma$
+  If $\Gamma \vdash s \Rightarrow \Gamma_2$, $\sigma : \Gamma$ and $\tuple{s}{\sigma} \leadsto \tuple{s_1}{\sigma_1}$, then there is a $\Gamma_1$ with $\Gamma_1 \vdash s_1 \Rightarrow \Gamma_2$ and $\sigma_2 : \Gamma_2$
 \end{definition}
 
 Since Corten's types do not influence the execution semantics of the program and conformance for the base types is assumed, progress not interesting.
@@ -1567,7 +1583,7 @@ A crucial consequence of \cref{lem:conf-sym-exec} it that references are tracked
 \begin{lemma}[Preservation of State Conformance]\label{lem:preservation-conformance}
   If $\Gamma \vdash s \Rightarrow \Gamma_2$, $\sigma : \Gamma$ and $\tuple{s}{\sigma} \leadsto \tuple{s_1}{\sigma_1}$, then  $\sigma_1 : \Gamma_1$ and $\Gamma_1 \vdash s_1 \Rightarrow \Gamma_2$ for some $\Gamma_1$
 \end{lemma}
-\begin{proof} Rule Induction over $\tuple{s_1}{\sigma} \leadsto \tuple{s_2}{\sigma'}$
+\begin{proof} Rule Induction over $\tuple{s}{\sigma} \leadsto \tuple{s_1}{\sigma_1}$
 \begin{itemize}
   \item \textsc{Case SS-Assign}:
     Given $\sigma : \Gamma$, $\Gamma \vdash x = e \Rightarrow \Gamma_2$
@@ -1609,24 +1625,24 @@ A crucial consequence of \cref{lem:conf-sym-exec} it that references are tracked
 
     % Because $e'$ is \code{unit}, the second proof obligation is trivially true, because $\Gamma' = \Gamma''$
   \item \textsc{Case \cref{rule:SS-Seq-Inner}}:
-    Given: $\tuple{c_1}{\sigma} \leadsto \tuple{c_1'}{\sigma'}$, \\
-     $\Gamma \vdash c_1 ; c_2 \Rightarrow \Gamma_2$, \\
-     $\forall \Gamma_2, \Gamma \vdash c_1 \Rightarrow \Gamma_2 \wedge \sigma : \Gamma \to \exists \Gamma_1, \sigma' : \Gamma_1 \wedge \Gamma_1 \vdash c_1' \Rightarrow \Gamma_2$ \\
-    show $\exists \Gamma_1, \sigma' : \Gamma_1 \wedge \Gamma_1 \vdash c_1' ; c_2  \Rightarrow \Gamma_2$.
+    Given: $\tuple{s_1}{\sigma} \leadsto \tuple{s_1'}{\sigma_1}$, \\
+     $\Gamma \vdash s_1 ; s_2 \Rightarrow \Gamma_2$, \\
+     $\forall \Gamma_2, \Gamma \vdash s_1 \Rightarrow \Gamma_2 \wedge \sigma : \Gamma \to \exists \Gamma_1, \sigma_1 : \Gamma_1 \wedge \Gamma_1 \vdash s_1' \Rightarrow \Gamma_2$ \\
+    show $\exists \Gamma_1, \sigma_1 : \Gamma_1 \wedge \Gamma_1 \vdash s_1' ; s_2  \Rightarrow \Gamma_2$.
 
-    Rule inversion over $\Gamma \vdash c_1 ; c_2 \Rightarrow \Gamma_2$ yields $\Gamma \vdash c_1 \Rightarrow \Gamma_1$, $\Gamma_1 \vdash c_2 \Rightarrow \Gamma_2$
+    Rule inversion over $\Gamma \vdash s_1 ; s_2 \Rightarrow \Gamma_2$ yields $\Gamma \vdash s_1 \Rightarrow \Gamma_1$, $\Gamma_1 \vdash s_2 \Rightarrow \Gamma_2$
 
     The preconditions for the third induction hypothesis are satisfied for $\Gamma_1$ and yield 
-    $\exists \Gamma_1', \sigma' : \Gamma_1' \wedge \Gamma_1' \vdash c_1' \Rightarrow \Gamma_1$
+    $\exists \Gamma_1', \sigma_1 : \Gamma_1' \wedge \Gamma_1' \vdash s_1' \Rightarrow \Gamma_1$
 
-    State conformance $\sigma' : \Gamma_1'$ follows directly from this.
+    State conformance $\sigma_1 : \Gamma_1'$ follows directly from this.
 
     For $\Gamma_1'$ the preconditions for the \textsc{Seq} rule are satisfied.
   \item \textsc{Case \cref{rule:SS-Seq-N}}: 
-    Given: $\Gamma \vdash \code{unit}; c \Rightarrow \Gamma_2$, $\sigma : \Gamma$
-    show $\exists \Gamma_1, \sigma : \Gamma_1 \wedge \Gamma \vdash c \Rightarrow \Gamma_2$.
+    Given: $\Gamma \vdash \code{unit}; s \Rightarrow \Gamma_2$, $\sigma : \Gamma$
+    show $\exists \Gamma_1, \sigma : \Gamma_1 \wedge \Gamma \vdash s \Rightarrow \Gamma_2$.
 
-    Rule inversion over $\Gamma \vdash \code{unit}; c \Rightarrow \Gamma_2$ yields $\Gamma \vdash c \Rightarrow \Gamma_2$.
+    Rule inversion over $\Gamma \vdash \code{unit}; s \Rightarrow \Gamma_2$ yields $\Gamma \vdash s \Rightarrow \Gamma_2$.
     Together with the second induction hypothesis this implies the goal.
   \item \textsc{Case \cref{rule:SS-IF-T}}:
      Given $\llbracket x \rrbracket \sigma \doteq \code{true}$, $\Gamma \vdash \code{if $x$\{$s_t$\}else\{$s_e$\}} \Rightarrow \Gamma_2$, $\sigma : \Gamma$, show $\exists \Gamma_1, \sigma : \Gamma_1 \wedge \Gamma_1 \vdash s_t \Rightarrow \Gamma_2$

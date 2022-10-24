@@ -189,9 +189,18 @@
 		\column{.5\textwidth}<3->
 		What does this it \code{print(x)} output?
 		\begin{itemize}
-			\item Could be: old \code{x} or \code{5}
-			\item<4-> But also \code{6} (if x aliases with y)!
+			\item In most imperative programming languages:
+			\begin{itemize}
+				\item Could be: old \code{x} or \code{5}
+				\item<4-> But also \code{6} (if x aliases with y)!
+			\end{itemize}
+			\item<5-> In Rust:
+				\begin{itemize}
+					\item Just old \code{x} or \code{5}
+					\item And nothing else!
+				\end{itemize}
 		\end{itemize}
+		
 	\end{columns}
 	\note{
 		- Hier: `clamp` stellt sicher, dass der referenzierte wert max `b` groß ist \\
@@ -203,8 +212,122 @@
 	}
 \end{frame}
 
+
+
+\begin{frame}[fragile]{Motivation}{}
+	\begin{columns}
+		\column{.5\textwidth}
+		\begin{minted}[autogobble]{rust}
+			fn  clamp(a: &mut i32, b: i32) { 
+				// borrows a
+				// owns b
+				if *a > b { *a = b }
+				// "returns" the borrow of a
+			}
+			fn  client(...) { // owns x, y
+				...
+				clamp(&mut x, 5); // lend x mutably
+				clamp(&mut y, 6); // lend y mutably
+				print(x);
+				...
+			}
+		\end{minted}
+
+		\column{.5\textwidth}
+		\begin{greenblock}{Ownership in Rust: Mutability XOR Aliasing}
+			Each lexical scope tracks permissions for visible memory objects.
+			Possible Permission Levels:
+			\begin{itemize}
+				\item Owner (e.g. \code{b})
+					\begin{itemize}
+						\item can: read, write
+						\item transfer ownership (if no outstanding borrows)
+					\end{itemize}
+				\item Mutable Reference (e.g. \code{\&mut x})
+					\begin{itemize}
+						\item can: read, write
+						\item guarantee: no aliasing
+					\end{itemize}
+				\item Immutable Reference (e.g. \code{\&v})
+					\begin{itemize}
+						\item can: read, alias
+						\item guarantee: no mutation
+					\end{itemize}
+			\end{itemize}
+		\end{greenblock}
+	\end{columns}
+	\note{
+		- 
+	}
+\end{frame}
+
+
+\begin{frame}[fragile]{Motivation}{}
+	\begin{columns}
+		\column{.5\textwidth}
+			Consequences:
+			\begin{itemize}
+				\item unique data owner
+				\item no global, mutable state
+				\item no cycles in memory structure
+			\end{itemize}
+
+			\onslide<2->{
+				Used for:
+				\begin{itemize}
+					\item safe non-gc memory management
+					\item safe concurrency
+					\item safe low-level hardware access
+					\item \dots
+					\item<3-> $\Rightarrow$ show: program verification as well
+				\end{itemize}
+			}
+		\column{.5\textwidth}
+		\begin{greenblock}{Ownership in Rust: Mutability XOR Aliasing}
+			Each lexical scope tracks permissions for visible memory objects.
+			Possible Permission Levels:
+			\begin{itemize}
+				\item Owner (e.g. \code{b})
+					\begin{itemize}
+						\item can: read, write
+						\item transfer ownership (if no outstanding borrows)
+					\end{itemize}
+				\item Mutable Reference (e.g. \code{\&mut x})
+					\begin{itemize}
+						\item can: read, write
+						\item guarantee: no aliasing
+					\end{itemize}
+				\item Immutable Reference (e.g. \code{\&v})
+					\begin{itemize}
+						\item can: read, alias
+						\item guarantee: no mutation
+					\end{itemize}
+			\end{itemize}
+		\end{greenblock}
+	\end{columns}
+	\note{
+		- Jeder speicherobjekt hat genau einen eigentümer \\
+		- Kein globaler, der veränderbar ist \\
+		- Keine Zyklen in der Speicherstruktur \\
+		\\ ---- \\
+		- Nützlich: \\
+			- wenn kein eigentümer -> speicherplatz freigeben \\
+			- nur 1 mutable => keine race conditions => nützlich für concurrency \\
+			- ... \\
+			- In MA zeigen: auch für verifikation\\
+		\\ ---- \\
+		Also: Wir haben gesehen: Refinement Types gut für immutable data; Rust: eingeschränkte mutability
+		=> Wie zusammenbringen?
+	}
+\end{frame}
+
 \section{Empirical Analysis}
 \section{Solution}
+
+\begin{frame}[fragile]{Extend Refinement Types to Rust}
+asd
+\end{frame}
+
 \section{Soundness Justification}
 \section{Related Work}
 \section{Conclusion / Future Work}

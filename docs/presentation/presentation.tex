@@ -345,7 +345,21 @@
   }
 \end{frame}
 
-% \section{Empirical Analysis}
+\section{Empirical Analysis}
+
+\begin{frame}{Empirical Use-Case Analysis}
+  \begin{columns}
+    \column{.5\textwidth}
+    \begin{itemize}
+      \item public open-source code (\text{crates.io})
+      \item about 64 million lines of Rust code
+      \item syntactical analysis
+    \end{itemize}
+    \column{0.5\textwidth}
+    \includegraphics[width=\textwidth]{../mutability_by_category.pdf}
+  \end{columns}
+\end{frame}
+
 \section{Type System}
 
 \begin{frame}[fragile]{Refinement Types for Rust -- Syntax}
@@ -570,8 +584,6 @@
         a
     }
   \end{minted}
-
-
 \end{frame}
 
 \begin{frame}[fragile]
@@ -784,16 +796,36 @@
   \end{itemize}
 \end{frame}
 
+\begin{frame}{Flux -- Refinement Types for Rust}
+  \begin{itemize}
+    \item MIR vs. HIR
+    \item Context-Inclusions vs. Sub-Context
+    \item 
+  \end{itemize}
+
+  
+  \note{
+    - Paper von Authoren von Liquid Types Papern\\
+    - Veröffentlicht gegen ende der MA\\
+    - Pluralität: erst nach eigener arbeit untersucht
+  }
+\end{frame}
+
 
 \section{Conclusion / Future Work}
 
 
 \begin{frame}{Future Work}
   \begin{itemize}
-    \item Records \& ADTs
+    \item Records \& ADTs 
     \item Predicate Generics (Abstract Predicates)
     \item Concurrency using Predicate Generics?
   \end{itemize}
+  \note{
+    - Variant distinktion, more syntax, nested structures
+    - uninterpreted functions in types
+    - use this for concurrency. Should be interesting in Rust (b/c of guarantees)
+  }
 \end{frame}
 
 \begin{frame}{Conclusion}

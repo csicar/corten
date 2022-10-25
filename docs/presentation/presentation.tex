@@ -559,20 +559,6 @@
 % \end{frame}
 
 
-% \begin{frame}[fragile]{Refinement Types for Rust -- Syntax}
-%   \begin{minted}[autogobble, mathescape]{rust}
-%     fn inc(a: &mut ty!{ a1: i32 | true => a2 | a2 == a1 + 1 }) {
-%       *a = *a + 1;
-%     }
-%     fn client(mut x: ty!{ xv: i32 | xv > 2 }) -> ty!{ v: i32 | v > 7 } {
-%       let mut y = 2;
-%       inc(&mut x); inc(&mut x);
-%       inc(&mut y)
-%       x + y
-%     }
-%   \end{minted}
-% \end{frame}
-
 \begin{frame}[fragile]{References -- Strong Updates}
   \begin{minted}[texcomments]{rust}
     fn client() -> ty!{ v: i32 | v == 4 } {
@@ -643,9 +629,9 @@
 \begin{frame}[fragile]{Modularity \& Mutation}
   \begin{minted}[autogobble, mathescape]{rust}
     fn clamp(a: &mut ty!{ a1 : i32 | true => a2 | a2 <= b1 }, b: ty!{ b1: i32 }) { 
-      // $\Gamma_1 = (\{a \mapsto \&arg_0, arg_0 \mapsto a_1, b \mapsto b_1\}, \text{true} \wedge \text{true})$
+      // $\Gamma_1 = (\{a \mapsto v_1, arg_0 \mapsto a_1, b \mapsto b_1\}, v_1 \doteq \&arg_0 \wedge \text{true} \wedge \text{true})$
       if *a > b { *a = b }
-      // $\Gamma_2 = (\{arg_0 \mapsto a_2, b \mapsto b_1\}, a2 \leq b_1 \wedge \text{true})$
+      // $\Gamma_2 = (\{a \mapsto v_1, arg_0 \mapsto {\red v_2}, b \mapsto b_1\}, {\red v_2 \leq b_1} \wedge v_1 \doteq \&arg_0 \wedge \text{true} \wedge \text{true})$
     }
     fn client(...) {
       ...
@@ -658,6 +644,58 @@
       ...
     }
   \end{minted}
+\end{frame}
+
+
+\begin{frame}[fragile]{Notion of Sub-Contexts}
+  \begin{minted}[autogobble, mathescape]{rust}
+    fn clamp(a: &mut ty!{ a1 : i32 | true => a2 | a2 <= b1 }, b: ty!{ b1: i32 }) { 
+      ...
+    // $\Gamma_2 = (\{a \mapsto v_1, arg_0 \mapsto { v_2}, b \mapsto b_1\}, { v_2 \leq b_1} \wedge v_1 \doteq \&arg_0) $
+    }
+  \end{minted}
+  \begin{itemize}
+    \item Question: Is $\Gamma_2$ a valid end-state for \code{clamp}?
+    \item Question: Expected end-state?
+    \item $\Rightarrow \Gamma_e = (\set{a \mapsto v_1, arg_0 \mapsto a_2, b \mapsto b_1}, v_1 \doteq \&arg_0 \wedge \text{true} \wedge \text{true} \wedge a_2 \leq b_1)$
+    \item $\Rightarrow$ $\Gamma_2$ must be a specialization of $\Gamma_e$. Written as $\Gamma_2 \preceq \Gamma_e$
+  \end{itemize}
+
+  
+  $$
+  \inferrule*[left=$\preceq$-Ctx]
+    {
+      \vDash v_1 \doteq \&arg_0 \wedge {\red v_2} \leq b_1 \rightarrow v_2 \leq b_1 \wedge v_1 \doteq \&arg_0
+      \\ \dom(\Gamma_e) \subseteq \dom(\Gamma_2)
+    }
+    { \Gamma_2 \preceq \Gamma_e}
+  $$
+
+  Use SMT-Solver
+  
+  % $$
+  % \inferrule*[left=$\preceq$-Ctx]
+  %   {
+  %     \vDash \Phi'[\mu'(x) \triangleright \mu(x)\ \mid x \in \dom(\mu')] \to \Phi
+  %     \\ \dom(\mu') \subseteq \dom(\mu)
+  %   }
+  %   {(\mu, \Phi) \preceq (\mu', \Phi')}
+  % $$
+
+\end{frame}
+
+\begin{frame}{SMT Request}
+  ...
+\end{frame}
+
+
+\begin{frame}{Example Error Message}
+  ...
+\end{frame}
+
+
+\begin{frame}{Ecosystem Integration}
+  ...
 \end{frame}
 
 \section{Soundness Justification}
@@ -730,18 +768,52 @@
 \end{frame}
 
 \section{Related Work}
+
+\begin{frame}{Related Work}
+  Refinement Types and Mutability
+  \begin{itemize}
+    \item Rondon et al. \cite{rondon_low-level_2010}, Bakst and Jhala \cite{bakst_predicate_2016}: Refinement Types for C subset. Lack of guarantees requires ad-hoc mechanisms to control aliasing
+    \item Lanzinger \cite{lanzinger_property_2021}: Property Types in Java (only immutable)
+    \item Bachmeier \cite{bachmeier_property_2022}: Extension using Ownership System
+  \end{itemize}
+  Rust verification
+  \begin{itemize}
+    \item Ullrich \cite{ullrich_simple_nodate}: Translation to Lean; linear mutation chain. Denis et al \cite{denis_creusot_2021} similar, but to Why3
+    \item Astrauskas et al. \cite{astrauskas_leveraging_2019} (Prusti): heavy-weight verification, translation to separation logic (Viper)
+    \item Matsushita et al. \cite{matsushita_rusthorn_2020}: constrained Horn clauses (RustHorn)
+  \end{itemize}
+\end{frame}
+
+
 \section{Conclusion / Future Work}
+
+
+\begin{frame}{Future Work}
+  \begin{itemize}
+    \item Records \& ADTs
+    \item Predicate Generics (Abstract Predicates)
+    \item Concurrency using Predicate Generics?
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Conclusion}
+  \begin{itemize}
+    \item Working Refinement Type System for Rust with Mutability
+    \item Minimal Interface
+    \item Soundness Justification
+    \item Evaluation
+  \end{itemize}
+\end{frame}
+
 
 
 \appendix
 \beginbackup
 
 \begin{frame}{Literatur}
-\begin{exampleblock}{Backup-Teil}
-    Folien, die nach \texttt{\textbackslash beginbackup} eingefügt werden, zählen nicht in die Gesamtzahl der Folien.
-\end{exampleblock}
-
-\printbibliography
+  \footnotesize{
+    \printbibliography
+  }
 \end{frame}
 
 

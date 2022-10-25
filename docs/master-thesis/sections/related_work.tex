@@ -44,7 +44,7 @@ Also Lanzinger \cite{lanzinger_property_2021} successfully adapted refinement ty
 Given Rust's ownership system and predestined position as language for writing future safety critical software, Rust has sparked interest in the software verification field. There are several papers with a variety of approaches.
 
 
-Ullrich \cite{ullrich_simple_nodate} translates Rust's MIR to the theorem prover / dependently typed language Lean (\cite{de_moura_lean_2015}), forgoing automation, but offering a clean modelling and extensive coverage of the Rust language.
+Ullrich \cite{ullrich_simple_2016} translates Rust's MIR to the theorem prover / dependently typed language Lean (\cite{de_moura_lean_2015}), forgoing automation, but offering a clean modelling and extensive coverage of the Rust language.
 
 A key observation made by Ullrich is that with Rust's ownership system, mutable references can be encoded as so called lenses\cite{foster_combinators_2007}. Basically, mutable reference parameter are translated in to a immutable initial value and a returned value representing the mutated type. Lenses extend this encoding by allowing a caller to give a callee access to part of a structure letting the Lens mechanism handle the reassembly of the structure from the changed value. The insight of Ullrich is that Rust's mutable references can naturally be translated into a sequence of sequential, linear updates to a data structure. 
 Corten's syntax for mutable refinement parameters is inspired by Ullrich's encoding.

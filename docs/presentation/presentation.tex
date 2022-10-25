@@ -346,20 +346,31 @@
   }
 \end{frame}
 
-\section{Empirical Analysis}
-
-\begin{frame}{Empirical Use-Case Analysis}
-  \begin{columns}
-    \column{.5\textwidth}
+\begin{frame}{Contributions}
+  \begin{itemize}
+    \item Empirical Use-Case Analysis
+    \item Refinement Type System
     \begin{itemize}
-      \item public open-source code (\text{crates.io})
-      \item about 64 million lines of Rust code
-      \item syntactical analysis
+      \item Automatic \& Decidable Type Checking
+      \item Path Sensitivity
+      \item Mutable Data \& References
+      \item Modularity
+      \item Partial Mechanized Proof of Soundness
     \end{itemize}
-    \column{0.5\textwidth}
-    \includegraphics[width=\textwidth]{../mutability_by_category.pdf}
-  \end{columns}
+    \item Implementation
+    \begin{itemize}
+      \item Accessible Interface
+      \item Type-Error Messages with Source Code Locations
+      \item Counter-Example Generation
+    \end{itemize}
+    \item Evaluation
+    \begin{itemize}
+      \item Automatic Verification of non-trivial Programs
+      \item Comparison to other tools
+    \end{itemize}
+  \end{itemize}
 \end{frame}
+
 
 \section{Type System}
 
@@ -777,18 +788,18 @@
   \textbf{Refinement Types and Mutability}
   \begin{itemize}
     \item Rondon et al. \cite{rondon_low-level_2010}, Bakst and Jhala \cite{bakst_predicate_2016}: Refinement Types for C subset. Lack of guarantees requires ad-hoc mechanisms to control aliasing
-    \item Lanzinger \cite{lanzinger_property_2021}: Property Types in Java (only immutable)
-    \item Bachmeier \cite{bachmeier_property_2022}: Extension using Ownership System
+    \item Lanzinger \cite{lanzinger_property_2021}: Property Types in Java (only immutable). Bachmeier \cite{bachmeier_property_2022}: Extension using Ownership System
+    \item Toman et al. \cite{toman_consort_2020} (ConSORT): Fractional Ownership, strong and weak updates
   \end{itemize}
   \textbf{Rust verification}
   \begin{itemize}
-    \item Ullrich \cite{ullrich_simple_nodate}: Translation to Lean; linear mutation chain. Denis et al \cite{denis_creusot_2021} similar, but to Why3
+    \item Ullrich \cite{ullrich_simple_2016}: Translation to Lean; linear mutation chain. Denis et al \cite{denis_creusot_2021} similar, but to Why3
     \item Astrauskas et al. \cite{astrauskas_leveraging_2019} (Prusti): heavy-weight verification, translation to separation logic (Viper)
-    \item Matsushita et al. \cite{matsushita_rusthorn_2020}: constrained Horn clauses (RustHorn)
+    \item Matsushita et al. \cite{matsushita_rusthorn_2020} (RustHorn): constrained Horn clauses 
   \end{itemize}
 \end{frame}
 
-\begin{frame}{Flux -- Refinement Types for Rust}
+\begin{frame}{Related Work: Flux -- Refinement Types for Rust}
   \begin{itemize}
     \item MIR vs. HIR
     \item specification in comments vs. embedding in types
@@ -844,6 +855,22 @@
 \appendix
 
 \beginbackup
+
+
+\section{Empirical Analysis}
+
+\begin{frame}{Empirical Use-Case Analysis}
+  \begin{columns}
+    \column{.5\textwidth}
+    \begin{itemize}
+      \item public open-source code (\text{crates.io})
+      \item about 64 million lines of Rust code
+      \item syntactical analysis
+    \end{itemize}
+    \column{0.5\textwidth}
+    \includegraphics[width=\textwidth]{../mutability_by_category.pdf}
+  \end{columns}
+\end{frame}
 
 \begin{frame}{\code{decr} Typing Tree}
   \begin{align*}

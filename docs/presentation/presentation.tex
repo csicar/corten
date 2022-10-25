@@ -42,6 +42,9 @@
 \newcommand{\tuple}[2]{\langle #1 \mid #2 \rangle}
 \newcommand{\set}[1]{\left\{ #1 \right\}}
 \newcommand{\bbracket}[1]{\llbracket #1 \rrbracket}
+\newcommand{\red}[1]{\color{kit-red90}{ #1 }}
+\newcommand{\fline}[1]{\overline{\vphantom{\mid}#1}} 
+
 
 \DeclareMathOperator{\rref}{ref}
 \DeclareMathOperator{\dom}{dom}
@@ -343,7 +346,7 @@
 \end{frame}
 
 % \section{Empirical Analysis}
-\section{Solution}
+\section{Type System}
 
 \begin{frame}[fragile]{Refinement Types for Rust -- Syntax}
   \begin{columns}
@@ -391,78 +394,238 @@
   }
 \end{frame}
 
-
-\begin{frame}[fragile]{Refinement Types for Rust -- Type Checking}
-  \begin{minted}[autogobble]{rust}
-    fn max(a: ty!{ av: i32 }, b: ty!{ bv : i32 }) -> ty!{ v : i32 | v >= av && v >= bv } {
-      if a > b { a as ty!{ r : i32 | r >= av && r >= bv } } else { b }
-    }
-  \end{minted}
-  \begin{align*}
-    &\text{let } \Gamma = (a : \{ v : \code{i32} \mid \text{true}\}, b : \{ v : \code{i32} \mid \text{true}\}) \text{ and } \tau = 
-    \{ v: \code{i32} \mid v \geq a \wedge v \geq b \}
-    \\
-    &\inferrule*
-      {
-        {
-          \inferrule*
-          { {
-              \inferrule*
-              {\star}
-              {\Gamma, a > b \vdash a : \{ v : \code{i32} \mid v \doteq a\}}
-            }
-            \\
-              {
-                \inferrule*
-                { 
-                  {
-                    \text{SMT-VALID}
-                    \footnotesize{
-                      \left(
-                      \begin{aligned}[]
-                        & \, \text{true} \wedge \text{true} \wedge a > b \\
-                        &\ \wedge v \doteq a \\
-                        &\quad \implies (v \geq a \wedge v \geq b)
-                      \end{aligned}
-                      \right)
-                    }
-                  }
-                }
-                {\Gamma, a > b \vdash \{ v : \code{i32} \mid v \doteq a\} \preceq \tau}
-              }
-          }
-          {
-            \Gamma, a > b \vdash a : \tau
-          }
+\begin{frame}[fragile]{Type Updates}
+  \begin{columns}
+    \column{.4\textwidth}
+    \begin{onlyenv}<1>
+      \begin{minted}[autogobble, mathescape]{rust}
+        fn decr() -> ty!{ w : i32 | w >= 0 } {
+         let mut i = ... as ty!{ v: i32 | v > 0};
+         i = i - 1;
+         i
         }
-        \\
-          {
-            \inferrule*
-            {{\vdots}}
-            {\Gamma, \neg(a > b) \vdash b : \tau}
-          }
-      }
-      {\Gamma \vdash \code{if } a > b\ \{ a \} \code{ else } \{ b \} : \tau \color{kit-orange80}{\Rightarrow \Gamma}}
-  \end{align*}
+      \end{minted}
+    \end{onlyenv}
+    \begin{onlyenv}<2->
+      \begin{minted}[autogobble, mathescape]{rust}
+        fn decr() -> ty!{ w : i32 | w >= 0 } {
+         // $\Gamma_1 = (\set{}, \text{true})$
+         let mut i = ... as ty!{ v: i32 | v > 0};
+         // $\Gamma_2 = (\set{i \mapsto v}, v > 0)$
+         i = i - 1;
+         // $\Gamma_3 = (\set{i \mapsto {\red{v_2}}}, v > 0 \wedge {\red{v_2 \doteq v - 1}})$
+         i }
+      \end{minted}
+    \end{onlyenv}
 
+    \column{.6\textwidth}
+    \only<1-2>{
+      \begin{itemize}
+        \item Types need to change through execution
+        \begin{itemize}
+          \item $\Rightarrow$ type updates
+          \item Separation of program-variables and logic-variables
+          \item $\Gamma$ association of program- to logic-variables and predicate
+          \item $\Gamma \vdash s \Rightarrow \Gamma'$ (Statement Type Checking)
+          \item $\Gamma \vdash e : \tau$ (Expression Typing)
+          \item On assignment: \textit{replace} association, \textit{append} predicate
+        \end{itemize}
+      \end{itemize}
+    }
+  \end{columns}
+
+  \onslide<3->{
+      \begin{align*}
+        &\text{let }
+        \Gamma_2 = \Gamma[i \mapsto v_1], v > 0 \text{ and }
+        \tau = \set{v : \code{i32} \mid v > 0}\\
+        &\inferrule*[left=\footnotesize{Seq}]
+          {
+            \inferrule*[left=\footnotesize{Decl}]
+              {
+                \inferrule*[left=\footnotesize{Intro}-Sub]
+                  {\Gamma_1 \vdash ... : \tau' \\ \Gamma_1 \vdash \tau' \preceq \tau}
+                  {\Gamma_1 \vdash \code{... as $\tau$} : \tau}
+              }
+              {\Gamma_1 \vdash \code{let i = ... as $\tau$} \Rightarrow \Gamma_2}
+            \\ 
+            \inferrule*[left=\footnotesize{Ass}]
+              {
+                \inferrule*[left=\footnotesize{BinOp}]
+                  {\Gamma_1 \vdash v_2 \text{ fresh}}
+                  {\Gamma_1 \vdash \code{i - 1} : \set{v_2 : \text{i32} \mid v_2 \doteq v - 1}}
+              }
+              {\Gamma_2 \vdash \code{i = i - 1} \Rightarrow \Gamma[i \mapsto v_2], v > 0, v_2 \doteq v - 1}
+          }
+          {\Gamma_1 \vdash \code{let i = ... as $\tau$; i = i - 1} \Rightarrow \Gamma[i \mapsto v_2], v > 0, v_2 \doteq v - 1}
+      \end{align*}
+    }
+    \note{
+      - Bsp: decr i und geben den wert zurück. 
+      - Lauft signatur: Rückgabe wert nicht-negativ
+      - Bsp. zeigt: Änderungen der Typen Notwenig. (sonst return nicht erfüllt)
+    }
 \end{frame}
 
+\begin{frame}
+  Expression Typing $\Gamma \vdash e : \tau$
+  $$ \begin{gathered}
+    \inferrule*[left=Lit]
+      {\Gamma \vdash \alpha \text{ fresh}}
+      {\Gamma \vdash v: \{ \alpha : b \mid \alpha \simeq \bbracket{v}\Gamma\} }
+    %
+    \quad
+    \inferrule*[left=BinOp]
+      {
+        \Gamma \vdash \alpha \text{ fresh}
+      }
+      {\Gamma \vdash x_1 \odot x_2 : \{ \alpha: b \mid \alpha \simeq \bbracket{x_1 \odot x_2}\Gamma \} }
+    %
+    \\
+    \inferrule*[left=Var]
+      {\Gamma \vdash \alpha \text{ fresh}}
+      {\Gamma \vdash x : \{ \alpha : b \mid \alpha \simeq \bbracket{x}\Gamma \} }
+    %
+    \quad
+    \inferrule*[left=Intro-Sub]
+      {
+        \Gamma \vdash e : \tau
+        \\ \Gamma \vdash \tau \preceq \tau'
+      }
+      {\Gamma \vdash e \texttt{ as } \tau': \tau'}
+  \end{gathered} $$
 
-\begin{frame}[fragile]{Refinement Types for Rust -- Syntax}
-  \begin{minted}[autogobble, mathescape]{rust}
-    fn inc(a: &mut ty!{ a1: i32 | true => a2 | a2 == a1 + 1 }) {
-      *a = *a + 1;
-    }
-    fn client(mut x: ty!{ xv: i32 | xv > 2 }) -> ty!{ v: i32 | v > 7 } {
-      let mut y = 2;
-      inc(&mut x); inc(&mut x);
-      inc(&mut y)
-      x + y
+  Statement Type Checking $\Gamma \vdash s \Rightarrow \Gamma'$
+
+  $$ \begin{gathered}
+    \inferrule*[left=If]
+      {
+        \Gamma, \Gamma(x) \doteq \code{true} \vdash s_t \Rightarrow \Gamma'
+        \\ \Gamma, \Gamma(x) \doteq \code{false} \vdash s_e \Rightarrow \Gamma'
+      }
+      {\Gamma \vdash \text{if } x \text{ then }s_t\text{ else } s_e \Rightarrow \Gamma'}
+    %
+    \\
+    \inferrule*[left=Seq]
+      {
+        \Gamma \vdash s_1 \Rightarrow \Gamma'
+        \\ \Gamma' \vdash s_2 \Rightarrow \Gamma''
+      }
+      {\Gamma \vdash s_1 ; s_2 \Rightarrow \Gamma''}
+    %
+    \\
+    \inferrule*[left=Decl]
+      {
+        \Gamma \vdash e :  \{ \beta : b \mid \varphi \}
+      }
+      {\Gamma \vdash \code{let } x = e  \Rightarrow \Gamma[ x \mapsto \beta], \varphi}
+    %
+    \quad
+    \inferrule*[left=Assign]
+      {\Gamma \vdash e : \{ \beta : b \mid \varphi \}}
+      {\Gamma \vdash x = e \Rightarrow \Gamma[x \mapsto \beta], \varphi}
+  \end{gathered} $$
+\end{frame}
+
+% \begin{frame}[fragile]{Refinement Types for Rust -- Type Checking}
+%   \begin{minted}[autogobble]{rust}
+%     fn max(a: ty!{ av: i32 }, b: ty!{ bv : i32 }) -> ty!{ v : i32 | v >= av && v >= bv } {
+%       let gt = a > b; if gt { a as ty!{ r : i32 | r >= av && r >= bv } } else { b } }
+%   \end{minted}
+%   \begin{align*}
+%     &\text{let } \Gamma = (\set{a \mapsto av, b \mapsto bv}, \text{true} \wedge \text{true}) \text{ and } 
+%       \varphi_r = (v \geq a \wedge v \geq b) \text{ and } \Gamma_1 = \Gamma[gt \mapsto v_1], v_1 \doteq av > bv
+%     \\
+%     &\inferrule*
+%       {
+%         \inferrule*
+%           { 
+%             \inferrule*
+%               { \Gamma \vdash v_1 \text{ fresh}}
+%               { \Gamma \vdash a > b : \set{v_1 : b \mid v_1 \simeq \bbracket{a > b}\Gamma } }
+%           }
+%           {\Gamma \vdash \code{let gt = } a > b \Rightarrow \Gamma[\code{gt} \mapsto v_1], v_1 \doteq av > bv}
+%         \\ 
+%           \inferrule*
+%             {\Gamma_1, v_1 \doteq \text{true} \vdash a}
+%             {\Gamma_1 \vdash \code{if } gt\ \{ a \} \code{ else } \{ b \} \Rightarrow \Gamma_1}
+%       }
+%       {\Gamma \vdash \code{let gt = } a > b; \code{if } gt\ \{ a \} \code{ else } \{ b \} \color{kit-red80}{\Rightarrow \Gamma}}
+%       \\
+%       &v_1 \simeq \bbracket{\code{a > b}}\Gamma = (v_1 \doteq (av > bv))
+%   \end{align*}
+
+
+% \end{frame}
+
+
+% \begin{frame}[fragile]{Refinement Types for Rust -- Syntax}
+%   \begin{minted}[autogobble, mathescape]{rust}
+%     fn inc(a: &mut ty!{ a1: i32 | true => a2 | a2 == a1 + 1 }) {
+%       *a = *a + 1;
+%     }
+%     fn client(mut x: ty!{ xv: i32 | xv > 2 }) -> ty!{ v: i32 | v > 7 } {
+%       let mut y = 2;
+%       inc(&mut x); inc(&mut x);
+%       inc(&mut y)
+%       x + y
+%     }
+%   \end{minted}
+% \end{frame}
+
+\begin{frame}[fragile]{References -- Strong Updates}
+  \begin{minted}[texcomments]{rust}
+    fn client() -> ty!{ v: i32 | v == 4 } {
+        let a = 2;       // a : $\{ v_1 : i32 \mid v_1 == 2 \}$
+        let b = &mut a;  // b : $\{ v_2 : &i32 \mid v_2 == &a \}$
+        *b = 0; // changes a's value and type
+        let c = &mut b;  // c : $\{ v_3 : &i32 \mid v_3 == &b \}$
+        **c = 4; // changes a's value and type
+        a
     }
   \end{minted}
+
+
 \end{frame}
 
-\begin{frame}[fragile]{Refinement Types for Rust -- Syntax}
+\begin{frame}[fragile]
+  Expression Typing $\Gamma \vdash e : \tau$
+  \begin{align*}
+    \inferrule*[left=Ref]
+    {\Gamma \vdash \alpha \text{ fresh}}
+    {\Gamma \vdash \&x : \{ \alpha : \&b \mid \alpha \simeq \bbracket{\&x}\Gamma\}}
+    %
+    \\
+    \inferrule*[left=Var-Deref]
+      {\Gamma \vdash *x \in \set{y} \\ \Gamma \vdash y : \tau }
+      {\Gamma \vdash *x : \tau }
+    \quad
+  \end{align*}
+  Statement Type Checking $\Gamma \vdash s \Rightarrow \Gamma'$
+  \begin{align*}
+    \inferrule*[left=Assign-Strong]
+    {
+      \Gamma(z) = \beta
+      \\ {\red \Gamma \vdash *x \in \set{y} }
+      \\ \Gamma \vdash \gamma \text{ fresh}
+    }
+    {\Gamma \vdash *x = z \Rightarrow \Gamma [y \mapsto \gamma], \gamma \doteq \beta}
+    %
+    \\
+    \onslide<2->{
+      \inferrule*[left=Assign-Weak]
+      {
+        \Gamma \vdash e : \tau 
+        \\ \Gamma \vdash *x \in \set{y_1, \dots, y_n}
+        \\\\ \fline{ \Gamma \vdash y_i : \{ \beta_i : b_i \mid \varphi_i \} }
+        \\ \fline{ \Gamma \vdash \tau \preceq \{ \beta_i : b_i \mid \varphi_i \} }
+      }
+      {\Gamma \vdash *x = e \Rightarrow \Gamma}
+    }
+  \end{align*}
+\end{frame}
+
+\begin{frame}[fragile]{Modularity \& Mutation}
   \begin{minted}[autogobble, mathescape]{rust}
     fn clamp(a: &mut ty!{ a1 : i32 | true => a2 | a2 <= b1 }, b: ty!{ b1: i32 }) { 
       if *a > b { *a = b }
@@ -477,7 +640,7 @@
   \end{minted}
 \end{frame}
 
-\begin{frame}[fragile]{Refinement Types for Rust -- Syntax}
+\begin{frame}[fragile]{Modularity \& Mutation}
   \begin{minted}[autogobble, mathescape]{rust}
     fn clamp(a: &mut ty!{ a1 : i32 | true => a2 | a2 <= b1 }, b: ty!{ b1: i32 }) { 
       // $\Gamma_1 = (\{a \mapsto \&arg_0, arg_0 \mapsto a_1, b \mapsto b_1\}, \text{true} \wedge \text{true})$

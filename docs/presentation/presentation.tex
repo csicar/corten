@@ -26,7 +26,7 @@
 
 % Literatur 
  
-\usepackage[citestyle=authoryear,bibstyle=numeric,hyperref,backend=biber]{biblatex}
+\usepackage[citestyle=alphabetic-verb,bibstyle=numeric,hyperref,backend=biber]{biblatex}
 \addbibresource{presentation.bib}
 \bibhang1em
 
@@ -35,8 +35,17 @@
 \usemintedstyle{colorful}
 
 \usepackage{mathpartir}
+\usepackage{ stmaryrd }
+\usepackage{xcolor}
 \usepackage[overridenote, notesposition=right]{pdfpc}
 \newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\tuple}[2]{\langle #1 \mid #2 \rangle}
+\newcommand{\set}[1]{\left\{ #1 \right\}}
+\newcommand{\bbracket}[1]{\llbracket #1 \rrbracket}
+
+\DeclareMathOperator{\rref}{ref}
+\DeclareMathOperator{\dom}{dom}
+\DeclareMathOperator{\img}{img}
 
 \begin{document}
  
@@ -50,285 +59,513 @@
 
 \section{Motivation}
 
+
+\begin{frame}[fragile]{Motivation}{}
+  \begin{columns}
+    \column{0.5\textwidth}
+    \begin{minted}[autogobble]{java}
+      public IntList square(IntList list) {
+        return list.map(x -> x*x);
+      }
+    \end{minted}
+
+    \column{.5\textwidth}
+    \includegraphics[width=1\textwidth]{../ratio-xkcd.png}
+  \end{columns}
+\end{frame}
+
 \begin{frame}[fragile]{Motivation}{}
  \begin{minted}[autogobble]{rust}
-		fn max(a: i32, b: i32) {
-			if a > b { a } else { b }
-		}
+    fn max(a: i32, b: i32) {
+      if a > b { a } else { b }
+    }
  \end{minted}
- \onslide<2->{
-	 $$
-		\text{Return Value }(v): v \geq a \wedge v \geq b
-	 $$
- }
- \onslide<3->{
-	Refinement Types\cite{rondon_liquid_2008} in Functional Programming Languages
- }
+ \begin{itemize}
+  \item<2-> $\text{Return Value }(v): v \geq a \wedge v \geq b$
+  \item<3-> Rondon et al. \cite{rondon_liquid_2008}: Refinement Types for Functional Programming Languages
+ \end{itemize}
  \note{
-	- In BA: FP-Patterns in imperativen Programmier Sprachen.\\
-	- Aufgefallen: \\
-		- Eigentliches Ziel: nicht so schwer, aber\\
-		- Abwesenheit von unabhängigen Änderungen verbraucht großteil der Zeit\\
-	- Also: welche alternativen gibt es?\\
-	- Refinement Types
+  - In BA: FP-Patterns in imperativen Programmier Sprachen.\\
+  - Aufgefallen: \\
+    - Eigentliches Ziel: nicht so schwer, aber\\
+    - Abwesenheit von unabhängigen Änderungen verbraucht großteil der Zeit\\
+  - Also: welche alternativen gibt es?\\
+  - Refinement Types
  }
 \end{frame}
 
 
 \begin{frame}[fragile]{Motivation}{}
-	\begin{minted}[autogobble]{rust}
-		//@ max(a: i32, b: i32) -> {v:i32 | v >= a && v >= b }
-		fn  max(a: i32, b: i32) -> i32 {
-			if a > b { a } else { b }
-		}
-	\end{minted}
-	\note{
-		Wie funktioniert das?\\
-		\\
-		1. Extra Typ Spezifikation \\
-		2. Ausdruck in klammern ähnlich zu set compresension (erlaubte werte) \\
-		\\
-		=> Wie werden diese typen überprüft?
-	}
+  \begin{minted}[autogobble]{rust}
+    //@ max(a: i32, b: i32) -> {v:i32 | v >= a && v >= b }
+    fn  max(a: i32, b: i32) -> i32 {
+      if a > b { a } else { b }
+    }
+  \end{minted}
+  \note{
+    Wie funktioniert das?\\
+    \\
+    1. Extra Typ Spezifikation \\
+    2. Ausdruck in klammern ähnlich zu set compresension (erlaubte werte) \\
+    \\
+    => Wie werden diese typen überprüft?
+  }
 \end{frame}
 
 
 \begin{frame}[fragile]{Motivation}
-	\begin{minted}[autogobble]{rust}
-		//@ max(a: i32, b: i32) -> {v:i32 | v >= a && v >= b }
-		fn  max(a: i32, b: i32) -> i32 {
-			if a > b { a } else { b }
-		}
-	\end{minted}
-	\begin{align*}
-		&\text{let } \Gamma = (a : \{ v : \code{i32} \mid \text{true}\}, b : \{ v : \code{i32} \mid \text{true}\}) \text{ and } \tau = 
-		\{ v: \code{i32} \mid v \geq a \wedge v \geq b \}
-		\\
-		&\inferrule*
-			{
-				\onslide<2->{
-					\inferrule*
-					{ \onslide<4->{
-							\inferrule*
-							{\star}
-							{\Gamma, a > b \vdash a : \{ v : \code{i32} \mid v \doteq a\}}
-						}
-						\\
-							\onslide<3->{
-								\inferrule*
-								{ 
-									\onslide<5->{
-										\text{SMT-VALID}
-										\footnotesize{
-											\left(
-											\begin{aligned}[]
-												& \, \text{true} \wedge \text{true} \wedge a > b \\
-												&\ \wedge v \doteq a \\
-												&\quad \implies (v \geq a \wedge v \geq b)
-											\end{aligned}
-											\right)
-										}
-									}
-								}
-								{\Gamma, a > b \vdash \{ v : \code{i32} \mid v \doteq a\} \preceq \tau}
-							}
-					}
-					{
-						\Gamma, a > b \vdash a : \tau
-					}
-				}
-				\\
-					\onslide<2->{
-						\inferrule*
-						{\onslide<6->{\vdots}}
-						{\Gamma, \neg(a > b) \vdash b : \tau}
-					}
-			}
-			{\Gamma \vdash \code{if } a > b\ \{ a \} \code{ else } \{ b \} : \tau}
-	\end{align*}
-	\note{
-		0. Ziel: Prüfe Body gegen signatur \\
-		1. Abkürzungen \\
-		2. Funktionskörper muss return type haben; Ctx enthält die argumente (uneingeschränkt -> true predicate) \\
-		3. Beide Seiten: if und else \\
-			- Füge path condition zu context hinzu \\
-		4. Zentrale Idee: Subtyp einführen, der bekannt ist \\
-		5. Spezifischerer Type folg trivialerweise aus Regeln \\
-		6. Was bedeutet Subtyp? Predikate müssen sich implizieren (in CTX) \\
-		\\
-		---- \\
-		\\
-		Anmerken: Zusammenarbeit von Type-System (für grobes) und SMT / Logic für kompliziertes
-		\\
-		Funktioniert gut, aber was ist mit mutabillity?
-	}
+  \begin{minted}[autogobble]{rust}
+    //@ max(a: i32, b: i32) -> {v:i32 | v >= a && v >= b }
+    fn  max(a: i32, b: i32) -> i32 {
+      if a > b { a } else { b }
+    }
+  \end{minted}
+  \begin{align*}
+    &\text{let } \Gamma = (a : \{ v : \code{i32} \mid \text{true}\}, b : \{ v : \code{i32} \mid \text{true}\}) \text{ and } \tau = 
+    \{ v: \code{i32} \mid v \geq a \wedge v \geq b \}
+    \\
+    &\inferrule*
+      {
+        \onslide<2->{
+          \inferrule*
+          { \onslide<4->{
+              \inferrule*
+              {\star}
+              {\Gamma, a > b \vdash a : \{ v : \code{i32} \mid v \doteq a\}}
+            }
+            \\
+              \onslide<3->{
+                \inferrule*
+                { 
+                  \onslide<5->{
+                    \text{SMT-VALID}
+                    \footnotesize{
+                      \left(
+                      \begin{aligned}[]
+                        & \, \text{true} \wedge \text{true} \wedge a > b \\
+                        &\ \wedge v \doteq a \\
+                        &\quad \implies (v \geq a \wedge v \geq b)
+                      \end{aligned}
+                      \right)
+                    }
+                  }
+                }
+                {\Gamma, a > b \vdash \{ v : \code{i32} \mid v \doteq a\} \preceq \tau}
+              }
+          }
+          {
+            \Gamma, a > b \vdash a : \tau
+          }
+        }
+        \\
+          \onslide<2->{
+            \inferrule*
+            {\onslide<6->{\vdots}}
+            {\Gamma, \neg(a > b) \vdash b : \tau}
+          }
+      }
+      {\Gamma \vdash \code{if } a > b\ \{ a \} \code{ else } \{ b \} : \tau}
+  \end{align*}
+  \note{
+    0. Ziel: Prüfe Body gegen signatur \\
+    1. Abkürzungen \\
+    2. Funktionskörper muss return type haben; Ctx enthält die argumente (uneingeschränkt -> true predicate) \\
+    3. Beide Seiten: if und else \\
+      - Füge path condition zu context hinzu \\
+    4. Zentrale Idee: Subtyp einführen, der bekannt ist. Hier kann etwas kreativität gebraucht werden. (Liquid Types) \\
+    5. Spezifischerer Type folg trivialerweise aus Regeln \\
+    6. Was bedeutet Subtyp? Predikate müssen sich implizieren (in CTX) \\
+    \\
+    ---- \\
+    \\
+    Anmerken: Zusammenarbeit von Type-System (für grobes) und SMT / Logic für kompliziertes
+    \\
+    Funktioniert gut, aber was ist mit mutabillity?
+  }
 \end{frame}
 
 
 
 \begin{frame}[fragile]{Motivation}{}
-	\begin{columns}
-		\column{.5\textwidth}
-		\begin{minted}[autogobble]{rust}
-			fn  clamp(a: &mut i32, b: i32) {
-				if *a > b { *a = b }
-			}
-		\end{minted}
-		\begin{onlyenv}<2->
-			\begin{minted}[autogobble]{rust}
-				fn  client(...) {
-					...
-					clamp(&mut x, 5);
-					clamp(&mut y, 6);
-					print(x);
-					...
-				}
-			\end{minted}
-		\end{onlyenv}
+  \begin{columns}
+    \column{.5\textwidth}
+    \begin{minted}[autogobble]{rust}
+      fn  clamp(a: &mut i32, b: i32) {
+        if *a > b { *a = b }
+      }
+    \end{minted}
+    \begin{onlyenv}<2->
+      \begin{minted}[autogobble]{rust}
+        fn  client(...) {
+          ...
+          clamp(&mut x, 5);
+          clamp(&mut y, 6);
+          print!(x);
+          ...
+        }
+      \end{minted}
+    \end{onlyenv}
 
-		\column{.5\textwidth}<3->
-		What does this it \code{print(x)} output?
-		\begin{itemize}
-			\item In most imperative programming languages:
-			\begin{itemize}
-				\item Could be: old \code{x} or \code{5}
-				\item<4-> But also \code{6} (if x aliases with y)!
-			\end{itemize}
-			\item<5-> In Rust:
-				\begin{itemize}
-					\item Just old \code{x} or \code{5}
-					\item And nothing else!
-				\end{itemize}
-		\end{itemize}
-		
-	\end{columns}
-	\note{
-		- Hier: `clamp` stellt sicher, dass der referenzierte wert max `b` groß ist \\
-		- Neu: `client`. Zeigt zusätzliche schwierigkeiten.\\
-		-  Zwei Aufrufe an clamp. \\
-			- Welche Werte könnte `x, y` haben? \\
-			- Auf jeden Fall mal: `x` und `5` (je nachdem was größer) \\
-			- Aber! auch 6
-	}
+    \column{.5\textwidth}<3->
+    What does this it \code{print(x)} output?
+    \begin{itemize}
+      \item In most imperative programming languages:
+      \begin{itemize}
+        \item Could be: old \code{x} or \code{5}
+        \item<4-> But also \code{6} (if x aliases with y)!
+      \end{itemize}
+      \item<5-> In Rust:
+        \begin{itemize}
+          \item Just old \code{x} or \code{5}
+          \item And nothing else!
+        \end{itemize}
+    \end{itemize}
+    
+  \end{columns}
+  \note{
+    - Hier: `clamp` stellt sicher, dass der referenzierte wert max `b` groß ist \\
+    - Neu: `client`. Zeigt zusätzliche schwierigkeiten.\\
+    -  Zwei Aufrufe an clamp. \\
+    - `print` macro call to output \\
+      - Welche Werte könnte `x, y` haben? \\
+      - Auf jeden Fall mal: `x` und `5` (je nachdem was größer) \\
+      - Aber! auch 6
+  }
 \end{frame}
 
 
 
 \begin{frame}[fragile]{Motivation}{}
-	\begin{columns}
-		\column{.5\textwidth}
-		\begin{minted}[autogobble]{rust}
-			fn  clamp(a: &mut i32, b: i32) { 
-				// borrows a
-				// owns b
-				if *a > b { *a = b }
-				// "returns" the borrow of a
-			}
-			fn  client(...) { // owns x, y
-				...
-				clamp(&mut x, 5); // lend x mutably
-				clamp(&mut y, 6); // lend y mutably
-				print(x);
-				...
-			}
-		\end{minted}
+  \begin{columns}
+    \column{.5\textwidth}
+    \begin{minted}[autogobble]{rust}
+      fn  clamp(a: &mut i32, b: i32) { 
+        // borrows a
+        // owns b
+        if *a > b { *a = b }
+        // "returns" the borrow of a
+      }
+      fn  client(...) { // owns x, y
+        ...
+        clamp(&mut x, 5); // lend x mutably
+        clamp(&mut y, 6); // lend y mutably
+        print!(x);
+        ...
+      }
+    \end{minted}
 
-		\column{.5\textwidth}
-		\begin{greenblock}{Ownership in Rust: Mutability XOR Aliasing}
-			Each lexical scope tracks permissions for visible memory objects.
-			Possible Permission Levels:
-			\begin{itemize}
-				\item Owner (e.g. \code{b})
-					\begin{itemize}
-						\item can: read, write
-						\item transfer ownership (if no outstanding borrows)
-					\end{itemize}
-				\item Mutable Reference (e.g. \code{\&mut x})
-					\begin{itemize}
-						\item can: read, write
-						\item guarantee: no aliasing
-					\end{itemize}
-				\item Immutable Reference (e.g. \code{\&v})
-					\begin{itemize}
-						\item can: read, alias
-						\item guarantee: no mutation
-					\end{itemize}
-			\end{itemize}
-		\end{greenblock}
-	\end{columns}
-	\note{
-		- 
-	}
+    \column{.5\textwidth}
+    \begin{greenblock}{Ownership in Rust: Mutability XOR Aliasing}
+      Each lexical scope tracks permissions for visible memory objects.
+      Possible Permission Levels:
+      \begin{itemize}
+        \item Owner (e.g. \code{b})
+          \begin{itemize}
+            \item can: read, write
+            \item transfer ownership (if no outstanding borrows)
+          \end{itemize}
+        \item Mutable Reference (e.g. \code{\&mut x})
+          \begin{itemize}
+            \item can: read, write
+            \item guarantee: no aliasing
+          \end{itemize}
+        \item Immutable Reference (e.g. \code{\&v})
+          \begin{itemize}
+            \item can: read, alias
+            \item guarantee: no mutation
+          \end{itemize}
+      \end{itemize}
+    \end{greenblock}
+  \end{columns}
+  \note{
+    - 
+  }
 \end{frame}
 
 
 \begin{frame}[fragile]{Motivation}{}
-	\begin{columns}
-		\column{.5\textwidth}
-			Consequences:
-			\begin{itemize}
-				\item unique data owner
-				\item no global, mutable state
-				\item no cycles in memory structure
-			\end{itemize}
+  \begin{columns}
+    \column{.5\textwidth}
+      Consequences:
+      \begin{itemize}
+        \item unique data owner
+        \item no global, mutable state
+        \item no cycles in memory structure
+      \end{itemize}
 
-			\onslide<2->{
-				Used for:
-				\begin{itemize}
-					\item safe non-gc memory management
-					\item safe concurrency
-					\item safe low-level hardware access
-					\item \dots
-					\item<3-> $\Rightarrow$ show: program verification as well
-				\end{itemize}
-			}
-		\column{.5\textwidth}
-		\begin{greenblock}{Ownership in Rust: Mutability XOR Aliasing}
-			Each lexical scope tracks permissions for visible memory objects.
-			Possible Permission Levels:
-			\begin{itemize}
-				\item Owner (e.g. \code{b})
-					\begin{itemize}
-						\item can: read, write
-						\item transfer ownership (if no outstanding borrows)
-					\end{itemize}
-				\item Mutable Reference (e.g. \code{\&mut x})
-					\begin{itemize}
-						\item can: read, write
-						\item guarantee: no aliasing
-					\end{itemize}
-				\item Immutable Reference (e.g. \code{\&v})
-					\begin{itemize}
-						\item can: read, alias
-						\item guarantee: no mutation
-					\end{itemize}
-			\end{itemize}
-		\end{greenblock}
-	\end{columns}
-	\note{
-		- Jeder speicherobjekt hat genau einen eigentümer \\
-		- Kein globaler, der veränderbar ist \\
-		- Keine Zyklen in der Speicherstruktur \\
-		\\ ---- \\
-		- Nützlich: \\
-			- wenn kein eigentümer -> speicherplatz freigeben \\
-			- nur 1 mutable => keine race conditions => nützlich für concurrency \\
-			- ... \\
-			- In MA zeigen: auch für verifikation\\
-		\\ ---- \\
-		Also: Wir haben gesehen: Refinement Types gut für immutable data; Rust: eingeschränkte mutability
-		=> Wie zusammenbringen?
-	}
+      \onslide<2->{
+        Used for:
+        \begin{itemize}
+          \item safe non-gc memory management
+          \item safe concurrency
+          \item safe low-level hardware access
+          \item \dots
+          \item<3-> $\Rightarrow$ show: program verification as well
+        \end{itemize}
+      }
+    \column{.5\textwidth}
+    \begin{greenblock}{Ownership in Rust: Mutability XOR Aliasing}
+      Each lexical scope tracks permissions for visible memory objects.
+      Possible Permission Levels:
+      \begin{itemize}
+        \item Owner (e.g. \code{b})
+          \begin{itemize}
+            \item can: read, write
+            \item transfer ownership (if no outstanding borrows)
+          \end{itemize}
+        \item Mutable Reference (e.g. \code{\&mut x})
+          \begin{itemize}
+            \item can: read, write
+            \item guarantee: no aliasing
+          \end{itemize}
+        \item Immutable Reference (e.g. \code{\&v})
+          \begin{itemize}
+            \item can: read, alias
+            \item guarantee: no mutation
+          \end{itemize}
+      \end{itemize}
+    \end{greenblock}
+  \end{columns}
+  \note{
+    - Jeder speicherobjekt hat genau einen eigentümer \\
+    - Kein globaler, der veränderbar ist \\
+    - Keine Zyklen in der Speicherstruktur \\
+    \\ ---- \\
+    - Nützlich: \\
+      - wenn kein eigentümer -> speicherplatz freigeben \\
+      - nur 1 mutable => keine race conditions => nützlich für concurrency \\
+      - ... \\
+      - In MA zeigen: auch für verifikation\\
+    \\ ---- \\
+    Also: Wir haben gesehen: Refinement Types gut für immutable data; Rust: eingeschränkte mutability
+    => Wie zusammenbringen?
+  }
 \end{frame}
 
-\section{Empirical Analysis}
+% \section{Empirical Analysis}
 \section{Solution}
 
-\begin{frame}[fragile]{Extend Refinement Types to Rust}
-asd
+\begin{frame}[fragile]{Refinement Types for Rust -- Syntax}
+  \begin{columns}
+    \column{.5\textwidth}
+      \begin{onlyenv}<1>
+        \begin{minted}[autogobble]{rust}
+          fn max(a: i32, b: i32) -> i32 {
+            if a > b { a } else { b }
+          }
+        \end{minted}
+      \end{onlyenv}
+      \begin{onlyenv}<2>
+        \begin{minted}[autogobble]{rust}
+          fn max(
+            a: ty!{ av: i32 | true }, 
+            b: ty!{ bv : i32 | true }
+          ) -> ty!{ v : i32 | v >= av && v >= bv } {
+            if a > b { a } else { b }
+          }
+        \end{minted}
+      \end{onlyenv}
+      \begin{onlyenv}<3->
+        \begin{minted}[autogobble]{rust}
+          fn max(
+            a: ty!{ av: i32 }, 
+            b: ty!{ bv : i32 }
+          ) -> ty!{ v : i32 | v >= av && v >= bv } {
+            if a > b { a } else { b }
+          }
+        \end{minted}
+      \end{onlyenv}
+
+    \column{.5\textwidth}
+    Addition of two macros
+    \begin{itemize}
+      \item $\code{ty!}\{ l : b \mid \varphi \}$ in place of a type
+      \item \mintinline{rust}{relax_ctx!{ ... }} in place of a statement
+    \end{itemize}
+  \end{columns}
+  \note{
+    - Hinzugefügt: Macro in Rust zum verfeinern eines Typs. 
+      - Logik Variable (anderer Scope)
+      - Basis Typ
+      - predikat (in Rust syntax)
+  }
+\end{frame}
+
+
+\begin{frame}[fragile]{Refinement Types for Rust -- Type Checking}
+  \begin{minted}[autogobble]{rust}
+    fn max(a: ty!{ av: i32 }, b: ty!{ bv : i32 }) -> ty!{ v : i32 | v >= av && v >= bv } {
+      if a > b { a as ty!{ r : i32 | r >= av && r >= bv } } else { b }
+    }
+  \end{minted}
+  \begin{align*}
+    &\text{let } \Gamma = (a : \{ v : \code{i32} \mid \text{true}\}, b : \{ v : \code{i32} \mid \text{true}\}) \text{ and } \tau = 
+    \{ v: \code{i32} \mid v \geq a \wedge v \geq b \}
+    \\
+    &\inferrule*
+      {
+        {
+          \inferrule*
+          { {
+              \inferrule*
+              {\star}
+              {\Gamma, a > b \vdash a : \{ v : \code{i32} \mid v \doteq a\}}
+            }
+            \\
+              {
+                \inferrule*
+                { 
+                  {
+                    \text{SMT-VALID}
+                    \footnotesize{
+                      \left(
+                      \begin{aligned}[]
+                        & \, \text{true} \wedge \text{true} \wedge a > b \\
+                        &\ \wedge v \doteq a \\
+                        &\quad \implies (v \geq a \wedge v \geq b)
+                      \end{aligned}
+                      \right)
+                    }
+                  }
+                }
+                {\Gamma, a > b \vdash \{ v : \code{i32} \mid v \doteq a\} \preceq \tau}
+              }
+          }
+          {
+            \Gamma, a > b \vdash a : \tau
+          }
+        }
+        \\
+          {
+            \inferrule*
+            {{\vdots}}
+            {\Gamma, \neg(a > b) \vdash b : \tau}
+          }
+      }
+      {\Gamma \vdash \code{if } a > b\ \{ a \} \code{ else } \{ b \} : \tau \color{kit-orange80}{\Rightarrow \Gamma}}
+  \end{align*}
+
+\end{frame}
+
+
+\begin{frame}[fragile]{Refinement Types for Rust -- Syntax}
+  \begin{minted}[autogobble, mathescape]{rust}
+    fn inc(a: &mut ty!{ a1: i32 | true => a2 | a2 == a1 + 1 }) {
+      *a = *a + 1;
+    }
+    fn client(mut x: ty!{ xv: i32 | xv > 2 }) -> ty!{ v: i32 | v > 7 } {
+      let mut y = 2;
+      inc(&mut x); inc(&mut x);
+      inc(&mut y)
+      x + y
+    }
+  \end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{Refinement Types for Rust -- Syntax}
+  \begin{minted}[autogobble, mathescape]{rust}
+    fn clamp(a: &mut ty!{ a1 : i32 | true => a2 | a2 <= b1 }, b: ty!{ b1: i32 }) { 
+      if *a > b { *a = b }
+    }
+    fn client(...) {
+      ...
+      clamp(&mut x, 5);
+      clamp(&mut y, 6);
+      print!(x);
+      ...
+    }
+  \end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{Refinement Types for Rust -- Syntax}
+  \begin{minted}[autogobble, mathescape]{rust}
+    fn clamp(a: &mut ty!{ a1 : i32 | true => a2 | a2 <= b1 }, b: ty!{ b1: i32 }) { 
+      // $\Gamma_1 = (\{a \mapsto \&arg_0, arg_0 \mapsto a_1, b \mapsto b_1\}, \text{true} \wedge \text{true})$
+      if *a > b { *a = b }
+      // $\Gamma_2 = (\{arg_0 \mapsto a_2, b \mapsto b_1\}, a2 \leq b_1 \wedge \text{true})$
+    }
+    fn client(...) {
+      ...
+      // $\Gamma_1 = (\{x \mapsto v_1, y \mapsto v_2\}, \dots)$
+      clamp(&mut x, 5);
+      // $\Gamma_2 = (\{x \mapsto v_3, y \mapsto v_2\}, \dots \wedge v_3 \leq 5)$
+      clamp(&mut y, 6);
+      // $\Gamma_3 = (\{x \mapsto v_3, y \mapsto v_4\}, \dots \wedge v_3 \leq 5 \wedge v_4 \leq 6)$
+      print!(x);
+      ...
+    }
+  \end{minted}
 \end{frame}
 
 \section{Soundness Justification}
+
+\begin{frame}[fragile]{Soundness}
+  \begin{greenblock}{Progress}
+    If $\Gamma \vdash s_1$, $\sigma : \Gamma \Rightarrow \Gamma_2$ and $s_1 \neq \code{unit}$, then there is a $s_2$ and $\sigma_2$ with $\tuple{s_1}{\sigma_1} \leadsto \tuple{s_2}{\sigma_2}$.
+  \end{greenblock}
+
+  Corten strictly refines the base language, therefore progress depends on base type system.
+
+  \begin{greenblock}{Preservation}
+    If $\Gamma \vdash s \Rightarrow \Gamma_2$, $\sigma : \Gamma$ and $\tuple{s}{\sigma} \leadsto \tuple{s_1}{\sigma_1}$, then there is a $\Gamma_1$ with $\Gamma_1 \vdash s_1 \Rightarrow \Gamma_2$ and $\sigma_2 : \Gamma_2$
+  \end{greenblock}
+
+  Stronger property than base language preservation: Show that refined types are preserved
+\end{frame}
+
+\begin{frame}[fragile]{State Conformance}
+  \begin{greenblock}{State Conformance $\sigma : \Gamma$}
+    A state $\sigma$ is conformant with respect to a typing context $\Gamma = (\mu, \Phi)$ (written as $\sigma : \Gamma$), iff:
+    $$
+      \Phi[\mu(x) \triangleright \bbracket{\sigma(x)} \mid x \in \dom(\mu)] \text{ is satisfiable}
+    $$
+    I.e. a conformant type context does not contradict the execution state.
+  \end{greenblock}
+  Examples:
+  \begin{itemize}
+    \item If $\sigma : (\emptyset, \Phi)$ then $\Phi$ is satisfiable
+    \item If $\sigma : (\mu, \Phi_1 \wedge \Phi_2)$ then $\sigma : (\mu, \Phi_1)$ and $\sigma : (\mu, \Phi_1)$.
+    \item If $\sigma : (\mu, \Phi)$ and $\text{FV}(\Phi) \subseteq \dom(\mu)$, then $\vDash \Phi[\mu(x) \triangleright \bbracket{\sigma(x)} \mid x \in \dom(\mu)]$
+  \end{itemize}
+  \note{
+    - Konformanz: Schon gesehen. Jetzt definierten \\
+    - Ungewöhnlich, weil Kontext freie variablen enthalten kann (deswegen Erfüllbarkeit) \\
+    - Beispiele: \\
+      1. trivialer Fall (kein state) \\
+      2. relativ offensichtlich \\
+      3. interessant: Wenn keine unassociated logik variablen, dann auch allgemeingültig. (weil konstant) \\
+  }
+\end{frame}
+
+
+\begin{frame}[fragile]{Intermediate Steps}
+  \begin{greenblock}{Conformance of Symbolic Execution}
+    If $\sigma : \Gamma$, $\Gamma \vdash \alpha \text{ fresh}$ then $\sigma[x \mapsto \bbracket{e} \sigma] : \Gamma[x \mapsto \alpha],(\alpha \simeq \bbracket{e} \Gamma)$
+  \end{greenblock}
+  where $(\alpha \simeq \bbracket{e} \Gamma)$ is the symbolic execution of $e$ equated with $\alpha$ in context $\Gamma$
+  
+  \begin{greenblock}{Reference Predicates are Conservative}
+    If $\sigma : \Gamma $ and $\Gamma \vdash *x \in \set{y_1, \dots, y_n}$ then $\bbracket{\sigma(x)} = \&y_i$ for some $i \in 1, \dots, n$ 
+  \end{greenblock}
+
+  Rare case where conservative typing requires 
+
+  \begin{greenblock}{Sub-Context Relation is Conservative}
+    If $\Gamma \preceq \Gamma'$ and $\sigma : \Gamma$ then $\sigma : \Gamma'$
+  \end{greenblock}
+
+  \note{
+    - Regel wird für zuweisung gebraucht: (`e` an `x`)
+    - Gleichsetzen ist vielleicht nicht möglich (v.a. wenn logik nicht stark genug)
+    ---
+    - Im gegensatz zum rest: Ctx muss richtigen wert enthalten.
+      - möglich wg. sehr eingeschränkter prädikate für references
+    ---
+    - Abschächen d. Ctx kann keine widersprüche erzeugen
+    - für Fn-Call und relax ctx
+  }
+\end{frame}
+
 \section{Related Work}
 \section{Conclusion / Future Work}
 
@@ -347,65 +584,65 @@ asd
 
 \subsection{Erster Unterabschnitt}
 \begin{frame}{Blöcke}{in den KIT-Farben}
-	\begin{columns}
-		\column{.3\textwidth}
-		\begin{greenblock}{Greenblock}
-			Standard (\texttt{block})
+  \begin{columns}
+    \column{.3\textwidth}
+    \begin{greenblock}{Greenblock}
+      Standard (\texttt{block})
         \end{greenblock}
-		\column{.3\textwidth}
-		\begin{blueblock}{Blueblock}
-			= \texttt{exampleblock}
+    \column{.3\textwidth}
+    \begin{blueblock}{Blueblock}
+      = \texttt{exampleblock}
         \end{blueblock}
-		\column{.3\textwidth}
-		\begin{redblock}{Redblock}
-			= \texttt{alertblock}
+    \column{.3\textwidth}
+    \begin{redblock}{Redblock}
+      = \texttt{alertblock}
         \end{redblock}
-	\end{columns}
-	\begin{columns}
-		\column{.3\textwidth}
+  \end{columns}
+  \begin{columns}
+    \column{.3\textwidth}
         \begin{brownblock}{Brownblock}
         \end{brownblock}
-		\column{.3\textwidth}
+    \column{.3\textwidth}
         \begin{purpleblock}{Purpleblock}
         \end{purpleblock}
-		\column{.3\textwidth}
+    \column{.3\textwidth}
         \begin{cyanblock}{Cyanblock}
         \end{cyanblock}
-	\end{columns}
-	\begin{columns}
-		\column{.3\textwidth}
+  \end{columns}
+  \begin{columns}
+    \column{.3\textwidth}
         \begin{yellowblock}{Yellowblock}
         \end{yellowblock}
-		\column{.3\textwidth}
+    \column{.3\textwidth}
         \begin{lightgreenblock}{Lightgreenblock}
         \end{lightgreenblock}
-		\column{.3\textwidth}
+    \column{.3\textwidth}
         \begin{orangeblock}{Orangeblock}
         \end{orangeblock}
-	\end{columns}
-	\begin{columns}
-		\column{.3\textwidth}
+  \end{columns}
+  \begin{columns}
+    \column{.3\textwidth}
         \begin{grayblock}{Grayblock}
         \end{grayblock}
-		\column{.3\textwidth}
-		\begin{contentblock}{Contentblock}
-			(farblos)
-		\end{contentblock}
-		\column{.3\textwidth}
-	\end{columns}
+    \column{.3\textwidth}
+    \begin{contentblock}{Contentblock}
+      (farblos)
+    \end{contentblock}
+    \column{.3\textwidth}
+  \end{columns}
 \end{frame}
-	  
+    
 \subsection{Zweiter Unterabschnitt}
 \begin{frame}{Auflistungen}
-	Text
-	\begin{itemize}
-		\item Auflistung\\ Umbruch
-		\item Auflistung
-		\begin{itemize}
-			\item Auflistung
-			\item Auflistung
-		\end{itemize}
-	\end{itemize}
+  Text
+  \begin{itemize}
+    \item Auflistung\\ Umbruch
+    \item Auflistung
+    \begin{itemize}
+      \item Auflistung
+      \item Auflistung
+    \end{itemize}
+  \end{itemize}
 \end{frame}
 
 \section{Zweiter Abschnitt}
@@ -435,140 +672,140 @@ asd
 \tiny
 
 % GREEN
-	\colorbox{kit-green100}{kit-green100}
-	\colorbox{kit-green90}{kit-green90}
-	\colorbox{kit-green80}{kit-green80}
-	\colorbox{kit-green70}{kit-green70}
-	\colorbox{kit-green60}{kit-green60}
-	\colorbox{kit-green50}{kit-green50}
-	\colorbox{kit-green40}{kit-green40}
-	\colorbox{kit-green30}{kit-green30}
-	\colorbox{kit-green25}{kit-green25}
-	\colorbox{kit-green20}{kit-green20}
-	\colorbox{kit-green15}{kit-green15}
-	\colorbox{kit-green10}{kit-green10}
-	\colorbox{kit-green5}{kit-green5}
+  \colorbox{kit-green100}{kit-green100}
+  \colorbox{kit-green90}{kit-green90}
+  \colorbox{kit-green80}{kit-green80}
+  \colorbox{kit-green70}{kit-green70}
+  \colorbox{kit-green60}{kit-green60}
+  \colorbox{kit-green50}{kit-green50}
+  \colorbox{kit-green40}{kit-green40}
+  \colorbox{kit-green30}{kit-green30}
+  \colorbox{kit-green25}{kit-green25}
+  \colorbox{kit-green20}{kit-green20}
+  \colorbox{kit-green15}{kit-green15}
+  \colorbox{kit-green10}{kit-green10}
+  \colorbox{kit-green5}{kit-green5}
 
 % BLUE
-	\colorbox{kit-blue100}{kit-blue100}
-	\colorbox{kit-blue90}{kit-blue90}
-	\colorbox{kit-blue80}{kit-blue80}
-	\colorbox{kit-blue70}{kit-blue70}
-	\colorbox{kit-blue60}{kit-blue60}
-	\colorbox{kit-blue50}{kit-blue50}
-	\colorbox{kit-blue40}{kit-blue40}
-	\colorbox{kit-blue30}{kit-blue30}
-	\colorbox{kit-blue25}{kit-blue25}
-	\colorbox{kit-blue20}{kit-blue20}
-	\colorbox{kit-blue15}{kit-blue15}
-	\colorbox{kit-blue10}{kit-blue10}
-	\colorbox{kit-blue5}{kit-blue5}
+  \colorbox{kit-blue100}{kit-blue100}
+  \colorbox{kit-blue90}{kit-blue90}
+  \colorbox{kit-blue80}{kit-blue80}
+  \colorbox{kit-blue70}{kit-blue70}
+  \colorbox{kit-blue60}{kit-blue60}
+  \colorbox{kit-blue50}{kit-blue50}
+  \colorbox{kit-blue40}{kit-blue40}
+  \colorbox{kit-blue30}{kit-blue30}
+  \colorbox{kit-blue25}{kit-blue25}
+  \colorbox{kit-blue20}{kit-blue20}
+  \colorbox{kit-blue15}{kit-blue15}
+  \colorbox{kit-blue10}{kit-blue10}
+  \colorbox{kit-blue5}{kit-blue5}
 
 % RED
-	\colorbox{kit-red100}{kit-red100}
-	\colorbox{kit-red90}{kit-red90}
-	\colorbox{kit-red80}{kit-red80}
-	\colorbox{kit-red70}{kit-red70}
-	\colorbox{kit-red60}{kit-red60}
-	\colorbox{kit-red50}{kit-red50}
-	\colorbox{kit-red40}{kit-red40}
-	\colorbox{kit-red30}{kit-red30}
-	\colorbox{kit-red25}{kit-red25}
-	\colorbox{kit-red20}{kit-red20}
-	\colorbox{kit-red15}{kit-red15}
-	\colorbox{kit-red10}{kit-red10}
-	\colorbox{kit-red5}{kit-red5}
+  \colorbox{kit-red100}{kit-red100}
+  \colorbox{kit-red90}{kit-red90}
+  \colorbox{kit-red80}{kit-red80}
+  \colorbox{kit-red70}{kit-red70}
+  \colorbox{kit-red60}{kit-red60}
+  \colorbox{kit-red50}{kit-red50}
+  \colorbox{kit-red40}{kit-red40}
+  \colorbox{kit-red30}{kit-red30}
+  \colorbox{kit-red25}{kit-red25}
+  \colorbox{kit-red20}{kit-red20}
+  \colorbox{kit-red15}{kit-red15}
+  \colorbox{kit-red10}{kit-red10}
+  \colorbox{kit-red5}{kit-red5}
 
 % GREY
-	\colorbox{kit-gray100}{\color{white}kit-gray100}
-	\colorbox{kit-gray90}{\color{white}kit-gray90}
-	\colorbox{kit-gray80}{\color{white}kit-gray80}
-	\colorbox{kit-gray70}{\color{white}kit-gray70}
-	\colorbox{kit-gray60}{\color{white}kit-gray60}
-	\colorbox{kit-gray50}{\color{white}kit-gray50}
-	\colorbox{kit-gray40}{kit-gray40}
-	\colorbox{kit-gray30}{kit-gray30}
-	\colorbox{kit-gray25}{kit-gray25}
-	\colorbox{kit-gray20}{kit-gray20}
-	\colorbox{kit-gray15}{kit-gray15}
-	\colorbox{kit-gray10}{kit-gray10}
-	\colorbox{kit-gray5}{kit-gray5}
+  \colorbox{kit-gray100}{\color{white}kit-gray100}
+  \colorbox{kit-gray90}{\color{white}kit-gray90}
+  \colorbox{kit-gray80}{\color{white}kit-gray80}
+  \colorbox{kit-gray70}{\color{white}kit-gray70}
+  \colorbox{kit-gray60}{\color{white}kit-gray60}
+  \colorbox{kit-gray50}{\color{white}kit-gray50}
+  \colorbox{kit-gray40}{kit-gray40}
+  \colorbox{kit-gray30}{kit-gray30}
+  \colorbox{kit-gray25}{kit-gray25}
+  \colorbox{kit-gray20}{kit-gray20}
+  \colorbox{kit-gray15}{kit-gray15}
+  \colorbox{kit-gray10}{kit-gray10}
+  \colorbox{kit-gray5}{kit-gray5}
 
 % Orange
-	\colorbox{kit-orange100}{kit-orange100}
-	\colorbox{kit-orange90}{kit-orange90}
-	\colorbox{kit-orange80}{kit-orange80}
-	\colorbox{kit-orange70}{kit-orange70}
-	\colorbox{kit-orange60}{kit-orange60}
-	\colorbox{kit-orange50}{kit-orange50}
-	\colorbox{kit-orange40}{kit-orange40}
-	\colorbox{kit-orange30}{kit-orange30}
-	\colorbox{kit-orange25}{kit-orange25}
-	\colorbox{kit-orange20}{kit-orange20}
-	\colorbox{kit-orange15}{kit-orange15}
-	\colorbox{kit-orange10}{kit-orange10}
-	\colorbox{kit-orange5}{kit-orange5}
+  \colorbox{kit-orange100}{kit-orange100}
+  \colorbox{kit-orange90}{kit-orange90}
+  \colorbox{kit-orange80}{kit-orange80}
+  \colorbox{kit-orange70}{kit-orange70}
+  \colorbox{kit-orange60}{kit-orange60}
+  \colorbox{kit-orange50}{kit-orange50}
+  \colorbox{kit-orange40}{kit-orange40}
+  \colorbox{kit-orange30}{kit-orange30}
+  \colorbox{kit-orange25}{kit-orange25}
+  \colorbox{kit-orange20}{kit-orange20}
+  \colorbox{kit-orange15}{kit-orange15}
+  \colorbox{kit-orange10}{kit-orange10}
+  \colorbox{kit-orange5}{kit-orange5}
 
 % lightgreen
-	\colorbox{kit-lightgreen100}{kit-lightgreen100}
-	\colorbox{kit-lightgreen90}{kit-lightgreen90}
-	\colorbox{kit-lightgreen80}{kit-lightgreen80}
-	\colorbox{kit-lightgreen70}{kit-lightgreen70}
-	\colorbox{kit-lightgreen60}{kit-lightgreen60}
-	\colorbox{kit-lightgreen50}{kit-lightgreen50}
-	\colorbox{kit-lightgreen40}{kit-lightgreen40}
-	\colorbox{kit-lightgreen30}{kit-lightgreen30}
-	\colorbox{kit-lightgreen25}{kit-lightgreen25}
-	\colorbox{kit-lightgreen20}{kit-lightgreen20}
-	\colorbox{kit-lightgreen15}{kit-lightgreen15}
-	\colorbox{kit-lightgreen10}{kit-lightgreen10}
-	\colorbox{kit-lightgreen5}{kit-lightgreen5}
+  \colorbox{kit-lightgreen100}{kit-lightgreen100}
+  \colorbox{kit-lightgreen90}{kit-lightgreen90}
+  \colorbox{kit-lightgreen80}{kit-lightgreen80}
+  \colorbox{kit-lightgreen70}{kit-lightgreen70}
+  \colorbox{kit-lightgreen60}{kit-lightgreen60}
+  \colorbox{kit-lightgreen50}{kit-lightgreen50}
+  \colorbox{kit-lightgreen40}{kit-lightgreen40}
+  \colorbox{kit-lightgreen30}{kit-lightgreen30}
+  \colorbox{kit-lightgreen25}{kit-lightgreen25}
+  \colorbox{kit-lightgreen20}{kit-lightgreen20}
+  \colorbox{kit-lightgreen15}{kit-lightgreen15}
+  \colorbox{kit-lightgreen10}{kit-lightgreen10}
+  \colorbox{kit-lightgreen5}{kit-lightgreen5}
 
 % Brown
-	\colorbox{kit-brown100}{kit-brown100}
-	\colorbox{kit-brown90}{kit-brown90}
-	\colorbox{kit-brown80}{kit-brown80}
-	\colorbox{kit-brown70}{kit-brown70}
-	\colorbox{kit-brown60}{kit-brown60}
-	\colorbox{kit-brown50}{kit-brown50}
-	\colorbox{kit-brown40}{kit-brown40}
-	\colorbox{kit-brown30}{kit-brown30}
-	\colorbox{kit-brown25}{kit-brown25}
-	\colorbox{kit-brown20}{kit-brown20}
-	\colorbox{kit-brown15}{kit-brown15}
-	\colorbox{kit-brown10}{kit-brown10}
-	\colorbox{kit-brown5}{kit-brown5}
+  \colorbox{kit-brown100}{kit-brown100}
+  \colorbox{kit-brown90}{kit-brown90}
+  \colorbox{kit-brown80}{kit-brown80}
+  \colorbox{kit-brown70}{kit-brown70}
+  \colorbox{kit-brown60}{kit-brown60}
+  \colorbox{kit-brown50}{kit-brown50}
+  \colorbox{kit-brown40}{kit-brown40}
+  \colorbox{kit-brown30}{kit-brown30}
+  \colorbox{kit-brown25}{kit-brown25}
+  \colorbox{kit-brown20}{kit-brown20}
+  \colorbox{kit-brown15}{kit-brown15}
+  \colorbox{kit-brown10}{kit-brown10}
+  \colorbox{kit-brown5}{kit-brown5}
 
 % Purple
-	\colorbox{kit-purple100}{kit-purple100}
-	\colorbox{kit-purple90}{kit-purple90}
-	\colorbox{kit-purple80}{kit-purple80}
-	\colorbox{kit-purple70}{kit-purple70}
-	\colorbox{kit-purple60}{kit-purple60}
-	\colorbox{kit-purple50}{kit-purple50}
-	\colorbox{kit-purple40}{kit-purple40}
-	\colorbox{kit-purple30}{kit-purple30}
-	\colorbox{kit-purple25}{kit-purple25}
-	\colorbox{kit-purple20}{kit-purple20}
-	\colorbox{kit-purple15}{kit-purple15}
-	\colorbox{kit-purple10}{kit-purple10}
-	\colorbox{kit-purple5}{kit-purple5}
+  \colorbox{kit-purple100}{kit-purple100}
+  \colorbox{kit-purple90}{kit-purple90}
+  \colorbox{kit-purple80}{kit-purple80}
+  \colorbox{kit-purple70}{kit-purple70}
+  \colorbox{kit-purple60}{kit-purple60}
+  \colorbox{kit-purple50}{kit-purple50}
+  \colorbox{kit-purple40}{kit-purple40}
+  \colorbox{kit-purple30}{kit-purple30}
+  \colorbox{kit-purple25}{kit-purple25}
+  \colorbox{kit-purple20}{kit-purple20}
+  \colorbox{kit-purple15}{kit-purple15}
+  \colorbox{kit-purple10}{kit-purple10}
+  \colorbox{kit-purple5}{kit-purple5}
 
 % Cyan
-	\colorbox{kit-cyan100}{kit-cyan100}
-	\colorbox{kit-cyan90}{kit-cyan90}
-	\colorbox{kit-cyan80}{kit-cyan80}
-	\colorbox{kit-cyan70}{kit-cyan70}
-	\colorbox{kit-cyan60}{kit-cyan60}
-	\colorbox{kit-cyan50}{kit-cyan50}
-	\colorbox{kit-cyan40}{kit-cyan40}
-	\colorbox{kit-cyan30}{kit-cyan30}
-	\colorbox{kit-cyan25}{kit-cyan25}
-	\colorbox{kit-cyan20}{kit-cyan20}
-	\colorbox{kit-cyan15}{kit-cyan15}
-	\colorbox{kit-cyan10}{kit-cyan10}
-	\colorbox{kit-cyan5}{kit-cyan5}
-		
+  \colorbox{kit-cyan100}{kit-cyan100}
+  \colorbox{kit-cyan90}{kit-cyan90}
+  \colorbox{kit-cyan80}{kit-cyan80}
+  \colorbox{kit-cyan70}{kit-cyan70}
+  \colorbox{kit-cyan60}{kit-cyan60}
+  \colorbox{kit-cyan50}{kit-cyan50}
+  \colorbox{kit-cyan40}{kit-cyan40}
+  \colorbox{kit-cyan30}{kit-cyan30}
+  \colorbox{kit-cyan25}{kit-cyan25}
+  \colorbox{kit-cyan20}{kit-cyan20}
+  \colorbox{kit-cyan15}{kit-cyan15}
+  \colorbox{kit-cyan10}{kit-cyan10}
+  \colorbox{kit-cyan5}{kit-cyan5}
+    
 \end{frame}
 %% ----------------------------------------
 %% | /Test-Folie mit definierten Farben |

@@ -1102,7 +1102,7 @@ $$
       \\\\ (\mu_{init}, \Phi_{init}) \vdash s \Rightarrow \Gamma'
       \\ \Gamma' \vdash x_r : \tau_r
       \\ \Gamma' \vdash \tau_r \preceq \tau
-      \\ \Gamma' \preceq \Gamma_{init}[\{arg_j \mapsto \gamma_j], \chi_j
+      \\ \Gamma' \preceq \left(\set{arg_j \mapsto \gamma_j, x_i \mapsto \alpha_i}, \chi_j \wedge \varphi_i\right)
     }
     {\code{fn } f(x_i : \{ \alpha_i : b_i \mid \varphi_i \}, y_j : \&\code{mut }\{ \beta_j : b_j \mid \psi_j \Rightarrow \gamma_j \mid \chi_j\}) \to \tau \{ s; x_r \}}
 $$
@@ -1143,7 +1143,7 @@ Note that, $\Gamma \vdash \tau \preceq \tau'$ can be rephrased in terms of $\Gam
 \begin{definition}[Sub-Context Rules: $\Gamma \preceq \Gamma'$]
 
 In contrast to other refinement type systems, Corten allows types in the context to refer to one another.
-For example the type specifications \code{a : \{ $\alpha$ : i32 | $\alpha$ > $\beta$\}, b:  \{ $\beta$: i32 | $\beta$ != $\alpha$\}} are considered well formed in Corten and result in the context $\Gamma = (\{\code{a} \mapsto \alpha, \code{b} \mapsto \beta\}, \alpha \neq \beta \wedge \beta \geq \alpha)$. In the example, the value $0$ is a valid inhabitant of \code{a}'s type as long as $\code{b} \geq 1$.
+For example the type specifications \code{a : \{ $\alpha$ : i32 | $\alpha$ > $\beta$ \}, b :  \{ $\beta$ : i32 | $\beta$ != $\alpha$ \}} are considered well formed in Corten and result in the context $\Gamma = (\{\code{a} \mapsto \alpha, \code{b} \mapsto \beta\}, \alpha \neq \beta \wedge \beta \geq \alpha)$. In the example, the value $0$ is a valid inhabitant of \code{a}'s type as long as $\code{b} \geq 1$.
 
 The rule \textsc{$\preceq$-Ctx} serves the purpose of allowing these interdependencies between predicates while still providing an applicable concept of subtyping: As long as the set of predicates in $\Gamma'$ imply the predicates for $\Gamma$, the sub-context relation is satisfied and $\Gamma'$ and $\Gamma$ is called the super-context and sub-context respectively. 
 To be more precise, the rule needs to relate the predicates for each \textit{program} variable with the opposing predicates for that program variable. The substitution $\Phi'[\mu'(x) \triangleright \mu(x)\ \mid x \in \dom(\mu)]$ forces the logic variable associated with \code{x} in $\Gamma'$ to be substituted by the logic variable $\mu(x)$ , which is associated with $x$ in $\Gamma'$.
@@ -1217,7 +1217,7 @@ $$ \begin{gathered}
     {\Gamma \vdash v: \{ \alpha : b \mid \alpha \simeq \bbracket{v}\Gamma\} }
   %
   \quad
-  \inferrule*[left=Add\rulelabel{Add}]
+  \inferrule*[left=BinOp\rulelabel{Add}]
     {
       \Gamma \vdash \alpha \text{ fresh}
     }

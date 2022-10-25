@@ -33,6 +33,7 @@
 \usepackage{minted}
 \usepackage{mathtools}
 \usemintedstyle{colorful}
+\setminted{autogobble, mathescape, highlightcolor=kit-orange60}
 
 \usepackage{mathpartir}
 \usepackage{ stmaryrd }
@@ -410,7 +411,7 @@
 
 \begin{frame}[fragile]{Type Updates}
   \begin{columns}
-    \column{.4\textwidth}
+    \column{.5\textwidth}
     \begin{onlyenv}<1>
       \begin{minted}[autogobble, mathescape]{rust}
         fn decr() -> ty!{ w : i32 | w >= 0 } {
@@ -420,19 +421,20 @@
         }
       \end{minted}
     \end{onlyenv}
-    \begin{onlyenv}<2->
-      \begin{minted}[autogobble, mathescape]{rust}
-        fn decr() -> ty!{ w : i32 | w >= 0 } {
-         // $\Gamma_1 = (\set{}, \text{true})$
-         let mut i = ... as ty!{ v: i32 | v > 0};
-         // $\Gamma_2 = (\set{i \mapsto v}, v > 0)$
-         i = i - 1;
-         // $\Gamma_3 = (\set{i \mapsto {\red{v_2}}}, v > 0 \wedge {\red{v_2 \doteq v - 1}})$
-         i }
-      \end{minted}
-    \end{onlyenv}
+    \only<2>{
+      \inputminted[]{rust}{./snippets/decr.rs}
+    }
+    \only<3>{
+      \inputminted[highlightlines=3]{rust}{./snippets/decr.rs}
+    }
+    \only<4>{
+      \inputminted[highlightlines=5]{rust}{./snippets/decr.rs}
+    }
+    \only<5>{
+      \inputminted[highlightlines=2-6]{rust}{./snippets/decr.rs}
+    }
 
-    \column{.6\textwidth}
+    \column{.5\textwidth}
     \only<1-2>{
       \begin{itemize}
         \item Types need to change through execution
@@ -442,103 +444,79 @@
           \item $\Gamma$ association of program- to logic-variables and predicate
           \item $\Gamma \vdash s \Rightarrow \Gamma'$ (Statement Type Checking)
           \item $\Gamma \vdash e : \tau$ (Expression Typing)
-          \item On assignment: \textit{replace} association, \textit{append} predicate
+          \item on assignment: \textit{replace} association, \textit{append} predicate
+          \item observation: assignment can not invalidate existing predicates
         \end{itemize}
       \end{itemize}
     }
-  \end{columns}
-
-  \onslide<3->{
+    \only<3>{
       \begin{align*}
-        &\text{let }
-        \Gamma_2 = \Gamma[i \mapsto v_1], v > 0 \text{ and }
-        \tau = \set{v : \code{i32} \mid v > 0}\\
-        &\inferrule*[left=\footnotesize{Seq}]
+        &\inferrule*[left=Intro-Sub]
           {
-            \inferrule*[left=\footnotesize{Decl}]
-              {
-                \inferrule*[left=\footnotesize{Intro}-Sub]
-                  {\Gamma_1 \vdash ... : \tau' \\ \Gamma_1 \vdash \tau' \preceq \tau}
-                  {\Gamma_1 \vdash \code{... as $\tau$} : \tau}
-              }
-              {\Gamma_1 \vdash \code{let i = ... as $\tau$} \Rightarrow \Gamma_2}
-            \\ 
-            \inferrule*[left=\footnotesize{Ass}]
-              {
-                \inferrule*[left=\footnotesize{BinOp}]
-                  {\Gamma_1 \vdash v_2 \text{ fresh}}
-                  {\Gamma_1 \vdash \code{i - 1} : \set{v_2 : \text{i32} \mid v_2 \doteq v - 1}}
-              }
-              {\Gamma_2 \vdash \code{i = i - 1} \Rightarrow \Gamma[i \mapsto v_2], v > 0, v_2 \doteq v - 1}
+            \Gamma \vdash e : \tau
+            \\ \Gamma \vdash \tau \preceq \tau'
           }
-          {\Gamma_1 \vdash \code{let i = ... as $\tau$; i = i - 1} \Rightarrow \Gamma[i \mapsto v_2], v > 0, v_2 \doteq v - 1}
+          {\Gamma \vdash e \texttt{ as } \tau': \tau'}
+        \\
+        &\inferrule*[left=Decl]
+          { \Gamma \vdash e :  \{ \beta : b \mid \varphi \} }
+          { \Gamma \vdash \code{let } x = e  \Rightarrow \Gamma[ x \mapsto \beta], \varphi }
       \end{align*}
     }
+    \only<4>{
+      \begin{align*}
+        &\inferrule*[left=BinOp]
+          {\Gamma \vdash \alpha \text{ fresh}}
+          {\Gamma \vdash x_1 \odot x_2 : \{ \alpha: b \mid \alpha \simeq \bbracket{x_1 \odot x_2}\Gamma \} }
+        \\
+        &\inferrule*[left=Assign]
+          {\Gamma \vdash e : \{ \beta : b \mid \varphi \}}
+          {\Gamma \vdash x = e \Rightarrow \Gamma[x \mapsto \beta], \varphi}
+      \end{align*}
+    }
+    \only<5>{
+      \begin{align*}
+        &\inferrule*[left=Seq]
+          {
+            \Gamma \vdash s_1 \Rightarrow \Gamma'
+            \\ \Gamma' \vdash s_2 \Rightarrow \Gamma''
+          }
+          {\Gamma \vdash s_1 ; s_2 \Rightarrow \Gamma''}
+      \end{align*}
+    }
+  \end{columns}
+
+  % \onslide<3->{
+  %     \begin{align*}
+  %       &\text{let }
+  %       \Gamma_2 = \Gamma[i \mapsto v_1], v > 0 \text{ and }
+  %       \tau = \set{v : \code{i32} \mid v > 0}\\
+  %       &\inferrule*[left=\footnotesize{Seq}]
+  %         {
+  %           \inferrule*[left=\footnotesize{Decl}]
+  %             {
+  %               \inferrule*[left=\footnotesize{Intro}-Sub]
+  %                 {\Gamma_1 \vdash ... : \tau' \\ \Gamma_1 \vdash \tau' \preceq \tau}
+  %                 {\Gamma_1 \vdash \code{... as $\tau$} : \tau}
+  %             }
+  %             {\Gamma_1 \vdash \code{let i = ... as $\tau$} \Rightarrow \Gamma_2}
+  %           \\ 
+  %           \inferrule*[left=\footnotesize{Ass}]
+  %             {
+  %               \inferrule*[left=\footnotesize{BinOp}]
+  %                 {\Gamma_1 \vdash v_2 \text{ fresh}}
+  %                 {\Gamma_1 \vdash \code{i - 1} : \set{v_2 : \text{i32} \mid v_2 \doteq v - 1}}
+  %             }
+  %             {\Gamma_2 \vdash \code{i = i - 1} \Rightarrow \Gamma[i \mapsto v_2], v > 0, v_2 \doteq v - 1}
+  %         }
+  %         {\Gamma_1 \vdash \code{let i = ... as $\tau$; i = i - 1} \Rightarrow \Gamma[i \mapsto v_2], v > 0, v_2 \doteq v - 1}
+  %     \end{align*}
+  %   }
     \note{
       - Bsp: decr i und geben den wert zurück. 
       - Lauft signatur: Rückgabe wert nicht-negativ
       - Bsp. zeigt: Änderungen der Typen Notwenig. (sonst return nicht erfüllt)
     }
-\end{frame}
-
-\begin{frame}
-  Expression Typing $\Gamma \vdash e : \tau$
-  $$ \begin{gathered}
-    \inferrule*[left=Lit]
-      {\Gamma \vdash \alpha \text{ fresh}}
-      {\Gamma \vdash v: \{ \alpha : b \mid \alpha \simeq \bbracket{v}\Gamma\} }
-    %
-    \quad
-    \inferrule*[left=BinOp]
-      {
-        \Gamma \vdash \alpha \text{ fresh}
-      }
-      {\Gamma \vdash x_1 \odot x_2 : \{ \alpha: b \mid \alpha \simeq \bbracket{x_1 \odot x_2}\Gamma \} }
-    %
-    \\
-    \inferrule*[left=Var]
-      {\Gamma \vdash \alpha \text{ fresh}}
-      {\Gamma \vdash x : \{ \alpha : b \mid \alpha \simeq \bbracket{x}\Gamma \} }
-    %
-    \quad
-    \inferrule*[left=Intro-Sub]
-      {
-        \Gamma \vdash e : \tau
-        \\ \Gamma \vdash \tau \preceq \tau'
-      }
-      {\Gamma \vdash e \texttt{ as } \tau': \tau'}
-  \end{gathered} $$
-
-  Statement Type Checking $\Gamma \vdash s \Rightarrow \Gamma'$
-
-  $$ \begin{gathered}
-    \inferrule*[left=If]
-      {
-        \Gamma, \Gamma(x) \doteq \code{true} \vdash s_t \Rightarrow \Gamma'
-        \\ \Gamma, \Gamma(x) \doteq \code{false} \vdash s_e \Rightarrow \Gamma'
-      }
-      {\Gamma \vdash \text{if } x \text{ then }s_t\text{ else } s_e \Rightarrow \Gamma'}
-    %
-    \\
-    \inferrule*[left=Seq]
-      {
-        \Gamma \vdash s_1 \Rightarrow \Gamma'
-        \\ \Gamma' \vdash s_2 \Rightarrow \Gamma''
-      }
-      {\Gamma \vdash s_1 ; s_2 \Rightarrow \Gamma''}
-    %
-    \\
-    \inferrule*[left=Decl]
-      {
-        \Gamma \vdash e :  \{ \beta : b \mid \varphi \}
-      }
-      {\Gamma \vdash \code{let } x = e  \Rightarrow \Gamma[ x \mapsto \beta], \varphi}
-    %
-    \quad
-    \inferrule*[left=Assign]
-      {\Gamma \vdash e : \{ \beta : b \mid \varphi \}}
-      {\Gamma \vdash x = e \Rightarrow \Gamma[x \mapsto \beta], \varphi}
-  \end{gathered} $$
 \end{frame}
 
 % \begin{frame}[fragile]{Refinement Types for Rust -- Type Checking}
@@ -574,126 +552,140 @@
 
 
 \begin{frame}[fragile]{References -- Strong Updates}
-  \begin{minted}[texcomments]{rust}
-    fn client() -> ty!{ v: i32 | v == 4 } {
-        let a = 2;       // a : $\{ v_1 : i32 \mid v_1 == 2 \}$
-        let b = &mut a;  // b : $\{ v_2 : &i32 \mid v_2 == &a \}$
-        *b = 0; // changes a's value and type
-        let c = &mut b;  // c : $\{ v_3 : &i32 \mid v_3 == &b \}$
-        **c = 4; // changes a's value and type
-        a
+  \begin{columns}
+    \column{.5\textwidth}
+    \only<1>{ \inputminted[]{rust}{./snippets/strong-updates.rs} }
+    \only<2>{ \inputminted[highlightlines=2]{rust}{./snippets/strong-updates.rs} }
+    \only<3>{ \inputminted[highlightlines=3]{rust}{./snippets/strong-updates.rs} }
+    \only<4>{ \inputminted[highlightlines=4]{rust}{./snippets/strong-updates.rs} }
+    \only<5>{ \inputminted[highlightlines=7]{rust}{./snippets/strong-updates.rs} }
+
+    \column{.5\textwidth}
+    \only<2> {
+      \begin{align*}
+        &\inferrule*[left=Lit]
+          {\Gamma \vdash \alpha \text{ fresh}}
+          {\Gamma \vdash v: \{ \alpha : b \mid \alpha \simeq \bbracket{v}\Gamma\} }
+      \end{align*}
+    }
+    \only<3> {
+      \begin{align*}
+        &\inferrule*[left=Ref]
+          {\Gamma \vdash \alpha \text{ fresh}}
+          {\Gamma \vdash \&x : \{ \alpha : \&b \mid \alpha \simeq \bbracket{\&x}\Gamma\}}
+      \end{align*}
+    }
+    \only<4> {
+      \begin{align*}
+        &\inferrule*[left=Assign-Strong]
+          {
+            \Gamma(z) = \beta
+            \\ \Gamma \vdash x \in \set{\&y} 
+            \\ \Gamma \vdash \gamma \text{ fresh}
+            % \\ \Gamma, \psi \vdash \alpha \text{ must reference } y
+          }
+          {\Gamma \vdash *x = z \Rightarrow \Gamma [y \mapsto \gamma], \gamma \doteq \beta}
+        \\
+        \\
+        &(\text{Also }\textsc{Assign-Weak})
+      \end{align*}
+    }
+    \only<5> {
+      \begin{align*}
+        &\inferrule*[left=Var]
+          {\Gamma \vdash \alpha \text{ fresh}}
+          {\Gamma \vdash x : \{ \alpha : b \mid \alpha \simeq \bbracket{x}\Gamma \} }
+      \end{align*}
+    }
+  \end{columns}
+  \only<1>{\note{
+    Hier: Referenzen
+  }}
+  \only<2>{\note{
+    Zuweisung mit Literal
+  }}
+  \only<3>{\note{
+    - Introduce a Reference. Type simply equality with addr \\
+    - Is das wirklich sicher? In Rust ja. Addr a ist wie eine stack slot (ändert sich auch nicht) \\
+  }}
+  \only<4>{\note{
+    - Dereferenziert b\\
+    - In TS: 
+  }}
+\end{frame}
+
+
+\begin{frame}[fragile]{Mutable Arguments}
+  \begin{minted}[autogobble, mathescape]{rust}
+    fn clamp(a: &mut ty!{ a1 : i32 | true => a2 | a2 <= b1 }, b: ty!{ b1: i32 }) { 
+      if *a > b { *a = b }
+    }
+    fn client(...) {
+      ...
+      clamp(&mut x, 5);
+      clamp(&mut y, 6);
+      print!(x);
+      ...
     }
   \end{minted}
 \end{frame}
 
-\begin{frame}[fragile]
-  Expression Typing $\Gamma \vdash e : \tau$
-  \begin{align*}
-    \inferrule*[left=Ref]
-    {\Gamma \vdash \alpha \text{ fresh}}
-    {\Gamma \vdash \&x : \{ \alpha : \&b \mid \alpha \simeq \bbracket{\&x}\Gamma\}}
-    %
-    \\
-    \inferrule*[left=Var-Deref]
-      {\Gamma \vdash *x \in \set{y} \\ \Gamma \vdash y : \tau }
-      {\Gamma \vdash *x : \tau }
-    \quad
-  \end{align*}
-  Statement Type Checking $\Gamma \vdash s \Rightarrow \Gamma'$
-  \begin{align*}
-    \inferrule*[left=Assign-Strong]
-    {
-      \Gamma(z) = \beta
-      \\ {\red \Gamma \vdash *x \in \set{y} }
-      \\ \Gamma \vdash \gamma \text{ fresh}
-    }
-    {\Gamma \vdash *x = z \Rightarrow \Gamma [y \mapsto \gamma], \gamma \doteq \beta}
-    %
-    \\
-    \onslide<2->{
-      \inferrule*[left=Assign-Weak]
-      {
-        \Gamma \vdash e : \tau 
-        \\ \Gamma \vdash *x \in \set{y_1, \dots, y_n}
-        \\\\ \fline{ \Gamma \vdash y_i : \{ \beta_i : b_i \mid \varphi_i \} }
-        \\ \fline{ \Gamma \vdash \tau \preceq \{ \beta_i : b_i \mid \varphi_i \} }
+\begin{frame}[fragile]{\alt<5->{Sub-Context}{Mutable Arguments}}
+  \begin{columns}
+    \column{.54\textwidth}
+    \only<1> { \inputminted[]{rust}{./snippets/mut-arg.rs} }
+    \only<2> { \inputminted[highlightlines=2]{rust}{./snippets/mut-arg.rs} }
+    \only<3> { \inputminted[highlightlines=5-6]{rust}{./snippets/mut-arg.rs} }
+    \only<4> { \inputminted[highlightlines=7-9]{rust}{./snippets/mut-arg.rs} }
+    \only<5-8> { \inputminted[highlightlines={2,10}]{rust}{./snippets/mut-arg.rs} }
+    \only<9->{
+        $$
+          \inferrule*[left=$\preceq$-Ctx]
+            {
+              \vDash \Phi'[\mu'(x) \triangleright \mu(x)\ \mid x \in \dom(\mu')] \to \Phi
+              \\ \dom(\mu') \subseteq \dom(\mu)
+            }
+            {(\mu, \Phi) \preceq (\mu', \Phi')}
+        $$
       }
-      {\Gamma \vdash *x = e \Rightarrow \Gamma}
-    }
-  \end{align*}
-\end{frame}
 
-\begin{frame}[fragile]{Modularity \& Mutation}
-  \begin{minted}[autogobble, mathescape]{rust}
-    fn clamp(a: &mut ty!{ a1 : i32 | true => a2 | a2 <= b1 }, b: ty!{ b1: i32 }) { 
-      if *a > b { *a = b }
-    }
-    fn client(...) {
-      ...
-      clamp(&mut x, 5);
-      clamp(&mut y, 6);
-      print!(x);
-      ...
-    }
-  \end{minted}
-\end{frame}
 
-\begin{frame}[fragile]{Modularity \& Mutation}
-  \begin{minted}[autogobble, mathescape]{rust}
-    fn clamp(a: &mut ty!{ a1 : i32 | true => a2 | a2 <= b1 }, b: ty!{ b1: i32 }) { 
-      // $\Gamma_1 = (\{a \mapsto v_1, arg_0 \mapsto a_1, b \mapsto b_1\}, v_1 \doteq \&arg_0 \wedge \text{true} \wedge \text{true})$
-      if *a > b { *a = b }
-      // $\Gamma_2 = (\{a \mapsto v_1, arg_0 \mapsto {\red v_2}, b \mapsto b_1\}, {\red v_2 \leq b_1} \wedge v_1 \doteq \&arg_0 \wedge \text{true} \wedge \text{true})$
+    \column{.46\textwidth}
+    \only<2>{
+      \begin{itemize}
+        \item $\code{ty!}\set{ \alpha : \text{b} \mid \varphi \Rightarrow \beta \mid \psi }$
+        \item Callee requires $\varphi$ for reference destination $\alpha$
+        \item Callee ensures $\psi$ for reference destination $\beta$
+        \item Of course, multiple arguments possible
+      \end{itemize}
     }
-    fn client(...) {
-      ...
-      // $\Gamma_1 = (\{x \mapsto v_1, y \mapsto v_2\}, \dots)$
-      clamp(&mut x, 5);
-      // $\Gamma_2 = (\{x \mapsto v_3, y \mapsto v_2\}, \dots \wedge v_3 \leq 5)$
-      clamp(&mut y, 6);
-      // $\Gamma_3 = (\{x \mapsto v_3, y \mapsto v_4\}, \dots \wedge v_3 \leq 5 \wedge v_4 \leq 6)$
-      print!(x);
-      ...
+    \only<5->{
+      \begin{itemize}
+        \item still left: proof obligation from signature $a_2 \leq b_1$
+        \item i.e. is $\Gamma_2$ a valid end-state?
+        \item<6-> generalize notion of sub-types to context: sub-context
+        \item<7-> expected state: $\Gamma_e = (\set{arg_0 \mapsto a_2, b\mapsto b_1}, a_2 \leq b_1)$
+        \item<8-> show: $\Gamma_2 \preceq \Gamma_e$
+      \end{itemize}
+      
     }
-  \end{minted}
+  \end{columns}
 \end{frame}
 
 
-\begin{frame}[fragile]{Notion of Sub-Contexts}
-  \begin{minted}[autogobble, mathescape]{rust}
-    fn clamp(a: &mut ty!{ a1 : i32 | true => a2 | a2 <= b1 }, b: ty!{ b1: i32 }) { 
-      ...
-    // $\Gamma_2 = (\{a \mapsto v_1, arg_0 \mapsto { v_2}, b \mapsto b_1\}, { v_2 \leq b_1} \wedge v_1 \doteq \&arg_0) $
+\begin{frame}[fragile]{Mutable Calls}
+  \begin{columns}
+    \column{.5\textwidth}
+    \inputminted[]{rust}{./snippets/mut-arg-caller.rs}
+    
+    \column{.5\textwidth}
+    \only<1->{
+      \begin{itemize}
+        \item append predicates from callee to context
+        \item update association of logic variables
+      \end{itemize}
     }
-  \end{minted}
-  \begin{itemize}
-    \item Question: Is $\Gamma_2$ a valid end-state for \code{clamp}?
-    \item Question: Expected end-state?
-    \item $\Rightarrow \Gamma_e = (\set{a \mapsto v_1, arg_0 \mapsto a_2, b \mapsto b_1}, v_1 \doteq \&arg_0 \wedge \text{true} \wedge \text{true} \wedge a_2 \leq b_1)$
-    \item $\Rightarrow$ $\Gamma_2$ must be a specialization of $\Gamma_e$. Written as $\Gamma_2 \preceq \Gamma_e$
-  \end{itemize}
-
-  
-  $$
-  \inferrule*[left=$\preceq$-Ctx]
-    {
-      \vDash v_1 \doteq \&arg_0 \wedge {\red v_2} \leq b_1 \rightarrow v_2 \leq b_1 \wedge v_1 \doteq \&arg_0
-      \\ \dom(\Gamma_e) \subseteq \dom(\Gamma_2)
-    }
-    { \Gamma_2 \preceq \Gamma_e}
-  $$
-
-  Use SMT-Solver
-  
-  % $$
-  % \inferrule*[left=$\preceq$-Ctx]
-  %   {
-  %     \vDash \Phi'[\mu'(x) \triangleright \mu(x)\ \mid x \in \dom(\mu')] \to \Phi
-  %     \\ \dom(\mu') \subseteq \dom(\mu)
-  %   }
-  %   {(\mu, \Phi) \preceq (\mu', \Phi')}
-  % $$
-
+  \end{columns}
 \end{frame}
 
 \begin{frame}{SMT Request}
@@ -843,15 +835,142 @@
 \end{frame}
 
 
-
-\appendix
-\beginbackup
-
 \begin{frame}{Literatur}
   \footnotesize{
     \printbibliography
   }
 \end{frame}
+
+\appendix
+
+\beginbackup
+
+\begin{frame}{\code{decr} Typing Tree}
+  \begin{align*}
+    &\text{let }
+    \Gamma_2 = \Gamma[i \mapsto v_1], v > 0 \text{ and }
+    \tau = \set{v : \code{i32} \mid v > 0}\\
+    &\inferrule*[left=\footnotesize{Seq}]
+      {
+        \inferrule*[left=\footnotesize{Decl}]
+          {
+            \inferrule*[left=\footnotesize{Intro}-Sub]
+              {\Gamma_1 \vdash ... : \tau' \\ \Gamma_1 \vdash \tau' \preceq \tau}
+              {\Gamma_1 \vdash \code{... as $\tau$} : \tau}
+          }
+          {\Gamma_1 \vdash \code{let i = ... as $\tau$} \Rightarrow \Gamma_2}
+        \\ 
+        \inferrule*[left=\footnotesize{Ass}]
+          {
+            \inferrule*[left=\footnotesize{BinOp}]
+              {\Gamma_1 \vdash v_2 \text{ fresh}}
+              {\Gamma_1 \vdash \code{i - 1} : \set{v_2 : \text{i32} \mid v_2 \doteq v - 1}}
+          }
+          {\Gamma_2 \vdash \code{i = i - 1} \Rightarrow \Gamma[i \mapsto v_2], v > 0, v_2 \doteq v - 1}
+      }
+      {\Gamma_1 \vdash \code{let i = ... as $\tau$; i = i - 1} \Rightarrow \Gamma[i \mapsto v_2], v > 0, v_2 \doteq v - 1}
+  \end{align*}
+\end{frame}
+
+
+\begin{frame}
+  Expression Typing $\Gamma \vdash e : \tau$
+  $$ \begin{gathered}
+    \inferrule*[left=Lit]
+      {\Gamma \vdash \alpha \text{ fresh}}
+      {\Gamma \vdash v: \{ \alpha : b \mid \alpha \simeq \bbracket{v}\Gamma\} }
+    %
+    \quad
+    \inferrule*[left=BinOp]
+      {
+        \Gamma \vdash \alpha \text{ fresh}
+      }
+      {\Gamma \vdash x_1 \odot x_2 : \{ \alpha: b \mid \alpha \simeq \bbracket{x_1 \odot x_2}\Gamma \} }
+    %
+    \\
+    \inferrule*[left=Var]
+      {\Gamma \vdash \alpha \text{ fresh}}
+      {\Gamma \vdash x : \{ \alpha : b \mid \alpha \simeq \bbracket{x}\Gamma \} }
+    %
+    \quad
+    \inferrule*[left=Intro-Sub]
+      {
+        \Gamma \vdash e : \tau
+        \\ \Gamma \vdash \tau \preceq \tau'
+      }
+      {\Gamma \vdash e \texttt{ as } \tau': \tau'}
+  \end{gathered} $$
+
+  Statement Type Checking $\Gamma \vdash s \Rightarrow \Gamma'$
+
+  $$ \begin{gathered}
+    \inferrule*[left=If]
+      {
+        \Gamma, \Gamma(x) \doteq \code{true} \vdash s_t \Rightarrow \Gamma'
+        \\ \Gamma, \Gamma(x) \doteq \code{false} \vdash s_e \Rightarrow \Gamma'
+      }
+      {\Gamma \vdash \text{if } x \text{ then }s_t\text{ else } s_e \Rightarrow \Gamma'}
+    %
+    \\
+    \inferrule*[left=Seq]
+      {
+        \Gamma \vdash s_1 \Rightarrow \Gamma'
+        \\ \Gamma' \vdash s_2 \Rightarrow \Gamma''
+      }
+      {\Gamma \vdash s_1 ; s_2 \Rightarrow \Gamma''}
+    %
+    \\
+    \inferrule*[left=Decl]
+      {
+        \Gamma \vdash e :  \{ \beta : b \mid \varphi \}
+      }
+      {\Gamma \vdash \code{let } x = e  \Rightarrow \Gamma[ x \mapsto \beta], \varphi}
+    %
+    \quad
+    \inferrule*[left=Assign]
+      {\Gamma \vdash e : \{ \beta : b \mid \varphi \}}
+      {\Gamma \vdash x = e \Rightarrow \Gamma[x \mapsto \beta], \varphi}
+  \end{gathered} $$
+\end{frame}
+
+
+\begin{frame}[fragile]
+  Expression Typing $\Gamma \vdash e : \tau$
+  \begin{align*}
+    \inferrule*[left=Ref]
+    {\Gamma \vdash \alpha \text{ fresh}}
+    {\Gamma \vdash \&x : \{ \alpha : \&b \mid \alpha \simeq \bbracket{\&x}\Gamma\}}
+    %
+    \\
+    \inferrule*[left=Var-Deref]
+      {\Gamma \vdash x \in \set{\&y} \\ \Gamma \vdash y : \tau }
+      {\Gamma \vdash *x : \tau }
+    \quad
+  \end{align*}
+  Statement Type Checking $\Gamma \vdash s \Rightarrow \Gamma'$
+  \begin{align*}
+    \inferrule*[left=Assign-Strong]
+    {
+      \Gamma(z) = \beta
+      \\ {\red \Gamma \vdash x \in \set{\&y} }
+      \\ \Gamma \vdash \gamma \text{ fresh}
+    }
+    {\Gamma \vdash *x = z \Rightarrow \Gamma [y \mapsto \gamma], \gamma \doteq \beta}
+    %
+    \\
+    \onslide<2->{
+      \inferrule*[left=Assign-Weak]
+      {
+        \Gamma \vdash e : \tau 
+        \\ \Gamma \vdash x \in \set{\&y_1, \dots, \&y_n}
+        \\\\ \fline{ \Gamma \vdash y_i : \{ \beta_i : b_i \mid \varphi_i \} }
+        \\ \fline{ \Gamma \vdash \tau \preceq \{ \beta_i : b_i \mid \varphi_i \} }
+      }
+      {\Gamma \vdash *x = e \Rightarrow \Gamma}
+    }
+  \end{align*}
+\end{frame}
+
 
 
 \subsection{Erster Unterabschnitt}

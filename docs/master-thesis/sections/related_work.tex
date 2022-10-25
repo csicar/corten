@@ -52,7 +52,7 @@ Denis et al. \cite{denis_creusot_2021} also use a translation technique, but use
 
 A different verification approach is taken by Astrauskas et al. \cite{astrauskas_leveraging_2019} with Prusti, which is a heavy-weight functional verification framework for Rust, that translates its proof obligations into a separation logic based verification infrastructure named Viper.
 
-There also exists a line of work that focuses on the generation of constrained Horn. For example Matsushita et al. \cite{matsushita_rusthorn_2020} employ this technique for verification of Rust. Particularity relevant for this thesis is the novel formalization for mutable references used in the paper. 
+There also exists a line of work that focuses on the generation of constrained Horn clauses. For example Matsushita et al. \cite{matsushita_rusthorn_2020} employ this technique for verification of Rust. Particularity relevant for this thesis is the novel formalization for mutable references used in the paper. 
 % The authors stipulate that mutable references should be specified by a pre- and post-state from before a reference is borrowed to after it is returned.
 The authors stipulate that lending of a variable should have a contract between the lender and the borrower: The borrower requires some precondition to be satisfied about the mutable reference and upon returning the borrow, the borrower ensures that a postcondition is met. Matsushita et al. \cite{matsushita_rusthornbelt_2022} further extend this like of work to cover unsafe code.
 
@@ -97,7 +97,7 @@ Shared (immutable) references, mutable weak (unique) references and strong refer
     \end{minted}
   \end{minipage}
   
-  \caption{Example demonstrating the Ownership System: \code{greet(a)} transfers ownership of \code{a} to \code{greet}}
+  \caption{Example demonstrating the differences between Flux and Corten}
   \label{lst:compare-flux-fundamentals}
 \end{listing}
 

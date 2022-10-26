@@ -36,6 +36,7 @@
 \setminted{autogobble, mathescape, highlightcolor=kit-orange60}
 
 \usepackage{mathpartir}
+\usepackage{hyperref}
 \usepackage{ stmaryrd }
 \usepackage{xcolor}
 \usepackage[overridenote, notesposition=right]{pdfpc}
@@ -868,10 +869,12 @@
     \item Predicate Generics (Abstract Predicates)
       \begin{itemize}
         \item Uninterpreted Functions in Types
+        \item Syntactic Embedding?
       \end{itemize}
     \item Concurrency using Predicate Generics?
       \begin{itemize}
-        \item Use Uninterpreted Functions
+        \item Use Predicate Generics
+        \item Predicate describes Contract for Mutation
         \item Interesting, because unusual guarantees in Rust
       \end{itemize}
   \end{itemize}
@@ -881,13 +884,45 @@
 \end{frame}
 
 \begin{frame}{Conclusion}
-  \begin{itemize}
-    \item Working Refinement Type System for Rust with Mutability
-    \item Minimal Interface
-    \item Soundness Justification
-    \item Evaluation
-  \end{itemize}
+  \begin{columns}
+    \column{.5\textwidth}
+    \begin{itemize}
+      \item Refinement Type System for Rust with Mutability
+      \begin{itemize}
+        \item Decidable, Automatic
+        \item Complex Mutation Patterns
+        \item ...
+      \end{itemize}
+      \item Minimal Interface
+      \item Soundness Justification
+      \item Practical Usability
+      \begin{itemize}
+        \item Source Locations
+        \item Counter Example
+        \item IDE Integration
+      \end{itemize}
+    \end{itemize}
+
+    \column{.5\textwidth}
+    \only<2->{
+      More Information:
+      \begin{itemize}
+        \item Implementation, Thesis, Mechanized Proof, Evaluation: \url{https://gitlab.com/csicar/liquidrust}
+        \item Empirical Analysis: \url{https://gitlab.com/csicar/crates-analysis}
+      \end{itemize}
+    }
+  \end{columns}
 \end{frame}
+
+\begin{frame}
+ 
+
+\end{frame}
+
+
+\appendix
+
+\beginbackup
 
 
 \begin{frame}[allowframebreaks]{Literatur}
@@ -896,9 +931,6 @@
   }
 \end{frame}
 
-\appendix
-
-\beginbackup
 
 
 \section{Empirical Analysis}
@@ -1042,6 +1074,9 @@
   \end{align*}
 \end{frame}
 
+\begin{frame}{Predicate Generics \& Concurrecy}
+  \inputminted[fontsize=\footnotesize]{rust}{./snippets/concurrency.rs}
+\end{frame}
 
 
 \subsection{Erster Unterabschnitt}

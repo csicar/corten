@@ -724,17 +724,21 @@
 \end{frame}
 
 \begin{frame}{SMT Request}
-  ...
+  \begin{columns}
+    \column{.5\textwidth}
+    \inputminted[mathescape=false, fontsize=\scriptsize, lastline=17]{lisp}{./snippets/smt.lisp}
+    \column{.5\textwidth}
+
+    \inputminted[mathescape=false, fontsize=\scriptsize, firstline=18]{lisp}{./snippets/smt.lisp}
+  \end{columns}
 \end{frame}
 
 
-\begin{frame}{Example Error Message}
-  ...
-\end{frame}
-
-
-\begin{frame}{Ecosystem Integration}
-  ...
+\begin{frame}
+  \centering
+  \only<1> { \includegraphics[width=.5\textwidth]{../demo-1.png} }
+  \only<2> { \includegraphics[width=.5\textwidth]{../demo-2.png} }
+  \only<3> { \includegraphics[width=.5\textwidth]{../demo-3.png} }
 \end{frame}
 
 \section{Soundness Justification}

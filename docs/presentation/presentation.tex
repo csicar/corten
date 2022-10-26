@@ -357,7 +357,7 @@
         \item Path Sensitivity
         \item Mutable Data \& References
         \item Modularity
-        \item Partial Mechanized Proof of Soundness
+        \item Partial, Mechanized Proof of Soundness
       \end{itemize}
       \item Implementation
       \begin{itemize}
@@ -376,8 +376,8 @@
     \onslide<2->{
       Restrictions
       \begin{itemize}
-        \item No Inference
-        \item Integers
+        \item No Inference System
+        \item Datatypes: Integers, Booleans and References
       \end{itemize}
     }
   \end{columns}
@@ -387,15 +387,19 @@
 \section{Type System}
 
 \begin{frame}{Overview}
-  \begin{enumerate}
-    \item Mutable Values
-    \item Mutable References
-    \item Function-Calls 
-    \item Verification of \code{clamp} Example
-    \item Demo
-  \end{enumerate}
-  
+  \begin{columns}
+    \column{.5\textwidth}
+    \begin{itemize}
+      \item Mutable Values
+      \item Mutable References
+      \item Function-Calls 
+      \item Verification of \code{clamp} Example
+      \item Demo
+    \end{itemize}
+    \column{.5\textwidth}
 
+    \inputminted[fontsize=\footnotesize]{rust}{./snippets/clamp-with-spec.rs}
+  \end{columns}
 \end{frame}
 
 \begin{frame}[fragile]{Refinement Types for Rust -- Syntax}
@@ -430,10 +434,10 @@
       \end{onlyenv}
 
     \column{.5\textwidth}
-    Addition of two macros
     \begin{itemize}
+      \item Embedding using a Macro
       \item $\code{ty!}\{ l : b \mid \varphi \}$ in place of a type
-      \item \mintinline{rust}{relax_ctx!{ ... }} in place of a statement
+      % \item \mintinline{rust}{relax_ctx!{ ... }} in place of a statement
     \end{itemize}
   \end{columns}
   \note{
@@ -447,7 +451,7 @@
 \begin{frame}[fragile]{Type Updates}
   \begin{columns}
     \column{.5\textwidth}
-    \begin{onlyenv}<1>
+    \begin{onlyenv}<1-2>
       \begin{minted}[autogobble, mathescape]{rust}
         fn decr() -> ty!{ w : i32 | w >= 0 } {
          let mut i = ... as ty!{ v: i32 | v > 0};
@@ -456,35 +460,46 @@
         }
       \end{minted}
     \end{onlyenv}
-    \only<2>{
+    \only<3>{
       \inputminted[]{rust}{./snippets/decr.rs}
     }
-    \only<3>{
+    \only<4>{
       \inputminted[highlightlines=3]{rust}{./snippets/decr.rs}
     }
-    \only<4>{
+    \only<5>{
       \inputminted[highlightlines=5]{rust}{./snippets/decr.rs}
     }
-    \only<5>{
+    \only<6>{
       \inputminted[highlightlines=2-6]{rust}{./snippets/decr.rs}
     }
 
     \column{.5\textwidth}
-    \only<1-2>{
+    \only<1>{
       \begin{itemize}
         \item Types need to change through execution
         \begin{itemize}
-          \item $\Rightarrow$ type updates
-          \item Separation of program-variables and logic-variables
-          \item $\Gamma$ association of program- to logic-variables and predicate
+          \item $\Rightarrow$ Type Updates
           \item $\Gamma \vdash s \Rightarrow \Gamma'$ (Statement Type Checking)
           \item $\Gamma \vdash e : \tau$ (Expression Typing)
-          \item on assignment: \textit{replace} association, \textit{append} predicate
-          \item observation: assignment can not invalidate existing predicates
         \end{itemize}
       \end{itemize}
     }
-    \only<3>{
+    \only<2-3>{
+      \begin{itemize}
+        \item Type of \code{i} after decrementing?
+        \begin{itemize}
+          \item Naïve: \code{ty!\{ v : i32 | v = v - 1 \}}
+        \end{itemize}
+        \item How to keep type context consistent?
+        \begin{itemize}
+          \item separation of program-variables and logic-variables
+          \item $\Gamma$: association of program- to logic-variables and predicate
+          \item on assignment: \textit{replace} association, \textit{append} predicate
+          \item observation: assignments can not invalidate existing predicates
+        \end{itemize}
+      \end{itemize}
+    }
+    \only<4>{
       \begin{align*}
         &\inferrule*[left=Intro-Sub]
           {
@@ -498,7 +513,7 @@
           { \Gamma \vdash \code{let } x = e  \Rightarrow \Gamma[ x \mapsto \beta], \varphi }
       \end{align*}
     }
-    \only<4>{
+    \only<5>{
       \begin{align*}
         &\inferrule*[left=BinOp]
           {\Gamma \vdash \alpha \text{ fresh}}
@@ -509,7 +524,7 @@
           {\Gamma \vdash x = e \Rightarrow \Gamma[x \mapsto \beta], \varphi}
       \end{align*}
     }
-    \only<5>{
+    \only<6>{
       \begin{align*}
         &\inferrule*[left=Seq]
           {
@@ -520,33 +535,6 @@
       \end{align*}
     }
   \end{columns}
-
-  % \onslide<3->{
-  %     \begin{align*}
-  %       &\text{let }
-  %       \Gamma_2 = \Gamma[i \mapsto v_1], v > 0 \text{ and }
-  %       \tau = \set{v : \code{i32} \mid v > 0}\\
-  %       &\inferrule*[left=\footnotesize{Seq}]
-  %         {
-  %           \inferrule*[left=\footnotesize{Decl}]
-  %             {
-  %               \inferrule*[left=\footnotesize{Intro}-Sub]
-  %                 {\Gamma_1 \vdash ... : \tau' \\ \Gamma_1 \vdash \tau' \preceq \tau}
-  %                 {\Gamma_1 \vdash \code{... as $\tau$} : \tau}
-  %             }
-  %             {\Gamma_1 \vdash \code{let i = ... as $\tau$} \Rightarrow \Gamma_2}
-  %           \\ 
-  %           \inferrule*[left=\footnotesize{Ass}]
-  %             {
-  %               \inferrule*[left=\footnotesize{BinOp}]
-  %                 {\Gamma_1 \vdash v_2 \text{ fresh}}
-  %                 {\Gamma_1 \vdash \code{i - 1} : \set{v_2 : \text{i32} \mid v_2 \doteq v - 1}}
-  %             }
-  %             {\Gamma_2 \vdash \code{i = i - 1} \Rightarrow \Gamma[i \mapsto v_2], v > 0, v_2 \doteq v - 1}
-  %         }
-  %         {\Gamma_1 \vdash \code{let i = ... as $\tau$; i = i - 1} \Rightarrow \Gamma[i \mapsto v_2], v > 0, v_2 \doteq v - 1}
-  %     \end{align*}
-  %   }
     \note{
       - Bsp: decr i und geben den wert zurück. 
       - Lauft signatur: Rückgabe wert nicht-negativ
@@ -588,14 +576,15 @@
 
 \begin{frame}[fragile]{References -- Strong Updates}
   \begin{columns}
-    \column{.5\textwidth}
+    \column{.55\textwidth}
     \only<1>{ \inputminted[]{rust}{./snippets/strong-updates.rs} }
-    \only<2>{ \inputminted[highlightlines=2]{rust}{./snippets/strong-updates.rs} }
-    \only<3>{ \inputminted[highlightlines=3]{rust}{./snippets/strong-updates.rs} }
-    \only<4>{ \inputminted[highlightlines=4]{rust}{./snippets/strong-updates.rs} }
-    \only<5>{ \inputminted[highlightlines=7]{rust}{./snippets/strong-updates.rs} }
+    \only<2>{ \inputminted[highlightlines=3]{rust}{./snippets/strong-updates.rs} }
+    \only<3>{ \inputminted[highlightlines=4]{rust}{./snippets/strong-updates.rs} }
+    \only<4>{ \inputminted[highlightlines=5]{rust}{./snippets/strong-updates.rs} }
+    \only<5>{ \inputminted[highlightlines=6]{rust}{./snippets/strong-updates.rs} }
+    \only<6>{ \inputminted[highlightlines=8]{rust}{./snippets/strong-updates.rs} }
 
-    \column{.5\textwidth}
+    \column{.45\textwidth}
     \only<2> {
       \begin{align*}
         &\inferrule*[left=Lit]
@@ -625,7 +614,7 @@
         &(\text{Also }\textsc{Assign-Weak})
       \end{align*}
     }
-    \only<5> {
+    \only<6> {
       \begin{align*}
         &\inferrule*[left=Var]
           {\Gamma \vdash \alpha \text{ fresh}}
@@ -655,12 +644,11 @@
     fn clamp(a: &mut ty!{ a1 : i32 | true => a2 | a2 <= b1 }, b: ty!{ b1: i32 }) { 
       if *a > b { *a = b }
     }
-    fn client(...) {
+    fn client() -> ty!{ v: () } {
       ...
-      clamp(&mut x, 5);
-      clamp(&mut y, 6);
-      print!(x);
-      ...
+      let max = 42;
+      clamp(&mut x, max);
+      x as ty!{ v : i32 | v < 43 };
     }
   \end{minted}
 \end{frame}
@@ -723,6 +711,16 @@
   \end{columns}
 \end{frame}
 
+
+
+\begin{frame}
+  \centering
+  \only<1> { \includegraphics[width=.5\textwidth]{../demo-1.png} }
+  \only<2> { \includegraphics[width=.5\textwidth]{../demo-2.png} }
+  \only<3> { \includegraphics[width=.5\textwidth]{../demo-3.png} }
+\end{frame}
+
+
 \begin{frame}{SMT Request}
   \begin{columns}
     \column{.5\textwidth}
@@ -731,14 +729,14 @@
 
     \inputminted[mathescape=false, fontsize=\scriptsize, firstline=18]{lisp}{./snippets/smt.lisp}
   \end{columns}
-\end{frame}
-
-
-\begin{frame}
-  \centering
-  \only<1> { \includegraphics[width=.5\textwidth]{../demo-1.png} }
-  \only<2> { \includegraphics[width=.5\textwidth]{../demo-2.png} }
-  \only<3> { \includegraphics[width=.5\textwidth]{../demo-3.png} }
+  \note{
+    - Ende von clamp \\
+    - Genau die Sub Ctx aussage von davor \\
+    \\
+    1. Deklarationen \\
+    2. Predikate des SubCtx \\
+    3. Predikate des SuperCtx, aber negiert
+  }
 \end{frame}
 
 \section{Soundness Justification}
@@ -756,7 +754,7 @@
 
   Stronger property than base language preservation: Show that refined types are preserved\\
   
-  Partially Mechanized Proof in Lean 4
+  Partial, Mechanized Proof in Lean 4
 \end{frame}
 
 \begin{frame}[fragile]{State Conformance}

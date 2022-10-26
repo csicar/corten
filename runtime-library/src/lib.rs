@@ -1,3 +1,4 @@
+#![allow(incomplete_features)]
 #![feature(adt_const_params)]
 
 use std::any::Any;
@@ -48,6 +49,7 @@ macro_rules! ctx {
 pub fn assert_ctx(_formulas: &[&'static str], _entries: &[(&dyn Any, &'static str, &'static str)]) {
 }
 
+#[allow(unused_macros)]
 macro_rules! corten_assume {
     ( $pred:expr ) => {
         assume(
@@ -62,7 +64,7 @@ macro_rules! corten_assume {
 }
 
 #[inline(always)]
-pub fn assume(formula: bool, proof: ()) {
+pub fn assume(formula: bool, _proof: ()) {
     assert!(formula)
 }
 

@@ -28,11 +28,15 @@ use rustc_hir as hir;
 use rustc_interface::interface;
 
 use rustc_interface::Queries;
+use tracing::error;
+use tracing_subscriber::EnvFilter;
 
 use std::str;
 
 use tracing::info_span;
 use tracing::trace;
+
+use crate::constraint_generator::ErrorSpan;
 
 mod hir_ext;
 
@@ -114,6 +118,7 @@ impl rustc_driver::Callbacks for OurCompilerCalls {
                 .iter()
                 .flat_map(|&local_def_id| {
                     // Skip items that are not functions or methods.
+
                     let hir_id = tcx.hir().local_def_id_to_hir_id(local_def_id);
                     let hir_node = tcx.hir().get(hir_id);
                     match hir_node {
@@ -128,9 +133,21 @@ impl rustc_driver::Callbacks for OurCompilerCalls {
                             match _res {
                                 Ok(_) => (),
                                 Err(e) => {
-                                    // see: https://rustc-dev-guide.rust-lang.org/diagnostics.html?highlight=diagnost#error-messages
-                                    let mut err = session.struct_span_err(*span, &e.to_string());
-                                    err.emit();
+                                    error!("{}", e);
+                                    if fn_item.ident.to_string() == "main" {
+                                        // skip error
+                                        // IDE some how creates empty main that causes problems
+                                        // FIXME: skip this
+                                    } else {
+                                        let specific_span = match e.downcast_ref::<ErrorSpan>() {
+                                            Some(span) => span.location,
+                                            None => *span,
+                                        };
+                                        // see: https://rustc-dev-guide.rust-lang.org/diagnostics.html?highlight=diagnost#error-messages
+                                        let mut err =
+                                            session.struct_span_err(specific_span, &e.to_string());
+                                        err.emit();
+                                    }
                                 }
                             }
                             Some("")
@@ -163,6 +180,8 @@ fn prusti_main() {
 
     compiler_args.push("-Zalways-encode-mir".to_owned());
 
+    trace!("rustc arguments: {:?}", compiler_args);
+
     let mut callbacks = OurCompilerCalls {};
     // Invoke compiler, and handle return code.
     let exit_code = rustc_driver::catch_with_exit_code(move || {
@@ -172,8 +191,10 @@ fn prusti_main() {
 }
 
 fn main() {
+    let file_appender = tracing_appender::rolling::never("/tmp/corten", "debug.log");
     tracing_subscriber::fmt::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::new("trace"))
+        .with_env_filter(EnvFilter::from_env("CORTEN_LOG"))
+        .with_writer(file_appender)
         .pretty()
         .init();
     prusti_main();

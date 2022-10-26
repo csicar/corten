@@ -20,6 +20,7 @@ tracing-subscriber = { version = "0.3.9", features = [
   "json",
   "ansi",
 ] }
+tracing-appender = "*"
 "serde" = "*"
 syn = { version = "1.0.93", features = ["full"] }
 syn-serde = { version = "0.2", features = ["json"] }
@@ -29,6 +30,7 @@ quote = "1.0.17"
 tempfile = "3.3.0"
 itertools = "0.10.3"
 uuid = { version = "1.1.2", features = ["v4"] }
+thiserror = "*"
 
 [dev-dependencies]
 "runtime-library" = { path = "../runtime-library" }

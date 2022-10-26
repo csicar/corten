@@ -20,3 +20,15 @@ cargo r -- -L crate=./target/debug/ --sysroot /home/csicar/.rustup/toolchains/ni
 ```bash
 > cargo +nightly rustc --example macro -- -Zunpretty=hir-tree | bat -l rust --plain
 ```
+
+### Configure Rust Analyzer
+
+`.vscode/settings.json`
+
+```json
+"rust-analyzer.server.extraEnv": {
+    "RUSTC": "<path to corten>/corten.sh",
+    "RUSTUP_TOOLCHAIN": "nightly-2022-02-17",
+  },
+  "rust-analyzer.checkOnSave.command": "check"
+```

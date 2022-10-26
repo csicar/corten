@@ -1,3 +1,7 @@
+use std::fmt::Display;
+use std::sync::Arc;
+use std::sync::Mutex;
+
 use crate::buildin_functions::CtxSpecFunctions;
 use crate::refinement_context::is_sub_context;
 use crate::refinement_context::require_is_subtype_of;
@@ -23,6 +27,7 @@ use rustc_hir::{Expr, ExprKind};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::ty::TypeckResults;
 use rustc_span::source_map::Spanned;
+use rustc_span::Span;
 
 use tracing::Level;
 
@@ -32,6 +37,14 @@ use tracing::instrument;
 use tracing::span;
 use tracing::trace;
 use tracing::warn;
+
+use thiserror::Error as ThisError;
+
+#[cfg(test)]
+mod tests;
+
+use crate::hir_ext::ExprExt;
+use crate::refinements::RefinementType;
 
 pub struct Fresh {
     current: u32,
@@ -49,11 +62,25 @@ impl Fresh {
     }
 }
 
-#[cfg(test)]
-mod tests;
+#[derive(Debug, ThisError)]
+pub struct ErrorSpan {
+    pub location: Span,
+}
 
-use crate::hir_ext::ExprExt;
-use crate::refinements::RefinementType;
+impl ErrorSpan {
+    fn new(span: Span) -> Self {
+        ErrorSpan { location: span }
+    }
+}
+
+unsafe impl Send for ErrorSpan {}
+unsafe impl Sync for ErrorSpan {}
+
+impl Display for ErrorSpan {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.location)
+    }
+}
 
 pub fn type_check_function<'a, 'tcx, 'r>(
     function: &'a hir::Item<'tcx>,
@@ -188,7 +215,8 @@ where
             is_sub_context(&expected_end_state, &ctx_after, tcx, &mut solver)?;
 
             trace!(%actual_ty, "actual function type");
-            require_is_subtype_of(&actual_ty, &expected_type, &ctx_after, tcx, &mut solver)?;
+            require_is_subtype_of(&actual_ty, &expected_type, &ctx_after, tcx, &mut solver)
+                .context(ErrorSpan::new(body.value.span))?;
 
             span.exit();
 
@@ -284,9 +312,28 @@ fn negate_predicate(pred: syn::Expr) -> anyhow::Result<syn::Expr> {
     }))
 }
 
+pub fn type_of<'a, 'b, 'c, 'tcx>(
+    expr: &'a Expr<'tcx>,
+    tcx: &'b TyCtxt<'tcx>,
+    ctx: &'c RContext<'tcx>,
+    local_ctx: &'a TypeckResults<'tcx>,
+    solver: &mut Solver<Parser>,
+    fresh: &mut Fresh,
+) -> anyhow::Result<(RefinementType<'tcx>, RContext<'tcx>)> {
+    match type_of_inner(expr, tcx, ctx, local_ctx, solver, fresh) {
+        Ok(v) => Ok(v),
+        Err(e) => match e.downcast_ref::<ErrorSpan>() {
+            Some(_) => Err(e),
+            None => Err(e.context(ErrorSpan {
+                location: expr.span,
+            })),
+        },
+    }
+}
+
 /// Computes the type of [`expr`] and returns its type, together with the  `ctx` after its execution
 #[instrument(skip_all, fields(expr=?expr.pretty_print()))]
-pub fn type_of<'a, 'b, 'c, 'tcx>(
+pub fn type_of_inner<'a, 'b, 'c, 'tcx>(
     expr: &'a Expr<'tcx>,
     tcx: &'b TyCtxt<'tcx>,
     ctx: &'c RContext<'tcx>,

@@ -9,7 +9,8 @@ fn clamp(
 }
 
 fn client() -> ty!{ v: () } {
-  let mut x = 1337; let max = 42;
-  clamp(&mut x, max);
+  ...
+  let m = 42;
+  clamp(&mut x, m);
   x as ty!{ v : i32 | v < 43 };
 }

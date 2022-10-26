@@ -138,8 +138,11 @@
 %
 \setkomafont{title}{\huge\sffamily\bfseries}
 \setkomafont{subtitle}{\normalfont\large}
+\uppertitleback{
+    Karlsruher Institut für Technologie\\ Fakultät für Informatik\\ Postfach 6980\\ 76128 Karlsruhe
 
-\uppertitleback{Karlsruher Institut für Technologie\\ Fakultät für Informatik\\ Postfach 6980\\ 76128 Karlsruhe}
+    {\includegraphics[width=0.9\textwidth, trim={1cm 0cm 0cm 0cm}]{logos/CC-BY.pdf}}
+}
 
 %% variables for title page
 \newcommand{\theinstitute}{\ifcurrentbaselanguage{English}

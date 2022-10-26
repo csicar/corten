@@ -1153,7 +1153,7 @@ The domain restriction ensures that the sub-context does not contain additional 
 $$
   \inferrule*[left=$\preceq$-Ctx\rulelabel{Sub-Ctx}]
     {
-      \vDash \Phi'[\mu'(x) \triangleright \mu(x)\ \mid x \in \dom(\mu')] \to \Phi
+      \vDash \Phi \to \Phi'[\mu'(x) \triangleright \mu(x)\ \mid x \in \dom(\mu')] 
       \\ \dom(\mu') \subseteq \dom(\mu)
     }
     {(\mu, \Phi) \preceq (\mu', \Phi')}

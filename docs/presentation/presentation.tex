@@ -347,32 +347,56 @@
 \end{frame}
 
 \begin{frame}{Contributions}
-  \begin{itemize}
-    \item Empirical Use-Case Analysis
-    \item Refinement Type System
+  \begin{columns}
+    \column{.5\textwidth}
     \begin{itemize}
-      \item Automatic \& Decidable Type Checking
-      \item Path Sensitivity
-      \item Mutable Data \& References
-      \item Modularity
-      \item Partial Mechanized Proof of Soundness
+      \item Empirical Use-Case Analysis
+      \item Refinement Type System
+      \begin{itemize}
+        \item Automatic \& Decidable Type Checking
+        \item Path Sensitivity
+        \item Mutable Data \& References
+        \item Modularity
+        \item Partial Mechanized Proof of Soundness
+      \end{itemize}
+      \item Implementation
+      \begin{itemize}
+        \item Accessible Interface
+        \item Type-Error Messages with Source Code Locations
+        \item Counter-Example Generation
+      \end{itemize}
+      \item Evaluation
+      \begin{itemize}
+        \item Automatic Verification of non-trivial Programs
+        \item Comparison to other tools
+      \end{itemize}
     \end{itemize}
-    \item Implementation
-    \begin{itemize}
-      \item Accessible Interface
-      \item Type-Error Messages with Source Code Locations
-      \item Counter-Example Generation
-    \end{itemize}
-    \item Evaluation
-    \begin{itemize}
-      \item Automatic Verification of non-trivial Programs
-      \item Comparison to other tools
-    \end{itemize}
-  \end{itemize}
+
+    \column{.5\textwidth}
+    \onslide<2->{
+      Restrictions
+      \begin{itemize}
+        \item No Inference
+        \item Integers
+      \end{itemize}
+    }
+  \end{columns}
 \end{frame}
 
 
 \section{Type System}
+
+\begin{frame}{Overview}
+  \begin{enumerate}
+    \item Mutable Values
+    \item Mutable References
+    \item Function-Calls 
+    \item Verification of \code{clamp} Example
+    \item Demo
+  \end{enumerate}
+  
+
+\end{frame}
 
 \begin{frame}[fragile]{Refinement Types for Rust -- Syntax}
   \begin{columns}
@@ -726,7 +750,9 @@
     If $\Gamma \vdash s \Rightarrow \Gamma_2$, $\sigma : \Gamma$ and $\tuple{s}{\sigma} \leadsto \tuple{s_1}{\sigma_1}$, then there is a $\Gamma_1$ with $\Gamma_1 \vdash s_1 \Rightarrow \Gamma_2$ and $\sigma_2 : \Gamma_2$
   \end{greenblock}
 
-  Stronger property than base language preservation: Show that refined types are preserved
+  Stronger property than base language preservation: Show that refined types are preserved\\
+  
+  Partially Mechanized Proof in Lean 4
 \end{frame}
 
 \begin{frame}[fragile]{State Conformance}
@@ -846,8 +872,8 @@
 \end{frame}
 
 
-\begin{frame}{Literatur}
-  \footnotesize{
+\begin{frame}[allowframebreaks]{Literatur}
+  \tiny{
     \printbibliography
   }
 \end{frame}

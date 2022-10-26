@@ -826,18 +826,25 @@
 \end{frame}
 
 \begin{frame}{Related Work: Flux -- Refinement Types for Rust}
-  \begin{itemize}
-    \item MIR vs. HIR
-    \item specification in comments vs. embedding in types
-    \item context inclusions vs. sub context
-    \item distinction strong and weak references vs. dynamic choice by typ checking rules
-    \item explicit introduction of logic variables vs. ad-hoc
-    \item formalization based on RustBelt vs. formalization based on own language
-    \item missing in Corten: records \& inference
-    \item otherwise: similar capabilities
-  \end{itemize}
+  \begin{columns}
+    \column{.5\textwidth}
+    \begin{itemize}
+      \item MIR vs. HIR
+      \item specification in comments vs. embedding in types
+      \item context inclusions vs. sub context
+      \item distinction strong and weak references vs. dynamic choice by typ checking rules
+      \item explicit introduction of logic variables vs. ad-hoc
+      \item formalization based on RustBelt vs. formalization based on own language
+      \item missing in Corten: records \& inference
+      \item otherwise: similar capabilities
+    \end{itemize}
 
-  
+    \column{.5\textwidth}
+    \inputminted[]{rust}{./snippets/flux-comparison-1.rs}
+    
+    \inputminted[]{rust}{./snippets/flux-comparison-2.rs}
+    
+  \end{columns}
   \note{
     - Paper von Authoren von Liquid Types Papern\\
     - Veröffentlicht gegen ende der MA\\
@@ -852,12 +859,21 @@
 \begin{frame}{Future Work}
   \begin{itemize}
     \item Records \& ADTs 
+    \begin{itemize}
+      \item More Syntax, Nested Structures
+      \item Variant Distinction
+    \end{itemize}
     \item Predicate Generics (Abstract Predicates)
+      \begin{itemize}
+        \item Uninterpreted Functions in Types
+      \end{itemize}
     \item Concurrency using Predicate Generics?
+      \begin{itemize}
+        \item Use Uninterpreted Functions
+        \item Interesting, because unusual guarantees in Rust
+      \end{itemize}
   \end{itemize}
   \note{
-    - Variant distinktion, more syntax, nested structures
-    - uninterpreted functions in types
     - use this for concurrency. Should be interesting in Rust (b/c of guarantees)
   }
 \end{frame}

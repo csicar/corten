@@ -179,7 +179,7 @@
       - Füge path condition zu context hinzu \\
     4. Zentrale Idee: Subtyp einführen, der bekannt ist. Hier kann etwas kreativität gebraucht werden. (Liquid Types) \\
     5. Spezifischerer Type folg trivialerweise aus Regeln \\
-    6. Was bedeutet Subtyp? Predikate müssen sich implizieren (in CTX) \\
+    6. Was bedeutet Subtyp? Predikate müssen sich implizieren (in CTX) (Liskov Substitutions Prinzip) \\
     \\
     ---- \\
     \\
@@ -232,9 +232,10 @@
     - Neu: `client`. Zeigt zusätzliche schwierigkeiten.\\
     -  Zwei Aufrufe an clamp. \\
     - `print` macro call to output \\
-      - Welche Werte könnte `x, y` haben? \\
+      - Welche Werte könnte `x` haben? \\
       - Auf jeden Fall mal: `x` und `5` (je nachdem was größer) \\
-      - Aber! auch 6
+      - Aber! auch 6 \\
+      - In Rust: Nur `x, 5'. Das liegt an ...
   }
 \end{frame}
 
@@ -341,9 +342,6 @@
       - nur 1 mutable => keine race conditions => nützlich für concurrency \\
       - ... \\
       - In MA zeigen: auch für verifikation\\
-    \\ ---- \\
-    Also: Wir haben gesehen: Refinement Types gut für immutable data; Rust: eingeschränkte mutability
-    => Wie zusammenbringen?
   }
 \end{frame}
 
@@ -382,6 +380,16 @@
       \end{itemize}
     }
   \end{columns}
+  \note{
+    1. Wie werden mutability etc. in Rust genutzt? \\
+    2. Type System entworfen. \\
+      - Mit verteilhaften eigenschaften von Refinement Types \\
+      - Zusätzlich: Mutable Data und Referenzen \\
+      - Außerdem: Rechfertigung, Teilw. computer gestützt in Lean \\
+    \\ ---- \\
+    Also: Wir haben gesehen: Refinement Types gut für immutable data; Rust: eingeschränkte mutability
+    => Wie zusammenbringen?
+  }
 \end{frame}
 
 
@@ -391,16 +399,20 @@
   \begin{columns}
     \column{.5\textwidth}
     \begin{itemize}
+      \item Common Refinement Types
       \item Mutable Values
       \item Mutable References
-      \item Function-Calls 
+      \item Function Calls 
       \item Verification of \code{clamp} Example
-      \item Demo
+      \item Demonstration
     \end{itemize}
     \column{.5\textwidth}
 
     \inputminted[fontsize=\footnotesize]{rust}{./snippets/clamp-with-spec.rs}
   \end{columns}
+  \note{
+    Ziel: Bsp rechts
+  }
 \end{frame}
 
 \begin{frame}[fragile]{Refinement Types for Rust -- Syntax}
@@ -442,10 +454,11 @@
     \end{itemize}
   \end{columns}
   \note{
-    - Hinzugefügt: Macro in Rust zum verfeinern eines Typs. 
-      - Logik Variable (anderer Scope)
-      - Basis Typ
-      - predikat (in Rust syntax)
+    - Hinzugefügt: Macro in Rust zum verfeinern eines Typs.  \\
+      - Logik Variable (anderer Scope) \\
+      - Basis Typ \\
+      - predikat (in Rust syntax, eingeschränkte Ausdrucksstärke) \\
+
   }
 \end{frame}
 
@@ -454,9 +467,9 @@
     \column{.5\textwidth}
     \begin{onlyenv}<1-2>
       \begin{minted}[autogobble, mathescape]{rust}
-        fn decr() -> ty!{ w : i32 | w >= 0 } {
-         let mut i = ... as ty!{ v: i32 | v > 0};
-         i = i - 1;
+        fn incr() -> ty!{ w : i32 | w > 0 } {
+         let mut i = ... as ty!{ v: i32 | v >= 0 };
+         i = i + 1;
          i
         }
       \end{minted}
@@ -489,7 +502,7 @@
       \begin{itemize}
         \item Type of \code{i} after decrementing?
         \begin{itemize}
-          \item Naïve: \code{ty!\{ v : i32 | v = v - 1 \}}
+          \item Naïve: \code{ty!\{ v : i32 | v = v + 1 \}}
         \end{itemize}
         \item How to keep type context consistent?
         \begin{itemize}
@@ -537,9 +550,11 @@
     }
   \end{columns}
     \note{
-      - Bsp: decr i und geben den wert zurück. 
-      - Lauft signatur: Rückgabe wert nicht-negativ
-      - Bsp. zeigt: Änderungen der Typen Notwenig. (sonst return nicht erfüllt)
+      - Bsp: incr i und geben den wert zurück.  \\
+      - Laut signatur: Rückgabe wert negativ, aber typ: nicht-positiv, (könnte 0 sein) \\
+      - Bsp. zeigt: Änderungen der Typen Notwenig. (sonst return nicht erfüllt) \\
+      \\ --- \\
+      Erzetze Zuordnung, Füge Predikat hinzu
     }
 \end{frame}
 
@@ -579,7 +594,7 @@
   \begin{columns}
     \column{.55\textwidth}
     \only<1>{ \inputminted[]{rust}{./snippets/strong-updates.rs} }
-    \only<2>{ \inputminted[highlightlines=3]{rust}{./snippets/strong-updates.rs} }
+    \only<2>{ \inputminted[highlightlines=2]{rust}{./snippets/strong-updates.rs} }
     \only<3>{ \inputminted[highlightlines=4]{rust}{./snippets/strong-updates.rs} }
     \only<4>{ \inputminted[highlightlines=5]{rust}{./snippets/strong-updates.rs} }
     \only<5>{ \inputminted[highlightlines=6]{rust}{./snippets/strong-updates.rs} }
@@ -915,7 +930,6 @@
 \end{frame}
 
 \begin{frame}
- 
 
 \end{frame}
 

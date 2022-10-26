@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::{
+    constraint_generator::RefinementError,
     hir_ext::ExprExt,
     refinements::{rename_ref_in_expr, vars_in_expr},
     smtlib_ext::{extract_model_diagnostics, Parser, SmtResExt, SolverExt},
@@ -835,15 +836,19 @@ pub fn is_sub_context<'tcx, 'a, K: Debug + Eq + Hash + Display + SmtFmt + Clone>
         .comment(&format!("done checking is_sub_context! is sat: {}", is_sat))
         .into_anyhow()?;
     let model = solver.get_model();
-    extract_model_diagnostics(solver);
+    let counter_example_msg = extract_model_diagnostics(solver);
 
     solver.pop(1).into_anyhow()?;
     if is_sat {
-        Err(anyhow::anyhow!(
-            "{} is not a sub context of {}, which is required here",
-            sub_ctx.with_tcx(tcx),
-            super_ctx.with_tcx(tcx)
-        ))
+        Err(RefinementError {
+            message: format!(
+                "{} is not a sub context of {}, which is required here",
+                sub_ctx.with_tcx(tcx),
+                super_ctx.with_tcx(tcx)
+            ),
+            counter_example: counter_example_msg,
+        }
+        .into())
     } else {
         anyhow::Ok(())
     }
@@ -906,7 +911,7 @@ pub fn require_is_subtype_of<'tcx>(
     solver
         .comment(&format!("done checking is_subtype_of! is sat: {}", is_sat))
         .into_anyhow()?;
-    extract_model_diagnostics(solver);
+    let counter_example_model = extract_model_diagnostics(solver);
 
     solver.pop(2).into_anyhow()?;
     solver.comment(&"-".repeat(80)).into_anyhow()?;
@@ -916,7 +921,11 @@ pub fn require_is_subtype_of<'tcx>(
             &sub_ty, &super_ty
         );
         error!("{} in ctx {}", msg, ctx.with_tcx(tcx));
-        Err(anyhow!(msg))
+        Err(RefinementError {
+            message: msg,
+            counter_example: counter_example_model,
+        }
+        .into())
     } else {
         info!("no counterexample found 🮱");
         // no counterexample found => everything is fine => continue

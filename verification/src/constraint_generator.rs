@@ -73,12 +73,24 @@ impl ErrorSpan {
     }
 }
 
-unsafe impl Send for ErrorSpan {}
-unsafe impl Sync for ErrorSpan {}
-
 impl Display for ErrorSpan {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.location)
+    }
+}
+
+unsafe impl Send for ErrorSpan {}
+unsafe impl Sync for ErrorSpan {}
+
+#[derive(Debug, ThisError)]
+pub struct RefinementError {
+    pub message: String,
+    pub counter_example: Option<String>,
+}
+
+impl Display for RefinementError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}\n{:?}", self.message, self.counter_example)
     }
 }
 

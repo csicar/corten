@@ -37,6 +37,7 @@ use tracing::info_span;
 use tracing::trace;
 
 use crate::constraint_generator::ErrorSpan;
+use crate::constraint_generator::RefinementError;
 
 mod hir_ext;
 
@@ -143,10 +144,29 @@ impl rustc_driver::Callbacks for OurCompilerCalls {
                                             Some(span) => span.location,
                                             None => *span,
                                         };
-                                        // see: https://rustc-dev-guide.rust-lang.org/diagnostics.html?highlight=diagnost#error-messages
-                                        let mut err =
-                                            session.struct_span_err(specific_span, &e.to_string());
-                                        err.emit();
+                                        match e.downcast_ref::<RefinementError>() {
+                                            Some(r) => {
+                                                error!("specific error, {:?}", e);
+                                                let mut err = session
+                                                    .struct_span_err(specific_span, &r.message);
+                                                if let Some(ce) = &r.counter_example {
+                                                    err.span_help(
+                                                        specific_span,
+                                                        &format!("Counter-Example: {}", ce),
+                                                    );
+                                                }
+                                                err.emit();
+                                            }
+                                            None => {
+                                                error!("generic error");
+                                                // see: https://rustc-dev-guide.rust-lang.org/diagnostics.html?highlight=diagnost#error-messages
+                                                let mut err = session.struct_span_err(
+                                                    specific_span,
+                                                    &format!("{:?}", e),
+                                                );
+                                                err.emit();
+                                            }
+                                        }
                                     }
                                 }
                             }

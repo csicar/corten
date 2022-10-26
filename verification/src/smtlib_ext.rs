@@ -80,11 +80,11 @@ impl Display for ValueAssignment {
         } else {
             "<dangling>".to_string()
         };
-        write!(f, "{} = {} (for {})", self.logic_var, self.value, program)
+        write!(f, "{} = {}", self.logic_var, self.value)
     }
 }
 
-pub fn extract_model_diagnostics(solver: &mut Solver<Parser>) {
+pub fn extract_model_diagnostics(solver: &mut Solver<Parser>) -> Option<String> {
     if let Ok(model) = solver.get_model() {
         let diag: String = model
             .into_iter()
@@ -99,6 +99,9 @@ pub fn extract_model_diagnostics(solver: &mut Solver<Parser>) {
         error!(
             "For the assignment, the property could not be shown: \n    {{{}}}",
             diag
-        )
+        );
+        Some(diag)
+    } else {
+        None
     }
 }

@@ -1,6 +1,6 @@
-# LiquidRust
+# Corten
 
-Refinement Type System for Rust.
+A Refinement Type System for Rust.
 This is an early research prototype and not ready for use.
 
 
@@ -13,64 +13,121 @@ Corten uses tiny compile-time library to add the necessary macros. Add this to y
 runtime-library = {path = "<path to corten>/runtime-library"}
 ```
 
-Now you can use the refinement type system. For example:
+Now you can use the refinement type system. 
+In Corten, a type `i32` is refined to `ty!{v : i32 | v > 0}`, meaning this type may only contain values `> 2`.
+For example `increment` specifies that the argument `a` must be non-negative and promises to return an integer that is greater than the input:
+
+```rust
+use runtime_library::*; // import the corten macros (e.g. ty!)
+
+fn increment(
+  a : ty!{ v : i32 | v > 0 }
+) -> ty!{ r : i32 | r > v } {
+  a + 1
+}
+```
+
+Running `cargo b` confirms that this is correct:
+```bash
+$ cargo b
+...
+warning: function is never used: `increment`
+ --> src/lib.rs:4:4
+  |
+4 | fn increment(
+  |    ^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` on by default
+
+warning: `tutorial` (lib) generated 1 warning
+    Finished dev [unoptimized + debuginfo] target(s) in 0.08s
+                                                                     
+```
+
+Lets say we accidentally decremented the value instead of incrementing it.
+Now, `cargo b` will complain that there is a refinement types conflict:
+
+
+```bash
+$ cat src/lib.rs
+use runtime_library::*;
+fn increment(
+  a : ty!{ v : i32 | v > 0 }
+) -> ty!{ r : i32 | r > v } {
+  a - 1
+}
+
+$ cargo b
+...
+   Compiling tutorial v0.1.0 (/home/csicar/Uni/Master/Masterarbeit/repo/examples/tutorial)
+...
+error: Subtyping judgement failed: ty!{ _0 : i32 | (v - 1) == _0 } is not a sub_ty of ty!{ r : i32 | r > v }
+ --> src/lib.rs:6:29
+  |
+6 |   ) -> ty!{ r : i32 | r > v } {
+  |  _____________________________^
+7 | |     a - 1
+8 | | }
+  | |_^
+  |
+help: Counter-Example: _0 = 0, v = 1
+ --> src/lib.rs:6:29
+  |
+6 |   ) -> ty!{ r : i32 | r > v } {
+  |  _____________________________^
+7 | |     a - 1
+8 | | }
+  | |_^
+
+warning: `tutorial` (lib) generated 1 warning
+error: could not compile `tutorial` due to previous error; 1 warning emitted
+```
+
+Corten tells us that it could not match the type `ty!{ _0 : i32 | (v - 1) == _0 }` to `ty!{ r : i32 | r > v }` meaning `v - 1` is not `> v`. Corten gives an example where this is the case: For the return value `_0 = 0` and the argument `v = 1`, our types can not be satisfied.
+
+
+Corten can recognize path conditions (like `a > b` in the if-statement below) and act accordingly:
+
+
+```rust
+fn max(
+  a : ty!{ av: i32 | true },
+  b: ty!{ bv: i32 | true }
+) -> ty!{ v: i32 | v >= av && v >= bv } {
+  if a > b { 
+    a as ty!{ x : i32 | x >= av && x >= bv }
+  } else { 
+    b
+  }
+}
+```
+
+Corten can also handle mutable references:
 
 ```rust
 fn inc(
   p : &mut ty!{ a : i32 | true => b | b == a + 1 }
 ) -> ty!{ v : () } {
-    *p = *p - 1; ()
+    *p = *p + 1; ()
 }
 ```
 
-Running `cargo b`, `corten` will recognize that the implementation does not match the type:
+More examples can be found in the [thesis](https://github.com/csicar/corten/blob/main/docs/master-thesis/thesis.pdf) under `5.1 Features` and `7 Evaluation`.
 
-Output from `cargo b`:
+
+## Installing
+
 
 ```bash
+$ git clone ...
 $ cargo b
-...
-error: RContext {
-           // formulas
-           // types
-           src/lib.rs:21:3: 21:4 (#0) p : ty!{ _0 : &mut i32 | _0 == & arg (0usize) }
-           <anon decl from argument 0> : ty!{ _2 : i32 | (a - 1) == _2 }
-           <dangling> : ty!{ a : &mut i32 | true }
-       }
-        is not a sub context of RContext {
-           // formulas
-           // types
-           <anon decl from argument 0> : ty!{ b : &mut i32 | b == a + 1 }
-       }
-       , which is required here
-  --> src/lib.rs:20:1
-   |
-20 | / fn inc(
-21 | |   p : &mut ty!{ a : i32 | true => b | b == a + 1 }
-22 | | ) -> ty!{ v : () } {
-23 | |     *p = *p - 1; ()
-24 | | }
-   | |_^
-   |
-help: Counter-Example: _0 = (- 1), _2 = (- 1), a = 0, b = 0, ref = 0
-  --> src/lib.rs:20:1
-   |
-20 | / fn inc(
-21 | |   p : &mut ty!{ a : i32 | true => b | b == a + 1 }
-22 | | ) -> ty!{ v : () } {
-23 | |     *p = *p - 1; ()
-24 | | }
-   | |_^
 ```
 
-## Usage
-
-Corten replaces the rust compiler (Corten calls the rust compiler internally)
+Corten replaces the rust compiler (Corten calls the rust compiler internally), so we need to tell cargo about that:
 
 ### In `rustc`
 
-Set corten as the rust compiler:
-
+Set Corten as the rust compiler:
 
 ```bash
 $ export RUSTC="$(pwd)/corten.sh"
@@ -81,11 +138,6 @@ then `cargo` can be used just like normal:
 ```bash
 $ cargo c
 ```
-
-For an example see `example/clamp`
-
-For more information see [https://github.com/csicar/corten/blob/main/docs/presentation/presentation.pdf](presentation).
-
 
 ### Configure Rust Analyzer
 
@@ -99,9 +151,8 @@ For more information see [https://github.com/csicar/corten/blob/main/docs/presen
 "rust-analyzer.checkOnSave.command": "check"
 ```
 
-## Building
+## Tests
 
 ```bash
-cargo b # build corten
-cargo t # also run test-cases
+cargo t # run test-cases
 ```

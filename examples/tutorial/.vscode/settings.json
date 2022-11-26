@@ -1,0 +1,7 @@
+{
+  "rust-analyzer.server.extraEnv": {
+    "RUSTC": "../../corten.sh",
+    "RUSTUP_TOOLCHAIN": "nightly-2022-02-17",
+  },
+  "rust-analyzer.checkOnSave.command": "check"
+}

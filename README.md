@@ -59,7 +59,7 @@ fn increment(
 
 $ cargo b
 ...
-   Compiling tutorial v0.1.0 (/home/csicar/Uni/Master/Masterarbeit/repo/examples/tutorial)
+   Compiling tutorial v0.1.0 (/home/.../examples/tutorial)
 ...
 error: Subtyping judgement failed: ty!{ _0 : i32 | (v - 1) == _0 } is not a sub_ty of ty!{ r : i32 | r > v }
  --> src/lib.rs:6:29
@@ -150,6 +150,11 @@ $ cargo c
 },
 "rust-analyzer.checkOnSave.command": "check"
 ```
+
+## Documentation
+
+- [Presentation on Corten](https://github.com/csicar/corten/blob/main/docs/presentation/presentation.pdf)
+- [Masterthesis](https://github.com/csicar/corten/blob/main/docs/master-thesis/thesis.pdf) or [published version](https://publikationen.bibliothek.kit.edu/1000152005)
 
 ## Tests
 

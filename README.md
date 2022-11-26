@@ -156,6 +156,10 @@ $ cargo c
 - [Presentation on Corten](https://github.com/csicar/corten/blob/main/docs/presentation/presentation.pdf)
 - [Masterthesis](https://github.com/csicar/corten/blob/main/docs/master-thesis/thesis.pdf) or [published version](https://publikationen.bibliothek.kit.edu/1000152005)
 
+## Alternatives
+
+[Flux](https://github.com/liquid-rust/flux) is a different refinement type system for Rust that is far more feature complete.
+
 ## Tests
 
 ```bash

@@ -1,2 +1,3 @@
 [workspace]
 members = ["verification", "runtime-library", "refinement-language"]
+exclude = ["examples"]
